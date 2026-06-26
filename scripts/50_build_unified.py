@@ -157,6 +157,27 @@ def load_std_pos(con):
     return m
 
 
+def resolve_pos(raw, std_pos):
+    """Resolve one raw POS string to a list of (en, mi) canonical pairs.
+
+    Whole-string mapping wins (handles pre-composed values like 'loan, noun' or
+    'proper noun - person'). If the whole string is unmapped, fall back to
+    splitting on commas and mapping each atomic code (handles He Pātaka Kupu
+    combos like 'mahp, ing, āhua' once the atomic codes are reviewed into std_pos).
+    """
+    whole = std_pos.get(raw)
+    if whole and whole[0]:
+        return [whole]
+    out = []
+    for tok in (t.strip() for t in raw.split(",")):
+        if not tok:
+            continue
+        pair = std_pos.get(tok)
+        if pair and pair[0]:
+            out.append(pair)
+    return out
+
+
 def write_entry_pos(con, std_pos):
     rows = con.execute(
         "SELECT e.id, GROUP_CONCAT(s.part_of_speech, '\x1f') "
@@ -169,11 +190,11 @@ def write_entry_pos(con, std_pos):
                 continue
             if r not in seen_raw:
                 seen_raw.append(r)
-            en, mi = std_pos.get(r, (None, None))
-            if en and en not in seen_en:
-                seen_en.append(en)
-            if mi and mi not in seen_mi:
-                seen_mi.append(mi)
+            for en, mi in resolve_pos(r, std_pos):
+                if en and en not in seen_en:
+                    seen_en.append(en)
+                if mi and mi not in seen_mi:
+                    seen_mi.append(mi)
         con.execute(
             "UPDATE entry SET part_of_speech=?, part_of_speech_en=?, part_of_speech_mi=? WHERE id=?",
             (", ".join(seen_raw) or None, ", ".join(seen_en) or None,

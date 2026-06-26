@@ -185,6 +185,32 @@ class UnifiedCore(unittest.TestCase):
         assert raw and "n." in raw           # raw set retained
 
 
+import importlib
+_bu = importlib.import_module("50_build_unified")
+
+
+class ResolvePos(unittest.TestCase):
+    """Pure unit tests for resolve_pos (whole-string-first, atomic comma-split fallback)."""
+
+    def test_whole_string_mapped(self):
+        std = {"noun": ("Noun", "Tūingoa")}
+        self.assertEqual(_bu.resolve_pos("noun", std), [("Noun", "Tūingoa")])
+
+    def test_whole_string_wins_over_atomic(self):
+        std = {"loan, noun": ("Noun", "Tūingoa"), "loan": ("Loan", None), "noun": ("Noun", "Tūingoa")}
+        self.assertEqual(_bu.resolve_pos("loan, noun", std), [("Noun", "Tūingoa")])
+
+    def test_atomic_fallback_for_combo(self):
+        std = {"ing": ("Verb", "Tūmahi"), "āhua": ("Stative", "Tūāhua")}
+        self.assertEqual(
+            _bu.resolve_pos("mahp, ing, āhua", std),
+            [("Verb", "Tūmahi"), ("Stative", "Tūāhua")],  # 'mahp' unmapped -> skipped
+        )
+
+    def test_unmapped_returns_empty(self):
+        self.assertEqual(_bu.resolve_pos("xyz", {}), [])
+
+
 if __name__ == "__main__":
     assert DB_PATH.exists(), f"Database not found: {DB_PATH}\nRun: py scripts/00_init_db.py && py scripts/50_build_unified.py"
     unittest.main(verbosity=2)
