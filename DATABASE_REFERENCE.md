@@ -106,7 +106,8 @@ Key columns on `entry`:
   (minted downstream); `source_entry_id` is unique within a source. `entry.id` is an
   **internal surrogate only** and is volatile across rebuilds — never reference it from the device.
 - `headword_search` / `headword_sort` — same normalisation as the per-source tables.
-- `part_of_speech` — RAW passthrough (canonical `std_pos` mapping pending expert review).
+- `part_of_speech` — deduped raw POS set across the entry's senses (e.g. `n., v.t.`). Canonical
+  labels are in `part_of_speech_en`/`part_of_speech_mi` below.
 - `part_of_speech_en` — **entry-level POS wrap-up (English).** Deduped, comma-joined canonical
   English labels drawn from the entry's senses' `sense.part_of_speech` values via `std_pos`.
   Present wherever at least one sense has a `std_pos` canonical mapping.
@@ -122,7 +123,7 @@ Key columns on `sense`:
   the parser splits numbered senses (i, ii, iii…) into separate `sense` rows under a single `entry`.
   Williams has 11,910 entries and 20,193 senses (avg 1.70 senses/entry).
 - `part_of_speech` — per-sense POS, drawn from the source. For Williams this is the inline
-  abbreviation expanded to a canonical English label (e.g. `s.` → `Noun`); for other sources it
+  abbreviation expanded to a canonical English label (e.g. `n.` → `Noun`); for other sources it
   is the raw passthrough from the per-source table. Used to compute `entry.part_of_speech_en/_mi`.
 - `gloss_en` / `gloss_mi` — language-tagged gloss (see language-tagging note below).
 

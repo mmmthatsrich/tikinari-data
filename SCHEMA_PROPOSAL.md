@@ -18,7 +18,7 @@
 
 > ## Grain refinement update (2026-06-27)
 > Williams multi-sense split is now **implemented and shipped**. The Williams parser
-> (`scripts/williams_senses.py`) splits numbered senses (i, ii, iii…) into separate
+> (`scripts/williams_senses.py`) splits numbered senses (1, 2, 3…) into separate
 > `sense` rows under a single `entry`; each sense carries its own `sense.part_of_speech`
 > (canonical English label from the inline abbreviation). Result: 11,910 Williams entries →
 > 20,193 senses (avg 1.70). All other sources remain one-sense-per-entry for now.
