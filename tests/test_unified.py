@@ -162,6 +162,18 @@ class UnifiedCore(unittest.TestCase):
             "SELECT COUNT(*) FROM example_fts WHERE example_fts MATCH 'whenua'"), 0)
 
 
+    def test_williams_multisense_split(self):
+        rows = self.conn.execute(
+            "SELECT s.sense_number, s.part_of_speech FROM entry e JOIN sense s ON s.entry_id=e.id "
+            "WHERE e.source_id='williams' AND e.headword_search=? ORDER BY s.sense_number",
+            ("pae",)
+        ).fetchall()
+        nums = [r[0] for r in rows]
+        self.assertGreaterEqual(len(nums), 3, f"expected multi-sense, got {nums}")
+        self.assertEqual(nums, list(range(1, len(nums) + 1)))   # sequential
+        self.assertIsNotNone(rows[0][1])                         # POS populated
+
+
 if __name__ == "__main__":
     assert DB_PATH.exists(), f"Database not found: {DB_PATH}\nRun: py scripts/00_init_db.py && py scripts/50_build_unified.py"
     unittest.main(verbosity=2)

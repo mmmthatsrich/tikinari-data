@@ -42,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import DB_PATH, normalise_search_key, compute_content_hash
+from williams_senses import split_senses
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -102,12 +103,12 @@ class Builder:
         return cur.lastrowid
 
     def add_sense(self, entry_id, sense_number, gloss_en, gloss_mi, definition_raw,
-                  register=None, parent_sense_id=None):
+                  register=None, parent_sense_id=None, part_of_speech=None):
         cur = self.con.execute(
             "INSERT INTO sense (entry_id, sense_number, parent_sense_id, gloss_en, "
-            "gloss_mi, definition_raw, register) VALUES (?,?,?,?,?,?,?)",
+            "gloss_mi, definition_raw, register, part_of_speech) VALUES (?,?,?,?,?,?,?,?)",
             (entry_id, sense_number, parent_sense_id, gloss_en, gloss_mi,
-             definition_raw, register))
+             definition_raw, register, part_of_speech))
         self.counts["sense"] += 1
         return cur.lastrowid
 
@@ -161,9 +162,16 @@ def build_williams(con, b):
                           locator=f"p{pg}/{sec}" if pg else sec,
                           material={"hw": hw, "pos": pos, "def": d,
                                     "ex": examples, "xr": jload(xr)})
-        sid = b.add_sense(eid, sn, d, None, d)
+        senses = split_senses(d) or [{"sense_number": 1, "part_of_speech": None,
+                                      "gloss_en": d, "definition_raw": d}]
+        first_sid = None
+        for s in senses:
+            sid = b.add_sense(eid, s["sense_number"], s["gloss_en"], None,
+                              s["definition_raw"], part_of_speech=s["part_of_speech"])
+            if first_sid is None:
+                first_sid = sid
         for i, ex in enumerate(examples):
-            b.add_example(sid, eid, ex, None, None, None, i)   # Māori fragment -> text_mi
+            b.add_example(first_sid, eid, ex, None, None, None, i)   # examples -> sense 1
         for t in jload(xr):
             if isinstance(t, str):
                 b.add_relation(eid, "cross_ref", t)
