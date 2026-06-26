@@ -203,6 +203,29 @@ def write_entry_pos(con, std_pos):
     con.commit()
 
 
+def write_sense_pos(con, std_pos):
+    """Bake per-sense canonical POS onto sense.part_of_speech_en / _mi via resolve_pos.
+
+    Combos (e.g. 'mahp, ing, āhua') are split to atomic codes and composed, so the
+    app reads finished labels off the sense row with no std_pos join. NULL where no
+    canonical mapping exists yet."""
+    rows = con.execute(
+        "SELECT id, part_of_speech FROM sense WHERE part_of_speech IS NOT NULL"
+    ).fetchall()
+    for sid, raw in rows:
+        seen_en, seen_mi = [], []
+        for en, mi in resolve_pos(raw, std_pos):
+            if en and en not in seen_en:
+                seen_en.append(en)
+            if mi and mi not in seen_mi:
+                seen_mi.append(mi)
+        con.execute(
+            "UPDATE sense SET part_of_speech_en=?, part_of_speech_mi=? WHERE id=?",
+            (", ".join(seen_en) or None, ", ".join(seen_mi) or None, sid),
+        )
+    con.commit()
+
+
 # ── per-source transforms ────────────────────────────────────────────────────
 
 def build_williams(con, b):
@@ -433,7 +456,9 @@ def main():
               f"example {grand['example']}, form {grand['form']}, "
               f"relation {grand['relation']}, domain {grand['entry_domain']}")
 
-    write_entry_pos(con, load_std_pos(con))
+    std_pos = load_std_pos(con)
+    write_sense_pos(con, std_pos)
+    write_entry_pos(con, std_pos)
     con.close()
 
 

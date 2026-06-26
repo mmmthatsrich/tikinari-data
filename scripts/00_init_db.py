@@ -551,7 +551,9 @@ def create_tables(conn: sqlite3.Connection) -> None:
             gloss_mi        TEXT,                  -- Māori monolingual gloss (HPK, Paekupu definition_mi)
             definition_raw  TEXT,                  -- original blob, untouched, for fidelity
             register        TEXT,
-            part_of_speech  TEXT
+            part_of_speech  TEXT,                  -- raw per-sense POS
+            part_of_speech_en TEXT,                -- canonical English POS (resolved via std_pos at build)
+            part_of_speech_mi TEXT                 -- canonical Māori POS (resolved via std_pos at build)
         );
         CREATE INDEX IF NOT EXISTS idx_sense_entry ON sense(entry_id);
         -- index FK-referencing cols so per-source DELETE doesn't full-scan on FK checks
@@ -664,6 +666,8 @@ def _add_column(conn: sqlite3.Connection, table: str, col: str, decl: str) -> No
 def migrate_pos_columns(conn: sqlite3.Connection) -> None:
     """Add part-of-speech columns to sense and entry tables (idempotent)."""
     _add_column(conn, "sense", "part_of_speech", "TEXT")
+    _add_column(conn, "sense", "part_of_speech_en", "TEXT")
+    _add_column(conn, "sense", "part_of_speech_mi", "TEXT")
     _add_column(conn, "entry", "part_of_speech_en", "TEXT")
     _add_column(conn, "entry", "part_of_speech_mi", "TEXT")
 

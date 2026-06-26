@@ -184,6 +184,20 @@ class UnifiedCore(unittest.TestCase):
         assert mi and "Tūingoa" in mi        # canonical māori wrap-up (n. -> Tūingoa)
         assert raw and "n." in raw           # raw set retained
 
+    def test_sense_pos_baked(self):
+        # per-sense canonical POS is baked onto the sense row (no std_pos join needed)
+        conn = sqlite3.connect(DB_PATH)
+        row = conn.execute(
+            "SELECT s.part_of_speech, s.part_of_speech_en, s.part_of_speech_mi "
+            "FROM entry e JOIN sense s ON s.entry_id=e.id "
+            "WHERE e.source_id='williams' AND e.headword_search='pae' "
+            "AND s.part_of_speech='n.' LIMIT 1"
+        ).fetchone()
+        conn.close()
+        self.assertIsNotNone(row, "expected a williams 'pae' sense with raw POS 'n.'")
+        self.assertEqual(row[1], "Noun")        # n. -> Noun
+        self.assertEqual(row[2], "Tūingoa")      # n. -> Tūingoa
+
 
 import importlib
 _bu = importlib.import_module("50_build_unified")
