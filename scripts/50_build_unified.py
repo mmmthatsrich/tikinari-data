@@ -42,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import DB_PATH, normalise_search_key, compute_content_hash
+from williams_senses import split_senses
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -102,12 +103,12 @@ class Builder:
         return cur.lastrowid
 
     def add_sense(self, entry_id, sense_number, gloss_en, gloss_mi, definition_raw,
-                  register=None, parent_sense_id=None):
+                  register=None, parent_sense_id=None, part_of_speech=None):
         cur = self.con.execute(
             "INSERT INTO sense (entry_id, sense_number, parent_sense_id, gloss_en, "
-            "gloss_mi, definition_raw, register) VALUES (?,?,?,?,?,?,?)",
+            "gloss_mi, definition_raw, register, part_of_speech) VALUES (?,?,?,?,?,?,?,?)",
             (entry_id, sense_number, parent_sense_id, gloss_en, gloss_mi,
-             definition_raw, register))
+             definition_raw, register, part_of_speech))
         self.counts["sense"] += 1
         return cur.lastrowid
 
@@ -149,6 +150,38 @@ class Builder:
         self.counts["entry_domain"] += 1
 
 
+def load_std_pos(con):
+    m = {}
+    for raw, en, mi in con.execute("SELECT raw_pos, canonical_en, canonical_mi FROM std_pos"):
+        m[raw] = (en, mi)
+    return m
+
+
+def write_entry_pos(con, std_pos):
+    rows = con.execute(
+        "SELECT e.id, GROUP_CONCAT(s.part_of_speech, '\x1f') "
+        "FROM entry e JOIN sense s ON s.entry_id = e.id GROUP BY e.id"
+    ).fetchall()
+    for eid, raws in rows:
+        seen_raw, seen_en, seen_mi = [], [], []
+        for r in (raws.split('\x1f') if raws else []):
+            if not r or r == 'None':
+                continue
+            if r not in seen_raw:
+                seen_raw.append(r)
+            en, mi = std_pos.get(r, (None, None))
+            if en and en not in seen_en:
+                seen_en.append(en)
+            if mi and mi not in seen_mi:
+                seen_mi.append(mi)
+        con.execute(
+            "UPDATE entry SET part_of_speech=?, part_of_speech_en=?, part_of_speech_mi=? WHERE id=?",
+            (", ".join(seen_raw) or None, ", ".join(seen_en) or None,
+             ", ".join(seen_mi) or None, eid),
+        )
+    con.commit()
+
+
 # ── per-source transforms ────────────────────────────────────────────────────
 
 def build_williams(con, b):
@@ -161,9 +194,16 @@ def build_williams(con, b):
                           locator=f"p{pg}/{sec}" if pg else sec,
                           material={"hw": hw, "pos": pos, "def": d,
                                     "ex": examples, "xr": jload(xr)})
-        sid = b.add_sense(eid, sn, d, None, d)
+        senses = split_senses(d) or [{"sense_number": 1, "part_of_speech": None,
+                                      "gloss_en": d, "definition_raw": d}]
+        first_sid = None
+        for s in senses:
+            sid = b.add_sense(eid, s["sense_number"], s["gloss_en"], None,
+                              s["definition_raw"], part_of_speech=s["part_of_speech"])
+            if first_sid is None:
+                first_sid = sid
         for i, ex in enumerate(examples):
-            b.add_example(sid, eid, ex, None, None, None, i)   # Māori fragment -> text_mi
+            b.add_example(first_sid, eid, ex, None, None, None, i)   # examples -> sense 1
         for t in jload(xr):
             if isinstance(t, str):
                 b.add_relation(eid, "cross_ref", t)
@@ -179,7 +219,7 @@ def build_te_aka(con, b):
                           locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "syn": jload(syn), "filt": jload(filt)})
-        sid = b.add_sense(eid, None, d, None, d)
+        sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
             text, cite = split_cite(ex)                # Te Aka example = Māori + (citation)
             b.add_example(sid, eid, text, None, None, cite, i)
@@ -209,7 +249,7 @@ def build_hepatakakupu(con, b):
         eid = b.add_entry(seid, hw, hs, hse, pos=pos, locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def_mi": d, "sn": sn,
                                     "ex": examples, "syn": jload(syn), "dom": dom})
-        sid = b.add_sense(eid, sn, None, d, d)         # monolingual Māori -> gloss_mi
+        sid = b.add_sense(eid, sn, None, d, d, part_of_speech=pos)  # monolingual Māori -> gloss_mi
         for i, ex in enumerate(examples):
             text, src = split_src(ex)
             b.add_example(sid, eid, text, None, src, None, i)
@@ -232,7 +272,7 @@ def build_paekupu(con, b):
                           material={"hw": hw, "hen": hen, "pos": pos, "def": d,
                                     "def_mi": dmi, "ex": examples, "alt": jload(alt),
                                     "subj": jload(subj)})
-        sid = b.add_sense(eid, None, d, dmi, raw)
+        sid = b.add_sense(eid, None, d, dmi, raw, part_of_speech=pos)
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         for w in jload(alt):
@@ -251,7 +291,7 @@ def build_papakupu(con, b):
                           locator=f"pdf p{pg}; src {sc}" if pg else sc,
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "vf": jload(vf), "sa": jload(sa), "lm": lm})
-        sid = b.add_sense(eid, None, d, None, d)
+        sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
             text, src = split_src(ex)
             # NOTE: Māori half is dropped upstream — only text_en is available today.
@@ -371,6 +411,8 @@ def main():
         print(f"\nTOTAL  entry {grand['entry']}, sense {grand['sense']}, "
               f"example {grand['example']}, form {grand['form']}, "
               f"relation {grand['relation']}, domain {grand['entry_domain']}")
+
+    write_entry_pos(con, load_std_pos(con))
     con.close()
 
 

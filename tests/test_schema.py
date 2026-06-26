@@ -218,6 +218,16 @@ def test_stub_tables_insert(conn: sqlite3.Connection):
 
 # ── Runner ────────────────────────────────────────────────────────────────────
 
+def test_pos_columns_exist(conn: sqlite3.Connection):
+    """Test that part_of_speech columns exist in sense and entry tables."""
+    sense_cols = {r[1] for r in conn.execute("PRAGMA table_info(sense)")}
+    entry_cols = {r[1] for r in conn.execute("PRAGMA table_info(entry)")}
+    assert "part_of_speech" in sense_cols
+    assert "part_of_speech_en" in entry_cols
+    assert "part_of_speech_mi" in entry_cols
+    print("  POS columns exist OK")
+
+
 def main():
     assert DB_PATH.exists(), f"Database not found: {DB_PATH}\nRun: py scripts/00_init_db.py"
 
@@ -231,6 +241,7 @@ def main():
         test_fts_tables_exist(conn)
         test_columns(conn)
         test_source_metadata(conn)
+        test_pos_columns_exist(conn)
 
     print("FTS trigger tests:")
     with sqlite3.connect(DB_PATH) as conn:
