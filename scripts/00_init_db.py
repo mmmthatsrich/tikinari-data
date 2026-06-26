@@ -512,6 +512,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             homonym_no      INTEGER,               -- distinguishes homographs
             headword_en     TEXT,                  -- Paekupu English headword
             part_of_speech  TEXT,                  -- RAW passthrough for now; joins to std_pos for later canonicalisation
+            part_of_speech_en TEXT,                -- English part-of-speech (for later canonicalisation)
+            part_of_speech_mi TEXT,                -- Māori part-of-speech (for later canonicalisation)
             loan_marker     TEXT,                  -- Papakupu
             dialect         TEXT,                  -- e.g. 'Tai Tokerau'; source-defaulted via source_metadata.default_dialect.
                                                    --   Drives the app's dialect boost; ranking reads THIS, never source_id.
@@ -548,7 +550,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             gloss_en        TEXT,                  -- English gloss (Te Aka/Williams/Papakupu/Paekupu)
             gloss_mi        TEXT,                  -- Māori monolingual gloss (HPK, Paekupu definition_mi)
             definition_raw  TEXT,                  -- original blob, untouched, for fidelity
-            register        TEXT
+            register        TEXT,
+            part_of_speech  TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_sense_entry ON sense(entry_id);
         -- index FK-referencing cols so per-source DELETE doesn't full-scan on FK checks
@@ -651,6 +654,20 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _add_column(conn: sqlite3.Connection, table: str, col: str, decl: str) -> None:
+    """Idempotent helper: add a column only if it does not exist."""
+    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+    if col not in cols:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+
+
+def migrate_pos_columns(conn: sqlite3.Connection) -> None:
+    """Add part-of-speech columns to sense and entry tables (idempotent)."""
+    _add_column(conn, "sense", "part_of_speech", "TEXT")
+    _add_column(conn, "entry", "part_of_speech_en", "TEXT")
+    _add_column(conn, "entry", "part_of_speech_mi", "TEXT")
+
+
 def migrate_tables(conn: sqlite3.Connection) -> None:
     """Add columns that were missing from initial schema versions."""
     pollex_cols = {row[1] for row in conn.execute("PRAGMA table_info(pollex_entries)")}
@@ -713,6 +730,7 @@ def main() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         create_tables(conn)
+        migrate_pos_columns(conn)
         migrate_tables(conn)
         seed_source_metadata(conn)
         conn.commit()
