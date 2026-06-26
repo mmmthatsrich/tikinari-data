@@ -1,0 +1,23 @@
+# Databases + backups (large, regenerable)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*.db.bak*
+
+# Source PDFs and scans (large binaries)
+*.pdf
+
+# Source data, scrapes, and embedded CLDF repos (large; regenerable; not needed in git)
+sources/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Subagent-driven-development scratch + progress ledger
+.superpowers/
+
+# OS
+Thumbs.db
+.DS_Store
