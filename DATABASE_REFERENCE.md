@@ -23,7 +23,7 @@ This document describes `data/maori_dict.db` — a SQLite database containing M�
 
 | Property | Value |
 |---|---|
-| App DB (copy this) | `data/maori_dict.db` — ~114 MB |
+| App DB (copy this) | `data/maori_dict.db` — ~117 MB |
 | Working/build DB | `data/staging_dictionary.db` — ~210 MB (stays in repo) |
 | Format | SQLite 3 with WAL journal mode |
 | FTS engine | FTS5 (built into SQLite) |
@@ -95,7 +95,7 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 | Table | Rows | What it holds |
 |---|---|---|
 | `entry` | 105,898 | one row per source headword-entry; provenance kept (not merged across sources) |
-| `sense` | 105,898 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number` |
+| `sense` | 114,181 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
 | `example` | 90,019 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
 | `relation` | 103,485 | `synonym` / `see_also` / `cross_ref` (Te Aka synonyms resolved to `target_entry_id`) |
@@ -106,9 +106,25 @@ Key columns on `entry`:
   (minted downstream); `source_entry_id` is unique within a source. `entry.id` is an
   **internal surrogate only** and is volatile across rebuilds — never reference it from the device.
 - `headword_search` / `headword_sort` — same normalisation as the per-source tables.
-- `part_of_speech` — RAW passthrough for now (canonical `std_pos` mapping pending expert review).
+- `part_of_speech` — RAW passthrough (canonical `std_pos` mapping pending expert review).
+- `part_of_speech_en` — **entry-level POS wrap-up (English).** Deduped, comma-joined canonical
+  English labels drawn from the entry's senses' `sense.part_of_speech` values via `std_pos`.
+  Present wherever at least one sense has a `std_pos` canonical mapping.
+- `part_of_speech_mi` — **entry-level POS wrap-up (Māori).** Same dedup/join, but only where
+  `std_pos.canonical_mi` is populated (i.e. the Māori term was matched from Paekupu). NULL when
+  no Māori term is recorded for any of the entry's POS values (e.g. He Pātaka Kupu entries whose
+  POS codes have not yet been added to `std_pos`).
 - `dialect` — e.g. `'Tai Tokerau'` (Papakupu). **Ranking/boost reads `dialect`, never `source_id`.**
 - `audio_url`, `headword_en`, `loan_marker`, `locator`, `content_hash`, `first_seen`.
+
+Key columns on `sense`:
+- `sense_number` — 1-based integer ordering within the entry. Williams entries are now **multi-sense**:
+  the parser splits numbered senses (i, ii, iii…) into separate `sense` rows under a single `entry`.
+  Williams has 11,910 entries and 20,193 senses (avg 1.70 senses/entry).
+- `part_of_speech` — per-sense POS, drawn from the source. For Williams this is the inline
+  abbreviation expanded to a canonical English label (e.g. `s.` → `Noun`); for other sources it
+  is the raw passthrough from the per-source table. Used to compute `entry.part_of_speech_en/_mi`.
+- `gloss_en` / `gloss_mi` — language-tagged gloss (see language-tagging note below).
 
 Language tagging (the core fix): He Pātaka Kupu glosses are **Māori** → `sense.gloss_mi`
 only; Te Aka/Williams/Papakupu → `gloss_en`; Paekupu is bilingual (both). Never infer the
@@ -128,9 +144,9 @@ WHERE e.headword_search = ?            -- normalise_search_key(user input)
 ORDER BY e.source_id, s.sense_number, x.sort_no;
 ```
 
-> Current simplifications: grain is one source row → one entry → one sense (multi-sense
-> grouping under a single entry is a later refinement); Papakupu `example.text_mi` is NULL
-> pending the upstream extractor fix (schema holds the slot).
+> Note: Papakupu `example.text_mi` is NULL pending the upstream extractor fix (schema holds
+> the slot). Williams is now multi-sense (20,193 senses across 11,910 entries); all other
+> sources remain one-sense-per-entry.
 
 ---
 

@@ -16,6 +16,21 @@
 > `staging_dictionary.db` (full working DB) and `maori_dict.db` (slim app projection, built
 > by `scripts/60_export_app_db.py`); see `DATABASE_REFERENCE.md`.
 
+> ## Grain refinement update (2026-06-27)
+> Williams multi-sense split is now **implemented and shipped**. The Williams parser
+> (`scripts/williams_senses.py`) splits numbered senses (i, ii, iii…) into separate
+> `sense` rows under a single `entry`; each sense carries its own `sense.part_of_speech`
+> (canonical English label from the inline abbreviation). Result: 11,910 Williams entries →
+> 20,193 senses (avg 1.70). All other sources remain one-sense-per-entry for now.
+>
+> POS is now **sense-level** (`sense.part_of_speech`) with an **entry-level wrap-up**
+> (`entry.part_of_speech_en` / `entry.part_of_speech_mi`) across all sources. The wrap-up
+> deduplicates and joins the canonical labels from the entry's senses via `std_pos`.
+> `part_of_speech_mi` is populated only where `std_pos.canonical_mi` is set (Māori terms
+> sourced from Paekupu `pos_mi`); He Pātaka Kupu entries have NULL `part_of_speech_mi`
+> because HPK POS codes have not yet been added to `std_pos`. The `std_pos` seed covers
+> Williams inline abbreviations (66 rows seeded, Māori from Paekupu where matched).
+
 > ## Tikinari amendments (2026-06-25)
 > This generic research report has been reviewed against the actual Tikinari app +
 > build pipeline. Full analysis: **`docs/SCHEMA_PROPOSAL_APP_IMPACT.md`**. Binding
