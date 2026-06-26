@@ -119,6 +119,40 @@ py scripts/08_etymology_linker.py            # POLLEX↔LPO↔ACD links
 
 ---
 
+## Part-of-speech (POS) normalisation
+
+POS is **sense-level** with an **entry-level wrap-up**, both baked into the app DB at unify
+time:
+- `sense.part_of_speech` (raw) + `sense.part_of_speech_en` / `_mi` (canonical)
+- `entry.part_of_speech` (deduped raw set) + `entry.part_of_speech_en` / `_mi`
+
+Canonical labels come from **`std_pos`** — the review/mapping table, which is **staging-only**
+(never exported; it holds `status`, `source_counts`, `needs_review` rows + placeholders).
+`50_build_unified.py` resolves each sense's raw POS via `std_pos` (`resolve_pos`: whole-string
+match first, else comma-split to **atomic** codes — so He Pātaka Kupu combos like
+`mahp, ing, āhua` compose from atomic rows). `canonical_mi` is set only where known (Paekupu
+`pos_mi` + reviewed terms); unmapped → NULL.
+
+To fill / extend the mapping:
+
+```bash
+# Option A (recommended) — edit std_pos directly; fill ATOMIC codes only, combos auto-compose:
+#   UPDATE std_pos SET canonical_en='Noun', canonical_mi='Tūingoa', status='reviewed' WHERE raw_pos='ing';
+# Option B — bulk via CSV:
+py scripts/15_apply_pos_review.py --csv docs/POS_REVIEW_atomic.csv
+# then bake into the core + app DB:
+py scripts/50_build_unified.py && py scripts/60_export_app_db.py
+```
+
+- `docs/POS_REVIEW_atomic.csv` — the worklist: every distinct atomic POS code across all
+  sources, with usage counts + current mapping.
+- `scripts/14_seed_williams_pos.py` — seeded the Williams inline abbreviations (one-off).
+- **`std_pos` edits are NOT in git** — a from-scratch rebuild (`00_init_db` → imports →
+  `13_build_pos_normalisation.py`) would lose them. A durable seed (dump → committed file,
+  load on init) is planned; until then, re-apply after any full rebuild.
+
+---
+
 ## New PDF source (OCR path)
 
 For a scanned dictionary (e.g. Maunsell, He Karao): OCR → parse → curate → import into a
@@ -136,6 +170,9 @@ py scripts/35_detect_pairs.py                # refresh cross-source "also in" ca
 py -m unittest discover -s tests -p "test_*.py"   # all green before you stop
 py scripts/60_export_app_db.py               # rebuild the slim app DB (data/maori_dict.db) — copy THIS to the app repo
 ```
+
+(If you edited `std_pos`, the rebuild above bakes the new POS labels onto `sense`/`entry`
+and the export carries them — see *Part-of-speech (POS) normalisation*.)
 
 Then update the trackers:
 - **`SESSIONS.md`** — add a row: source, row counts, what changed, date (canonical tracker).
