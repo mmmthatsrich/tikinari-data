@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import DB_PATH
 
 sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 # raw -> (canonical_en, canonical_mi)
 SEED = {
@@ -25,7 +26,9 @@ def seed(db_path=DB_PATH):
             exists = conn.execute("SELECT 1 FROM std_pos WHERE raw_pos=?", (raw,)).fetchone()
             if exists:
                 conn.execute(
-                    "UPDATE std_pos SET canonical_en=?, canonical_mi=?, status='seeded' WHERE raw_pos=?",
+                    "UPDATE std_pos SET canonical_en=?, canonical_mi=?, "
+                    "status=CASE WHEN status IS NULL OR status IN ('needs_review','seeded') THEN 'seeded' ELSE status END "
+                    "WHERE raw_pos=?",
                     (en, mi, raw),
                 )
             else:
