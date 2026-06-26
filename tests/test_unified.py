@@ -173,6 +173,17 @@ class UnifiedCore(unittest.TestCase):
         self.assertEqual(nums, list(range(1, len(nums) + 1)))   # sequential
         self.assertIsNotNone(rows[0][1])                         # POS populated
 
+    def test_entry_pos_wrapup(self):
+        conn = sqlite3.connect(DB_PATH)
+        en, mi, raw = conn.execute(
+            "SELECT part_of_speech_en, part_of_speech_mi, part_of_speech FROM entry "
+            "WHERE source_id='williams' AND headword_search=? LIMIT 1", ("pae",)
+        ).fetchone()
+        conn.close()
+        assert en and "Noun" in en          # canonical english wrap-up
+        assert mi and "Tūingoa" in mi        # canonical māori wrap-up (n. -> Tūingoa)
+        assert raw and "n." in raw           # raw set retained
+
 
 if __name__ == "__main__":
     assert DB_PATH.exists(), f"Database not found: {DB_PATH}\nRun: py scripts/00_init_db.py && py scripts/50_build_unified.py"

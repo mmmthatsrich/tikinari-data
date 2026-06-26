@@ -150,6 +150,38 @@ class Builder:
         self.counts["entry_domain"] += 1
 
 
+def load_std_pos(con):
+    m = {}
+    for raw, en, mi in con.execute("SELECT raw_pos, canonical_en, canonical_mi FROM std_pos"):
+        m[raw] = (en, mi)
+    return m
+
+
+def write_entry_pos(con, std_pos):
+    rows = con.execute(
+        "SELECT e.id, GROUP_CONCAT(s.part_of_speech, '\x1f') "
+        "FROM entry e JOIN sense s ON s.entry_id = e.id GROUP BY e.id"
+    ).fetchall()
+    for eid, raws in rows:
+        seen_raw, seen_en, seen_mi = [], [], []
+        for r in (raws.split('\x1f') if raws else []):
+            if not r or r == 'None':
+                continue
+            if r not in seen_raw:
+                seen_raw.append(r)
+            en, mi = std_pos.get(r, (None, None))
+            if en and en not in seen_en:
+                seen_en.append(en)
+            if mi and mi not in seen_mi:
+                seen_mi.append(mi)
+        con.execute(
+            "UPDATE entry SET part_of_speech=?, part_of_speech_en=?, part_of_speech_mi=? WHERE id=?",
+            (", ".join(seen_raw) or None, ", ".join(seen_en) or None,
+             ", ".join(seen_mi) or None, eid),
+        )
+    con.commit()
+
+
 # ── per-source transforms ────────────────────────────────────────────────────
 
 def build_williams(con, b):
@@ -187,7 +219,7 @@ def build_te_aka(con, b):
                           locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "syn": jload(syn), "filt": jload(filt)})
-        sid = b.add_sense(eid, None, d, None, d)
+        sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
             text, cite = split_cite(ex)                # Te Aka example = Māori + (citation)
             b.add_example(sid, eid, text, None, None, cite, i)
@@ -217,7 +249,7 @@ def build_hepatakakupu(con, b):
         eid = b.add_entry(seid, hw, hs, hse, pos=pos, locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def_mi": d, "sn": sn,
                                     "ex": examples, "syn": jload(syn), "dom": dom})
-        sid = b.add_sense(eid, sn, None, d, d)         # monolingual Māori -> gloss_mi
+        sid = b.add_sense(eid, sn, None, d, d, part_of_speech=pos)  # monolingual Māori -> gloss_mi
         for i, ex in enumerate(examples):
             text, src = split_src(ex)
             b.add_example(sid, eid, text, None, src, None, i)
@@ -240,7 +272,7 @@ def build_paekupu(con, b):
                           material={"hw": hw, "hen": hen, "pos": pos, "def": d,
                                     "def_mi": dmi, "ex": examples, "alt": jload(alt),
                                     "subj": jload(subj)})
-        sid = b.add_sense(eid, None, d, dmi, raw)
+        sid = b.add_sense(eid, None, d, dmi, raw, part_of_speech=pos)
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         for w in jload(alt):
@@ -259,7 +291,7 @@ def build_papakupu(con, b):
                           locator=f"pdf p{pg}; src {sc}" if pg else sc,
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "vf": jload(vf), "sa": jload(sa), "lm": lm})
-        sid = b.add_sense(eid, None, d, None, d)
+        sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
             text, src = split_src(ex)
             # NOTE: Māori half is dropped upstream — only text_en is available today.
@@ -379,6 +411,8 @@ def main():
         print(f"\nTOTAL  entry {grand['entry']}, sense {grand['sense']}, "
               f"example {grand['example']}, form {grand['form']}, "
               f"relation {grand['relation']}, domain {grand['entry_domain']}")
+
+    write_entry_pos(con, load_std_pos(con))
     con.close()
 
 
