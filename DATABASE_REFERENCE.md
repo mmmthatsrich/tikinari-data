@@ -95,8 +95,8 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 | Table | Rows | What it holds |
 |---|---|---|
 | `entry` | 105,898 | one row per source headword-entry; provenance kept (not merged across sources) |
-| `sense` | 114,181 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
-| `example` | 90,019 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
+| `sense` | 125,775 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
+| `example` | 89,896 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
 | `relation` | 103,485 | `synonym` / `see_also` / `cross_ref` (Te Aka synonyms resolved to `target_entry_id`) |
 | `entry_domain` | 59,570 | subject / semantic-domain tags (`domain_lang` = mi/en) |
@@ -119,12 +119,15 @@ Key columns on `entry`:
 - `audio_url`, `headword_en`, `loan_marker`, `locator`, `content_hash`, `first_seen`.
 
 Key columns on `sense`:
-- `sense_number` — 1-based integer ordering within the entry. Williams entries are now **multi-sense**:
-  the parser splits numbered senses (i, ii, iii…) into separate `sense` rows under a single `entry`.
-  Williams has 11,910 entries and 20,193 senses (avg 1.70 senses/entry).
-- `part_of_speech` — per-sense POS, drawn from the source. For Williams this is the inline
-  abbreviation expanded to a canonical English label (e.g. `n.` → `Noun`); for other sources it
-  is the raw passthrough from the per-source table. Used to compute `entry.part_of_speech_en/_mi`.
+- `sense_number` — 1-based integer ordering within the entry. **Williams and Te Aka are multi-sense**:
+  numbered senses are split into separate `sense` rows under a single `entry`. Williams: 11,910
+  entries → 20,193 senses (avg 1.70). Te Aka: 47,878 entries → 59,472 senses (avg 1.24); exact
+  duplicate senses in the source are collapsed and survivors renumbered 1..n.
+- `part_of_speech` — per-sense POS, drawn from the source. Williams: inline abbreviation expanded
+  to a canonical English label (e.g. `n.` → `Noun`). Te Aka: the genuine per-sense POS recovered
+  from the raw HTML (e.g. a verb entry whose later senses are nouns keeps `verb` on senses 1–6 and
+  `noun` on 7–10). Other sources: raw passthrough from the per-source table. Used to compute
+  `entry.part_of_speech_en/_mi`. ~1,911 Te Aka senses (3.2%) have NULL POS where the source omits it.
 - `gloss_en` / `gloss_mi` — language-tagged gloss (see language-tagging note below).
 
 Language tagging (the core fix): He Pātaka Kupu glosses are **Māori** → `sense.gloss_mi`
@@ -146,8 +149,9 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 ```
 
 > Note: Papakupu `example.text_mi` is NULL pending the upstream extractor fix (schema holds
-> the slot). Williams is now multi-sense (20,193 senses across 11,910 entries); all other
-> sources remain one-sense-per-entry.
+> the slot). Williams (20,193 senses / 11,910 entries) and Te Aka (59,472 senses / 47,878 entries)
+> are multi-sense with per-sense POS and per-sense examples; the remaining sources are
+> one-sense-per-entry.
 
 ---
 
@@ -207,9 +211,10 @@ Te Aka Māori-English/English-Māori Dictionary. Largest source. Has audio URLs,
 | `headword` | TEXT | With macrons |
 | `headword_sort` | TEXT | Indexed |
 | `headword_search` | TEXT | Indexed |
-| `part_of_speech` | TEXT | e.g. `noun`, `verb`, `particle` |
-| `definition` | TEXT | Pipe-separated senses: `"1. fishing line \| 2. weft"` |
-| `usage_examples` | TEXT | JSON array of strings (source citations pre-expanded) |
+| `part_of_speech` | TEXT | Entry-level POS (first sense's), e.g. `noun`, `verb`, `particle`. Per-sense POS lives in `senses` |
+| `definition` | TEXT | Legacy pipe-separated senses: `"1. fishing line \| 2. weft"` — kept for FTS/back-compat. Authoritative per-sense data is in `senses` |
+| `senses` | TEXT | JSON array, one object per sense: `{"sense_number", "part_of_speech", "gloss_en", "definition_raw", "examples", "citations", "synonyms"}`. `gloss_en` has the leading passive marker `(-ia,-ngia)` stripped (kept in `definition_raw`). Exploded into unified `sense`/`example` rows by `50_build_unified.py` |
+| `usage_examples` | TEXT | JSON array of all examples flat (source citations pre-expanded); per-sense examples are in `senses[].examples` |
 | `audio_url` | TEXT | MP3 URL on Google Cloud Storage — 58.6% of entries have audio |
 | `synonyms` | TEXT | JSON array of `{"text": "raina", "word_id": 6429}` objects |
 | `source_citations` | TEXT | JSON array of expanded citation strings |

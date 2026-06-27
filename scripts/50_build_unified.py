@@ -63,6 +63,11 @@ def jload(s):
         return []
 
 
+def _ws(s):
+    """Collapse whitespace runs to single spaces; '' for falsy input."""
+    return re.sub(r"\s+", " ", s).strip() if s else ""
+
+
 def split_src(s):
     """Strip a trailing [SRC] code; return (text, src|None)."""
     m = SRC_BRACKET.search(s)
@@ -256,18 +261,42 @@ def build_williams(con, b):
 
 def build_te_aka(con, b):
     sql = ("SELECT word_id, headword, headword_sort, headword_search, part_of_speech, "
-           "definition, usage_examples, audio_url, synonyms, filters "
+           "definition, senses, usage_examples, audio_url, synonyms, filters "
            "FROM te_aka_entries ORDER BY word_id")
-    for (wid, hw, hs, hse, pos, d, ux, au, syn, filt) in con.execute(sql):
+    for (wid, hw, hs, hse, pos, d, sj, ux, au, syn, filt) in con.execute(sql):
         examples = [e for e in jload(ux) if isinstance(e, str)]
+        senses = [s for s in jload(sj) if isinstance(s, dict)]
         eid = b.add_entry(wid, hw, hs, hse, pos=pos, audio_url=au,
                           locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "syn": jload(syn), "filt": jload(filt)})
-        sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
-        for i, ex in enumerate(examples):
-            text, cite = split_cite(ex)                # Te Aka example = Māori + (citation)
-            b.add_example(sid, eid, text, None, None, cite, i)
+
+        # Explode the structured senses into per-sense rows, each with its own POS
+        # and examples. Drop exact-duplicate senses (some source entries repeat the
+        # same def-div N times, e.g. "Rua o Takurua, Te"), then renumber 1..n.
+        # Fall back to the packed definition for data parsed before senses existed.
+        if not senses:
+            senses = [{"sense_number": 1, "part_of_speech": pos,
+                       "gloss_en": d, "definition_raw": d, "examples": examples}]
+
+        first_sid = None
+        seen_senses = set()
+        out_no = 0
+        for s in senses:
+            key = _ws(s.get("definition_raw") or s.get("gloss_en") or "").lower()
+            if key and key in seen_senses:
+                continue
+            seen_senses.add(key)
+            out_no += 1
+            sid = b.add_sense(eid, out_no, s.get("gloss_en"), None,
+                              s.get("definition_raw"),
+                              part_of_speech=s.get("part_of_speech"))
+            if first_sid is None:
+                first_sid = sid
+            for i, ex in enumerate(e for e in (s.get("examples") or []) if isinstance(e, str)):
+                text, cite = split_cite(ex)            # Te Aka example = Māori + (citation)
+                b.add_example(sid, eid, text, None, None, cite, i)
+
         for sy in jload(syn):
             if isinstance(sy, dict):
                 # word_id is a SOURCE id, not a unified entry.id — stash it in note and
@@ -277,7 +306,7 @@ def build_te_aka(con, b):
             elif isinstance(sy, str):
                 b.add_relation(eid, "synonym", sy)
         for fdom in jload(filt):
-            b.add_domain(eid, sid, fdom if isinstance(fdom, str) else str(fdom), "en")
+            b.add_domain(eid, first_sid, fdom if isinstance(fdom, str) else str(fdom), "en")
 
 
 def build_hepatakakupu(con, b):

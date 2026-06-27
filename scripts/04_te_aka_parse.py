@@ -5,8 +5,11 @@ Reads sources/te_aka/raw/{ID}.html for each valid ID listed in manifest.json
 (or all .html files if manifest is absent — useful for partial runs).
 Writes sources/te_aka/parsed/te_aka_entries.json.
 
-One JSON object per word_id.  All senses are bundled into a single
-definition string ("1. ... | 2. ... | 3. ...").
+One JSON object per word_id.  Each entry carries a structured ``senses`` list
+(one dict per sense, with its own POS, gloss, and examples) so the unify step
+can explode it into per-sense rows.  A legacy ``definition`` string
+("1. ... | 2. ... | 3. ...") and flat ``usage_examples`` are kept alongside for
+FTS and content-hash continuity.
 """
 
 import json
@@ -29,6 +32,16 @@ AUDIO_BASE = "https://storage.googleapis.com/maori-dictionary-prod2-web-assets/p
 def _ws(text: str) -> str:
     """Collapse runs of whitespace (including newlines) to a single space."""
     return re.sub(r"\s+", " ", text).strip()
+
+
+_PASSIVE_RE = re.compile(r"^\(-[^)]*\)\s*")
+
+
+def _strip_passive(gloss: str) -> str:
+    """Strip a leading passive/transitive marker, e.g. '(-ia,-ngia) to drive' ->
+    'to drive'. Mirrors the Williams convention: the marker stays in
+    definition_raw, gloss_en holds the bare gloss."""
+    return _PASSIVE_RE.sub("", gloss).strip()
 
 
 def _def_text(p_elem) -> str:
@@ -90,7 +103,7 @@ def parse_page(html_bytes: bytes, word_id: int) -> dict | None:
     all_synonyms: list[dict] = []
     all_citations: list[str] = []
 
-    for div in def_divs:
+    for ordinal, div in enumerate(def_divs, 1):
         # Main definition paragraph
         detail = div.xpath('./div[contains(@class,"flex-1")]')
         if not detail:
@@ -100,7 +113,9 @@ def parse_page(html_bytes: bytes, word_id: int) -> dict | None:
             continue
         def_p = p_list[0]
 
-        # Sense number and POS from <strong> children
+        # Sense number and POS from <strong> children. Parenthesised strongs hold
+        # the POS (e.g. "(verb)"); passive/transitive markers like "(-ia,-ngia)"
+        # live in the body text, never in a strong, but guard against them anyway.
         strongs = def_p.xpath('./strong')
         sense_num = None
         pos_parts: list[str] = []
@@ -109,61 +124,79 @@ def parse_page(html_bytes: bytes, word_id: int) -> dict | None:
             if re.match(r"^\d+\.$", t):
                 sense_num = int(t[:-1])
             elif re.match(r"^\([^)]+\)$", t):
-                pos_parts.append(t[1:-1])  # strip parens
+                inner = t[1:-1]
+                if not inner.startswith("-"):
+                    pos_parts.append(inner)  # POS, not a passive marker
 
         def_str = _def_text(def_p)
-        senses.append({
-            "sense_num": sense_num,
-            "pos":       ", ".join(pos_parts) if pos_parts else None,
-            "definition": def_str,
-        })
+        pos = ", ".join(pos_parts) if pos_parts else None
 
-        # Source citations: p.text-slate.mb-0 without x-show (not example paras)
+        # Per-sense source citations: p.text-slate.mb-0 without x-show
+        sense_citations: list[str] = []
         cit_paras = detail[0].xpath(
             './/p[contains(@class,"text-slate") and contains(@class,"mb-0") and not(@x-show)]'
         )
         for cp in cit_paras:
             ct = _ws(cp.text_content())
             if ct:
-                all_citations.append(ct)
+                sense_citations.append(ct)
 
-        # Usage examples (in DOM regardless of show/hide state)
-        ex_paras = div.xpath('.//p[@x-show="showExample"]')
-        for ep in ex_paras:
+        # Per-sense usage examples (in DOM regardless of show/hide state)
+        sense_examples: list[str] = []
+        for ep in div.xpath('.//p[@x-show="showExample"]'):
             em_tags = ep.xpath('.//em')
             if em_tags:
                 ex_text = _ws(em_tags[0].text_content())
                 if ex_text:
-                    all_examples.append(ex_text)
+                    sense_examples.append(ex_text)
 
-        # Synonyms (dictionary-link anchors)
+        # Per-sense synonyms (dictionary-link anchors)
+        sense_synonyms: list[dict] = []
         for link in div.xpath('.//a[contains(@class,"dictionary-link")]'):
             href = link.get("href", "")
             m = re.search(r"/word/(\d+)", href)
             syn_id = int(m.group(1)) if m else None
             syn_text = link.text_content().strip()
-            entry = {"text": syn_text, "word_id": syn_id}
-            if syn_text and entry not in all_synonyms:
-                all_synonyms.append(entry)
+            syn = {"text": syn_text, "word_id": syn_id}
+            if syn_text and syn not in sense_synonyms:
+                sense_synonyms.append(syn)
+
+        senses.append({
+            "sense_number":   sense_num or ordinal,
+            "part_of_speech": pos,
+            "gloss_en":       _strip_passive(def_str),
+            "definition_raw": def_str,
+            "examples":       sense_examples,
+            "citations":      sense_citations,
+            "synonyms":       sense_synonyms,
+        })
+
+        # Entry-level aggregates (legacy / FTS / synonym resolution)
+        all_examples.extend(sense_examples)
+        all_citations.extend(sense_citations)
+        for syn in sense_synonyms:
+            if syn not in all_synonyms:
+                all_synonyms.append(syn)
 
     if not senses:
         return None
 
-    # ── combine multi-sense entries ───────────────────────────────────────────
+    # ── legacy combined definition string (kept for FTS + content-hash) ────────
     def_parts = []
     for s in senses:
-        prefix = f"{s['sense_num']}. " if s["sense_num"] else ""
-        def_parts.append(prefix + s["definition"])
+        prefix = f"{s['sense_number']}. " if s["sense_number"] else ""
+        def_parts.append(prefix + s["definition_raw"])
     combined_def = " | ".join(def_parts)
 
-    # POS from first sense that has one
-    combined_pos = next((s["pos"] for s in senses if s["pos"]), None)
+    # Entry-level POS: first sense that has one (per-sense POS lives in senses[])
+    combined_pos = next((s["part_of_speech"] for s in senses if s["part_of_speech"]), None)
 
     return {
         "word_id":         word_id,
         "headword":        headword,
         "part_of_speech":  combined_pos,
         "definition":      combined_def,
+        "senses":          senses,
         "usage_examples":  all_examples,
         "audio_url":       audio_url,
         "synonyms":        all_synonyms,

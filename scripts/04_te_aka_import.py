@@ -38,7 +38,7 @@ JSON_PATH = Path(__file__).parent.parent / "sources" / "te_aka" / "parsed" / "te
 # Excludes: id, word_id, headword_sort, headword_search, audio_url,
 #           content_hash, first_seen, created_at, last_updated.
 MATERIAL_FIELDS = (
-    "headword", "part_of_speech", "definition",
+    "headword", "part_of_speech", "definition", "senses",
     "usage_examples", "synonyms", "source_citations", "filters",
 )
 
@@ -63,6 +63,7 @@ _CREATE_SQL = """
         headword_search  TEXT NOT NULL,
         part_of_speech   TEXT,
         definition       TEXT,
+        senses           TEXT DEFAULT '[]',
         usage_examples   TEXT DEFAULT '[]',
         audio_url        TEXT,
         synonyms         TEXT DEFAULT '[]',
@@ -101,10 +102,10 @@ _CREATE_SQL = """
 _INSERT_SQL = """
     INSERT INTO te_aka_entries
         (word_id, headword, headword_sort, headword_search,
-         part_of_speech, definition, usage_examples,
+         part_of_speech, definition, senses, usage_examples,
          audio_url, synonyms, source_citations, filters,
          content_hash, first_seen)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -126,6 +127,15 @@ def _expand_entry(entry: dict, abbrevs: dict) -> dict:
     out["source_citations"] = [
         expand_citations(c, abbrevs) for c in (entry.get("source_citations") or [])
     ]
+    # Expand abbreviations inside each sense's examples/citations too, so the
+    # per-sense rows match the entry-level aggregates.
+    senses = []
+    for s in (entry.get("senses") or []):
+        s = s.copy()
+        s["examples"] = [expand_citations(ex, abbrevs) for ex in (s.get("examples") or [])]
+        s["citations"] = [expand_citations(c, abbrevs) for c in (s.get("citations") or [])]
+        senses.append(s)
+    out["senses"] = senses
     return out
 
 
@@ -135,6 +145,7 @@ def _build_material(entry: dict) -> dict:
         "headword":        entry.get("headword") or "",
         "part_of_speech":  entry.get("part_of_speech") or "",
         "definition":      entry.get("definition") or "",
+        "senses":          entry.get("senses") or [],
         "usage_examples":  entry.get("usage_examples") or [],
         "synonyms":        entry.get("synonyms") or [],
         "source_citations": entry.get("source_citations") or [],
@@ -151,6 +162,7 @@ def _build_row(entry: dict, now: str) -> tuple:
         normalise_search_key(entry["headword"]),
         entry.get("part_of_speech"),
         entry.get("definition"),
+        json.dumps(entry.get("senses") or [], ensure_ascii=False),
         json.dumps(entry.get("usage_examples") or [], ensure_ascii=False),
         entry.get("audio_url"),
         json.dumps(entry.get("synonyms") or [], ensure_ascii=False),
@@ -199,6 +211,7 @@ def _material_from_db_te_aka(db: dict) -> dict:
         "headword":        db.get("headword") or "",
         "part_of_speech":  db.get("part_of_speech") or "",
         "definition":      db.get("definition") or "",
+        "senses":          json.loads(db.get("senses") or "[]"),
         "usage_examples":  json.loads(db.get("usage_examples") or "[]"),
         "synonyms":        json.loads(db.get("synonyms") or "[]"),
         "source_citations": json.loads(db.get("source_citations") or "[]"),
@@ -215,14 +228,14 @@ def refresh_import(conn: sqlite3.Connection, entries: list[dict]) -> None:
     existing: dict[int, dict] = {}
     for row in conn.execute(
         "SELECT word_id, headword, content_hash, first_seen, "
-        "part_of_speech, definition, usage_examples, synonyms, source_citations, filters "
+        "part_of_speech, definition, senses, usage_examples, synonyms, source_citations, filters "
         "FROM te_aka_entries"
     ):
         existing[row[0]] = {
             "headword": row[1], "content_hash": row[2], "first_seen": row[3],
-            "part_of_speech": row[4], "definition": row[5],
-            "usage_examples": row[6], "synonyms": row[7],
-            "source_citations": row[8], "filters": row[9],
+            "part_of_speech": row[4], "definition": row[5], "senses": row[6],
+            "usage_examples": row[7], "synonyms": row[8],
+            "source_citations": row[9], "filters": row[10],
         }
 
     # Backfill content_hash for rows imported before refresh tracking was added
@@ -263,6 +276,7 @@ def refresh_import(conn: sqlite3.Connection, entries: list[dict]) -> None:
             "headword":        (old_db["headword"],        e.get("headword") or ""),
             "part_of_speech":  (old_db["part_of_speech"],  e.get("part_of_speech") or ""),
             "definition":      (old_db["definition"],       e.get("definition") or ""),
+            "senses":          (old_db["senses"],           json.dumps(e.get("senses") or [], ensure_ascii=False)),
             "usage_examples":  (old_db["usage_examples"],   json.dumps(e.get("usage_examples") or [], ensure_ascii=False)),
             "synonyms":        (old_db["synonyms"],          json.dumps(e.get("synonyms") or [], ensure_ascii=False)),
             "source_citations":(old_db["source_citations"],  json.dumps(e.get("source_citations") or [], ensure_ascii=False)),
@@ -302,7 +316,7 @@ def refresh_import(conn: sqlite3.Connection, entries: list[dict]) -> None:
         conn.execute(
             "UPDATE te_aka_entries SET "
             "headword=?, headword_sort=?, headword_search=?, part_of_speech=?, "
-            "definition=?, usage_examples=?, audio_url=?, synonyms=?, "
+            "definition=?, senses=?, usage_examples=?, audio_url=?, synonyms=?, "
             "source_citations=?, filters=?, content_hash=?, last_updated=datetime('now') "
             "WHERE word_id=?",
             (
@@ -311,6 +325,7 @@ def refresh_import(conn: sqlite3.Connection, entries: list[dict]) -> None:
                 normalise_search_key(e["headword"]),
                 e.get("part_of_speech"),
                 e.get("definition"),
+                json.dumps(e.get("senses") or [], ensure_ascii=False),
                 json.dumps(e.get("usage_examples") or [], ensure_ascii=False),
                 e.get("audio_url"),
                 json.dumps(e.get("synonyms") or [], ensure_ascii=False),
