@@ -20,7 +20,7 @@ Read-only against source tables; only std_pos is dropped/created.
 Usage:
     py scripts/13_build_pos_normalisation.py
 """
-import json, sqlite3, sys
+import csv, json, sqlite3, sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,6 +28,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import DB_PATH
 
 NOW = datetime.now(timezone.utc).isoformat()
+SEED_CSV = Path(__file__).parent.parent / "seeds" / "std_pos_seed.csv"
 SOURCES = {
     "williams": "williams_entries", "te_aka": "te_aka_entries",
     "hepatakakupu": "hepatakakupu_entries", "paekupu": "paekupu_entries",
@@ -128,6 +129,42 @@ CREATE TABLE std_pos (
 """
 
 
+def load_seed(con, path=SEED_CSV):
+    """Apply committed expert POS decisions (seeds/std_pos_seed.csv) — FILL-ONLY.
+
+    Never overwrites a row already 'reviewed'/'not_pos' in the live DB (live edits win);
+    only fills/seeds other rows, and inserts a row if the code is absent. This is the
+    from-empty safety net: on a fresh rebuild the seed restores reviewer decisions.
+    """
+    if not path.exists():
+        return 0
+    n = 0
+    with open(path, encoding="utf-8-sig", newline="") as f:
+        for row in csv.DictReader(f):
+            raw = (row.get("raw_pos") or "").strip()
+            if not raw:
+                continue
+            cur = con.execute("SELECT status FROM std_pos WHERE raw_pos=?", (raw,)).fetchone()
+            if cur and cur[0] in ("reviewed", "not_pos"):
+                continue  # live decision wins
+            en = (row.get("canonical_en") or "").strip() or None
+            mi = (row.get("canonical_mi") or "").strip() or None
+            st = (row.get("status") or "").strip() or "reviewed"
+            notes = (row.get("notes") or "").strip() or None
+            if cur:
+                con.execute(
+                    "UPDATE std_pos SET canonical_en=?, canonical_mi=?, status=?, notes=? "
+                    "WHERE raw_pos=?", (en, mi, st, notes, raw))
+            else:
+                con.execute(
+                    "INSERT INTO std_pos (raw_pos,source_counts,total_count,is_loan,"
+                    "canonical_en,canonical_mi,status,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (raw, "{}", 0, 1 if "loan" in raw.lower() else 0, en, mi, st, notes, NOW))
+            n += 1
+    con.commit()
+    return n
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     con = sqlite3.connect(DB_PATH)
@@ -203,6 +240,9 @@ def main():
     con.commit()
     print(f"std_pos rebuilt ATOMIC-only: {rid} codes "
           f"(preserved={kept}, freshly seeded={seeded}, needs_review={review})")
+    applied = load_seed(con)
+    if applied:
+        print(f"  applied {applied} committed decisions from {SEED_CSV.name} (fill-only)")
     tot = con.execute("SELECT SUM(total_count) FROM std_pos").fetchone()[0]
     cov = con.execute(
         "SELECT SUM(total_count) FROM std_pos WHERE canonical_en IS NOT NULL"
