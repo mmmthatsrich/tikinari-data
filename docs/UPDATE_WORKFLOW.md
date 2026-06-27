@@ -177,8 +177,15 @@ py -m unittest discover -s tests -p "test_*.py"   # all green before you stop
 py scripts/60_export_app_db.py               # rebuild the slim app DB (data/maori_dict.db) — copy THIS to the app repo
 ```
 
-(If you edited `std_pos`, the rebuild above bakes the new POS labels onto `sense`/`entry`
-and the export carries them — see *Part-of-speech (POS) normalisation*.)
+If you edited `std_pos` this session, also run (before the rebuild above):
+
+```bash
+py scripts/16_dump_std_pos_seed.py           # persist reviewed/not_pos decisions -> seeds/std_pos_seed.csv
+git add seeds/std_pos_seed.csv               # commit the seed so the decisions are durable
+```
+
+The rebuild then bakes the new POS labels onto `sense`/`entry` and the export carries them
+(see *Part-of-speech (POS) normalisation*).
 
 Then update the trackers:
 - **`SESSIONS.md`** — add a row: source, row counts, what changed, date (canonical tracker).
