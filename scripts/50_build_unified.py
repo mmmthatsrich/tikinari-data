@@ -457,6 +457,18 @@ def main():
               f"example {grand['example']}, form {grand['form']}, "
               f"relation {grand['relation']}, domain {grand['entry_domain']}")
 
+    # scrub values reviewers flagged as NOT a part of speech (std_pos.status='not_pos'):
+    # null them off senses so they never surface as POS (raw or canonical). Durable —
+    # re-read from std_pos on every build.
+    notpos = [r[0] for r in con.execute("SELECT raw_pos FROM std_pos WHERE status='not_pos'")]
+    if notpos:
+        ph = ",".join("?" * len(notpos))
+        n = con.execute(
+            f"UPDATE sense SET part_of_speech=NULL WHERE part_of_speech IN ({ph})", notpos
+        ).rowcount
+        con.commit()
+        print(f"scrubbed {n} sense rows with not_pos values ({len(notpos)} codes)")
+
     std_pos = load_std_pos(con)
     write_sense_pos(con, std_pos)
     write_entry_pos(con, std_pos)
