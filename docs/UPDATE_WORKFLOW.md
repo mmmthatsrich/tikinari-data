@@ -147,9 +147,15 @@ py scripts/50_build_unified.py && py scripts/60_export_app_db.py
 - `docs/POS_REVIEW_atomic.csv` — the worklist: every distinct atomic POS code across all
   sources, with usage counts + current mapping.
 - `scripts/14_seed_williams_pos.py` — seeded the Williams inline abbreviations (one-off).
-- **`std_pos` edits are NOT in git** — a from-scratch rebuild (`00_init_db` → imports →
-  `13_build_pos_normalisation.py`) would lose them. A durable seed (dump → committed file,
-  load on init) is planned; until then, re-apply after any full rebuild.
+- **Durable seed (so `std_pos` edits survive a from-scratch rebuild):** `std_pos` lives in
+  the git-ignored DB. After a review session, dump your decisions to the committed seed:
+  `py scripts/16_dump_std_pos_seed.py` → `seeds/std_pos_seed.csv` (commit it).
+  `13_build_pos_normalisation.py` auto-loads that seed **fill-only** (never overwrites a row
+  already `reviewed`/`not_pos` in the live DB), so a from-empty rebuild restores every
+  decision. `13`'s in-DB preserve protects edits during normal rebuilds; the seed is the
+  from-scratch safety net.
+- **Flagging non-POS values:** `UPDATE std_pos SET status='not_pos' WHERE id IN (…);` — the
+  build nulls those off `sense.part_of_speech` so they never surface as POS.
 
 ---
 
