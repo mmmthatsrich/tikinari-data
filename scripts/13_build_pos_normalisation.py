@@ -1,14 +1,19 @@
-"""Build the part-of-speech normalisation table (std_pos).
+"""Build the part-of-speech normalisation table (std_pos) — ATOMIC codes only.
 
-Collects every distinct raw part_of_speech value used across the source dictionaries,
-records which sources use it and how often, and provides canonical_en / canonical_mi
-columns so the 315+ raw variants can be normalised to one controlled vocabulary and
-translated to Māori.
+Collects every distinct part_of_speech value across the source dictionaries, **splits
+comma-combined values into atomic codes** (e.g. He Pātaka Kupu 'mahp, ing, āhua' →
+'mahp' + 'ing' + 'āhua'), records which sources use each atomic code and how often, and
+provides canonical_en / canonical_mi columns. Compound combos are never stored — the
+unify build (`50_build_unified.py` `resolve_pos`) composes them from the atomic rows.
+
+PRESERVES existing review work: before rebuilding, current canonical_en / canonical_mi /
+status / notes are read and carried forward for any raw_pos that already had them, so
+direct edits in std_pos and prior seeds (incl. `14_seed_williams_pos.py`) survive a
+re-run. Only genuinely new or still-unmapped codes fall back to the SEED dict below or
+to status='needs_review'.
 
 Confident mappings are pre-seeded (English from standard grammar, Māori from Paekupu's
-authoritative pos_mi vocabulary: tūingoa, tūmahi, tūmahi whiti, tūmahi poro, tūāhua,
-tūwāhi). Everything else is left with status='needs_review' for an expert to complete —
-especially the He Pātaka Kupu compound abbreviation codes (ing, mahp, mahw, āhua, …).
+authoritative pos_mi vocabulary). Everything else is left needs_review for an expert.
 
 Read-only against source tables; only std_pos is dropped/created.
 
@@ -29,7 +34,7 @@ SOURCES = {
     "papakupu": "papakupu_entries", "pollex": "pollex_entries",
 }
 
-# raw value (lower-cased) -> (canonical_en, canonical_mi|None)
+# atomic raw value (lower-cased) -> (canonical_en, canonical_mi|None)
 # Māori terms taken from Paekupu pos_mi (authoritative) where confident; else None.
 SEED = {
     "noun": ("Noun", "Tūingoa"),
@@ -75,13 +80,13 @@ DDL = """
 DROP TABLE IF EXISTS std_pos;
 CREATE TABLE std_pos (
     id            INTEGER PRIMARY KEY,
-    raw_pos       TEXT NOT NULL,        -- exact value as stored in a source
+    raw_pos       TEXT NOT NULL,        -- atomic POS code as stored in a source
     source_counts TEXT,                 -- JSON {source_id: count}
     total_count   INTEGER,
-    is_loan       INTEGER DEFAULT 0,    -- raw value carried a 'loan' marker
+    is_loan       INTEGER DEFAULT 0,    -- atomic code is a 'loan' marker
     canonical_en  TEXT,                 -- normalised English POS (controlled vocab)
     canonical_mi  TEXT,                 -- Māori translation
-    status        TEXT,                 -- seeded | needs_review
+    status        TEXT,                 -- seeded | reviewed | needs_review | not_pos
     notes         TEXT,
     created_at    TEXT
 );
@@ -92,50 +97,69 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     con = sqlite3.connect(DB_PATH)
 
+    # 1. preserve any existing review work before the table is dropped
+    preserved = {}
+    try:
+        for raw, en, mi, st, notes in con.execute(
+            "SELECT raw_pos, canonical_en, canonical_mi, status, notes FROM std_pos"
+        ):
+            preserved[raw] = (en, mi, st, notes)
+    except sqlite3.OperationalError:
+        pass  # first build: no table yet
+
+    # 2. atomic inventory: split comma-combined POS into atomic codes
     allp = {}
     for sid, t in SOURCES.items():
         for pos, n in con.execute(
             f"SELECT part_of_speech, COUNT(*) FROM {t} "
             f"WHERE part_of_speech IS NOT NULL AND part_of_speech!='' GROUP BY part_of_speech"
         ):
-            allp.setdefault(pos, {})[sid] = n
+            for tok in (x.strip() for x in pos.split(",")):
+                if not tok:
+                    continue
+                allp.setdefault(tok, {})
+                allp[tok][sid] = allp[tok].get(sid, 0) + n
 
     con.executescript(DDL)
-    rid = 0
-    seeded = review = 0
+    rid = seeded = review = kept = 0
     for raw in sorted(allp, key=lambda k: -sum(allp[k].values())):
         rid += 1
         counts = allp[raw]
-        key = raw.strip().lower()
-        is_loan = 1 if "loan" in key else 0
-        # strip a leading 'loan,' for mapping lookup
-        lookup = key.replace("loan,", "").replace("loan", "").strip().strip(",").strip()
-        en_mi = SEED.get(key) or SEED.get(lookup)
-        if en_mi:
-            canon_en, canon_mi = en_mi
-            status = "seeded"
-            seeded += 1
+        is_loan = 1 if "loan" in raw.strip().lower() else 0
+        prev = preserved.get(raw)
+        notes = prev[3] if prev else None
+        if prev and (prev[0] or prev[1] or prev[2] in ("reviewed", "not_pos")):
+            # carry forward existing canonical / reviewed / not_pos decision
+            canon_en, canon_mi, status = prev[0], prev[1], prev[2] or "seeded"
+            kept += 1
         else:
-            canon_en = canon_mi = None
-            status = "needs_review"
-            review += 1
+            em = SEED.get(raw.strip().lower())
+            if em:
+                canon_en, canon_mi, status = em[0], em[1], "seeded"
+                seeded += 1
+            else:
+                canon_en = canon_mi = None
+                status = "needs_review"
+                review += 1
         con.execute(
             "INSERT INTO std_pos (id,raw_pos,source_counts,total_count,is_loan,"
             "canonical_en,canonical_mi,status,notes,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (rid, raw, json.dumps(counts, ensure_ascii=False), sum(counts.values()),
-             is_loan, canon_en, canon_mi, status, None, NOW))
+             is_loan, canon_en, canon_mi, status, notes, NOW))
     con.commit()
-    print(f"std_pos: {rid} distinct raw POS values  (seeded={seeded}, needs_review={review})")
-    print("\ncanonical_en coverage by row-volume:")
+    print(f"std_pos rebuilt ATOMIC-only: {rid} codes "
+          f"(preserved={kept}, freshly seeded={seeded}, needs_review={review})")
     tot = con.execute("SELECT SUM(total_count) FROM std_pos").fetchone()[0]
-    cov = con.execute("SELECT SUM(total_count) FROM std_pos WHERE status='seeded'").fetchone()[0]
-    print(f"  {cov}/{tot} entry-rows ({100*cov/tot:.1f}%) covered by seeded mappings")
-    print("\ntop needs_review (expert to map):")
+    cov = con.execute(
+        "SELECT SUM(total_count) FROM std_pos WHERE canonical_en IS NOT NULL"
+    ).fetchone()[0] or 0
+    print(f"  canonical_en coverage: {cov}/{tot} code-occurrences ({100*cov/tot:.1f}%)")
+    print("\ntop needs_review atomic codes (expert to map):")
     for raw, n, sc in con.execute(
         "SELECT raw_pos,total_count,source_counts FROM std_pos "
         "WHERE status='needs_review' ORDER BY total_count DESC LIMIT 15"
     ):
-        print(f"  {n:6} {raw!r:30} {sc}")
+        print(f"  {n:6} {raw!r:18} {sc}")
     con.close()
 
 
