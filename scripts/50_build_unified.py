@@ -166,14 +166,14 @@ def resolve_pos(raw, std_pos):
     combos like 'mahp, ing, āhua' once the atomic codes are reviewed into std_pos).
     """
     whole = std_pos.get(raw)
-    if whole and whole[0]:
+    if whole and (whole[0] or whole[1]):
         return [whole]
     out = []
     for tok in (t.strip() for t in raw.split(",")):
         if not tok:
             continue
         pair = std_pos.get(tok)
-        if pair and pair[0]:
+        if pair and (pair[0] or pair[1]):
             out.append(pair)
     return out
 

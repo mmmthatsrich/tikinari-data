@@ -224,6 +224,11 @@ class ResolvePos(unittest.TestCase):
     def test_unmapped_returns_empty(self):
         self.assertEqual(_bu.resolve_pos("xyz", {}), [])
 
+    def test_mi_only_mapping_flows(self):
+        # a code with Māori but no English must still resolve (mi-only)
+        std = {"thu": (None, "Tūhau")}
+        self.assertEqual(_bu.resolve_pos("thu", std), [(None, "Tūhau")])
+
 
 if __name__ == "__main__":
     assert DB_PATH.exists(), f"Database not found: {DB_PATH}\nRun: py scripts/00_init_db.py && py scripts/50_build_unified.py"

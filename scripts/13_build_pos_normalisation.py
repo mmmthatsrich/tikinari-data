@@ -74,6 +74,32 @@ SEED = {
     "negative": ("Negative", None),
     "causative": ("Verb (causative)", None),
     "universal": ("Universal", None),
+    # He Pātaka Kupu atomic codes — official key (Tohu poto / Ingoa roa,
+    # hepatakakupu.co.nz/comprehension). Māori authoritative; English best-effort
+    # (NULL where uncertain, e.g. thu/tkp particle classes).
+    "ing": ("Noun", "Tūingoa"),
+    "mahw": ("Verb (transitive)", "Tūmahi whiti"),
+    "mahp": ("Verb (intransitive)", "Tūmahi poro"),
+    "maho": ("Verb (neuter)", "Tūmahi oti"),
+    "mahh": ("Verb (passive)", "Tūmahi hāngū"),
+    "āhua": ("Stative", "Tūāhua"),
+    "hono": ("Conjunction", "Tūhono"),
+    "tūkē": ("Adverb", "Tūkē"),
+    "kore": ("Negative", "Tūwhakakāhore"),
+    "pāt": ("Interrogative", "Tūpātai"),
+    "wāhi": ("Locative", "Tūwāhi"),
+    "wā": ("Locative (time)", "Tūwā"),
+    "tau": ("Numeral", "Tūtau"),
+    "kīa": ("Saying", "Kīanga"),
+    "kīw": ("Idiom", "Kīwaha"),
+    "pīa": ("Particle", "Pīmua"),
+    "pīi": ("Particle", "Pīmuri"),
+    "pma": ("Particle", "Pūmahi"),
+    "pmi": ("Particle", "Pūmuri"),
+    "pmu": ("Particle", "Pūmau"),
+    "ptm": ("Particle", "Pūtūmua"),
+    "thu": (None, "Tūhau"),
+    "tkp": (None, "Tūkapi"),
 }
 
 DDL = """
