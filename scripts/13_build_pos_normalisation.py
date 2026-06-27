@@ -67,7 +67,7 @@ SEED = {
     "pron.": ("Pronoun", None),
     "numeral": ("Numeral", None),
     "adverb": ("Adverb", None),
-    "ad.": ("Adverb", None),
+    "ad.": ("Adverb", "Tūkē"),
     "conjunction": ("Conjunction", None),
     "conj.": ("Conjunction", None),
     "determiner": ("Determiner", None),
@@ -100,6 +100,15 @@ SEED = {
     "ptm": ("Particle", "Pūtūmua"),
     "thu": (None, "Tūhau"),
     "tkp": (None, "Tūkapi"),
+    # Williams inline abbreviations (POS lives in the definition, surfaced into
+    # sense.part_of_speech by williams_senses.split_senses).
+    "l.n.": ("Locative", "Tūwāhi"),
+    "pt.": ("Particle", None),
+    "pos.": ("Determiner (possessive)", None),
+    "def.": ("Determiner (definite)", None),
+    "indef.": ("Determiner (indefinite)", None),
+    "prefix.": ("Prefix", None),
+    "num.": ("Numeral", None),
 }
 
 DDL = """
@@ -133,18 +142,37 @@ def main():
     except sqlite3.OperationalError:
         pass  # first build: no table yet
 
-    # 2. atomic inventory: split comma-combined POS into atomic codes
+    # 2. atomic inventory: split comma-combined POS into atomic codes.
+    # Source from the unified core's sense.part_of_speech — it carries EVERY source's
+    # per-sense POS, including Williams inline abbreviations (n./v.t./l.n./…) that live
+    # in the definition and never reach williams_entries.part_of_speech. Requires the
+    # core to be built (run 50_build_unified.py first). Falls back to the raw *_entries
+    # columns only if the core is empty (e.g. a fresh DB before the first unify).
     allp = {}
-    for sid, t in SOURCES.items():
-        for pos, n in con.execute(
-            f"SELECT part_of_speech, COUNT(*) FROM {t} "
-            f"WHERE part_of_speech IS NOT NULL AND part_of_speech!='' GROUP BY part_of_speech"
-        ):
+    core_rows = con.execute(
+        "SELECT e.source_id, s.part_of_speech, COUNT(*) "
+        "FROM sense s JOIN entry e ON e.id = s.entry_id "
+        "WHERE s.part_of_speech IS NOT NULL AND s.part_of_speech!='' "
+        "GROUP BY e.source_id, s.part_of_speech"
+    ).fetchall()
+    if core_rows:
+        for sid, pos, n in core_rows:
             for tok in (x.strip() for x in pos.split(",")):
                 if not tok:
                     continue
                 allp.setdefault(tok, {})
                 allp[tok][sid] = allp[tok].get(sid, 0) + n
+    else:
+        for sid, t in SOURCES.items():
+            for pos, n in con.execute(
+                f"SELECT part_of_speech, COUNT(*) FROM {t} "
+                f"WHERE part_of_speech IS NOT NULL AND part_of_speech!='' GROUP BY part_of_speech"
+            ):
+                for tok in (x.strip() for x in pos.split(",")):
+                    if not tok:
+                        continue
+                    allp.setdefault(tok, {})
+                    allp[tok][sid] = allp[tok].get(sid, 0) + n
 
     con.executescript(DDL)
     rid = seeded = review = kept = 0
