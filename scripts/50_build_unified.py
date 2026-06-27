@@ -153,7 +153,8 @@ class Builder:
 def load_std_pos(con):
     m = {}
     for raw, en, mi in con.execute("SELECT raw_pos, canonical_en, canonical_mi FROM std_pos"):
-        m[raw] = (en, mi)
+        # defensive strip: manual edits can leave trailing CR/LF/space
+        m[raw] = (en.strip() if en else en, mi.strip() if mi else mi)
     return m
 
 
