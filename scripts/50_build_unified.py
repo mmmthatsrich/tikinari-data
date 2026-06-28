@@ -43,6 +43,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import DB_PATH, normalise_search_key, compute_content_hash
 from williams_senses import split_senses
+from williams_xref import parse_see_also_targets
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -255,7 +256,9 @@ def build_williams(con, b):
         for i, ex in enumerate(examples):
             b.add_example(first_sid, eid, ex, None, None, None, i)   # examples -> sense 1
         for t in jload(xr):
-            if isinstance(t, str):
+            if isinstance(t, dict):                       # typed ‖ cross-ref
+                b.add_relation(eid, t.get("type") or "cross_ref", t.get("target"))
+            elif isinstance(t, str):                      # legacy bare string
                 b.add_relation(eid, "cross_ref", t)
 
 
@@ -429,6 +432,64 @@ def resolve_te_aka_synonyms(con):
     """)
 
 
+def resolve_williams_xrefs(con):
+    """Resolve Williams see_also relations to target_entry_id (entry.id).
+
+    Each see_also row holds the raw '‖' target Williams printed (e.g. "apa (i), 2",
+    "mataaho, tiaho"). parse_see_also_targets() strips the decoration into linkable
+    (search_key, roman_sense) tuples; each is matched against a Williams entry by
+    headword_search, preferring the homograph with the same roman sense, else any
+    entry with that headword (same-source — only williams entries are indexed here).
+
+    Multi-target strings are SPLIT: the first match updates the existing row, each
+    further match inserts a new see_also row (raw kept in note for provenance).
+    Citations, cognate/relative pointers, and unmatched headwords stay NULL.
+
+    Returns (rows_resolved, rows_total).
+    """
+    # headword_search -> [(entry_id, roman_sense, display_headword), ...]  (williams only)
+    by_key = {}
+    for eid, hwk, rsense, disp in con.execute(
+            "SELECT e.id, w.headword_search, w.sense_number, w.headword "
+            "FROM entry e JOIN williams_entries w "
+            "  ON w.id = CAST(e.source_entry_id AS INTEGER) "
+            "WHERE e.source_id = 'williams'"):
+        by_key.setdefault(hwk, []).append((eid, rsense, disp))
+
+    def match(key, sense):
+        cands = by_key.get(key)
+        if not cands:
+            return None
+        if sense:
+            for eid, rs, disp in cands:
+                if rs and rs.lower() == sense:
+                    return eid, disp
+        eid, _rs, disp = cands[0]   # fall back to any entry with that headword
+        return eid, disp
+
+    rows = con.execute(
+        "SELECT r.id, r.entry_id, r.target_headword FROM relation r "
+        "JOIN entry e ON e.id = r.entry_id "
+        "WHERE r.rel_type = 'see_also' AND e.source_id = 'williams' "
+        "  AND r.target_entry_id IS NULL").fetchall()
+
+    resolved = 0
+    for rid, entry_id, raw in rows:
+        hits = [m for m in (match(k, s) for k, s in parse_see_also_targets(raw)) if m]
+        if not hits:
+            continue
+        first_eid, first_disp = hits[0]
+        note = raw if (len(hits) > 1 or first_disp != raw) else None
+        con.execute("UPDATE relation SET target_entry_id=?, target_headword=?, note=? "
+                    "WHERE id=?", (first_eid, first_disp, note, rid))
+        for eid, disp in hits[1:]:
+            con.execute("INSERT INTO relation (entry_id, rel_type, target_headword, "
+                        "target_entry_id, note) VALUES (?,?,?,?,?)",
+                        (entry_id, "see_also", disp, eid, raw))
+        resolved += 1
+    return resolved, len(rows)
+
+
 def first_seen_snapshot(con, source_id) -> dict:
     """Preserve first_seen across a rebuild, keyed by source_entry_id."""
     return {r[0]: r[1] for r in con.execute(
@@ -446,6 +507,9 @@ def unify_source(con, source_id) -> dict:
     BUILDERS[source_id](con, b)
     if source_id == "te_aka":
         resolve_te_aka_synonyms(con)
+    if source_id == "williams":
+        n, tot = resolve_williams_xrefs(con)
+        print(f"  williams see_also resolved {n}/{tot}")
     # keep source_metadata.last_updated honest for the unified projection
     con.execute("UPDATE source_metadata SET last_updated=? WHERE source_id=?",
                 (NOW, source_id))

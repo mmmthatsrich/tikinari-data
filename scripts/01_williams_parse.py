@@ -6,6 +6,9 @@ import re
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from williams_xref import extract_xrefs
+
 try:
     from lxml import html as lhtml
 except ImportError:
@@ -96,22 +99,13 @@ def parse_section_div(div, source_section, page_number):
     pos_m = POS_RE.match(tail)
     part_of_speech = pos_m.group(1) if pos_m else ""
 
-    # Collect usage examples (non-bold foreign mi spans) and cross-refs
+    # Usage examples = non-bold foreign mi spans. Cross-refs are NOT taken from
+    # bold spans any more — that capture was ~73% noise (sub-headwords, example
+    # fragments). Williams' real cross-ref notation is the '‖' marker, extracted
+    # from the definition text below via williams_xref.extract_xrefs.
     usage_examples = []
-    cross_refs = []
-    first_bold_seen = False
-
     for elem in div.iter("span"):
-        cls = elem.get("class", "")
-        lang = elem.get("lang", "")
-        if cls == "foreign bold" and lang == "mi":
-            if not first_bold_seen:
-                first_bold_seen = True  # headword — skip
-            else:
-                ref = clean_text(elem.text_content())
-                if ref and ref not in cross_refs:
-                    cross_refs.append(ref)
-        elif cls == "foreign" and lang == "mi":
+        if elem.get("class") == "foreign" and elem.get("lang") == "mi":
             ex = clean_text(elem.text_content())
             if ex:
                 usage_examples.append(ex)
@@ -139,8 +133,16 @@ def parse_section_div(div, source_section, page_number):
             full_text = full_text[len(part_of_speech):].strip()
 
     definition = clean_text(full_text)
+    definition, cross_refs = extract_xrefs(definition)
     if not definition:
-        return None
+        # Pure pointer entry: the whole gloss was a ‖ cross-ref. Keep it with a
+        # readable "Cf." gloss synthesised from the targets ('‖' = compare in
+        # Williams); drop only if there is genuinely nothing left.
+        targets = [r["target"] for r in cross_refs]
+        if targets:
+            definition = "Cf. " + ", ".join(targets) + "."
+        else:
+            return None
 
     return {
         "headword": headword,

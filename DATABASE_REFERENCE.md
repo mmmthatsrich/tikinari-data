@@ -98,7 +98,7 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 | `sense` | 125,775 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
 | `example` | 89,896 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
-| `relation` | 103,485 | `synonym` / `see_also` / `cross_ref` (Te Aka synonyms resolved to `target_entry_id`) |
+| `relation` | 107,445 | `synonym` / `see_also` / `cross_ref` / `citation` (Te Aka synonyms resolved to `target_entry_id`; Williams `‖` refs → `see_also` headword links + `citation` literature refs, e.g. `J. vii, 120`). Williams `see_also` rows are resolved to `target_entry_id` at build (3,490 / 4,230 = 83%): multi-target strings like `mataaho, tiaho` are split into one row each, `(i)`/`(ii)` sense pointers prefer the matching homograph, and cognate/citation/relative pointers (`Tah, ao`, `J. vii, 120`, `6, below`) stay NULL with the raw text kept in `note`. The app renders resolved rows as clickable links and unresolved rows as plain text |
 | `entry_domain` | 59,570 | subject / semantic-domain tags (`domain_lang` = mi/en) |
 
 Key columns on `entry`:
@@ -190,7 +190,7 @@ Williams 1957 dictionary, sourced from NZETC TEI HTML. English definitions, usag
 | `definition` | TEXT | May contain expanded source abbreviations |
 | `usage_examples` | TEXT | JSON array of strings |
 | `sense_number` | INTEGER | Stored as Roman numeral text (`"i"`, `"ii"`) due to SQLite dynamic typing |
-| `cross_refs` | TEXT | JSON array of strings |
+| `cross_refs` | TEXT | JSON array of `{"type","target"}` objects extracted from the `‖` ("compare") marker. `type` is `see_also` (Māori headword ref, e.g. `apa (i), 2`) or `citation` (literature ref, e.g. `J. vii, 120`). Exploded into unified `relation` rows by `50_build_unified.py`. Pure-pointer entries get a synthesised `Cf. <targets>.` definition |
 | `page_number` | INTEGER | Page in the 1957 edition |
 | `source_section` | TEXT | Letter section: A E H I K M N Ng O P R T U W |
 | `created_at` | TEXT | ISO datetime |
