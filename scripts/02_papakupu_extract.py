@@ -53,8 +53,41 @@ SEE_ALSO_RE = re.compile(r"\b(?:See also|See|Cf\.?)[\s:]+([^\n.()]+)")
 # Source reference codes: [TTU], [TWK/MHR], [NGH3], [K1:31:45], etc.
 SRC_REF_RE = re.compile(r"\[[A-Z][A-Z0-9/:.-]+\]")
 
-# Usage example: sentence text + [SOURCE_REF] where ref is uppercase+digits/slash/colon
-EXAMPLE_RE = re.compile(r"([^.!?][^.!?]*[.!?])\s*(\[[A-Z][A-Z0-9/:.-]+\])")
+# Sentence boundary: whitespace following a terminator.
+SENT_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
+
+# Māori orthography. A Māori word uses only these letters (vowels incl. macrons +
+# consonants h k m n p r t w; g appears only in the digraph 'ng'). The presence of
+# any English-only consonant marks a token as English — used to split the Māori half
+# of an example off the English gloss/translation prose it is glued to.
+_MAORI_CHARS = set("aāeēiīoōuūhkmnprtwg")
+_ENGLISH_ONLY = set("bcdfjlqsvxyz")
+
+
+def _is_maori_token(token: str) -> bool | None:
+    """True if token is Māori, False if clearly English, None if neutral (digits/punct)."""
+    letters = [c for c in token.lower() if c.isalpha()]
+    if not letters:
+        return None
+    if any(c in _ENGLISH_ONLY for c in letters):
+        return False
+    return all(c in _MAORI_CHARS for c in letters)
+
+
+def _maori_tail(text: str) -> str:
+    """Return the maximal trailing run of Māori tokens.
+
+    Papakupu's first example per entry is glued onto the English gloss with no
+    separating period, so the Māori sentence cannot be found by position alone.
+    Walking right-to-left and stopping at the first clearly-English token recovers
+    it; neutral tokens (punctuation, digits) are kept and walked through.
+    """
+    kept = []
+    for token in reversed(text.split()):
+        if _is_maori_token(token) is False:
+            break
+        kept.append(token)
+    return " ".join(reversed(kept)).strip()
 
 
 def strip_header(text: str) -> str:
@@ -93,16 +126,43 @@ def extract_see_also(definition: str) -> list[str]:
     return []
 
 
-def extract_examples(definition: str) -> list[str]:
-    """Extract Māori example sentences with their [SOURCE] refs.
-    Collapses newlines first so multi-line sentences are captured whole.
+def extract_examples(definition: str) -> list[dict]:
+    """Extract bilingual examples as {text_mi, text_en, source_abbrev} dicts.
+
+    Papakupu examples follow `<Māori sentence>. <English translation>. [SRC]`.
+    Splitting on the [SRC] refs yields one segment per example; within a segment
+    the last sentence is the English translation and the sentence before it the
+    Māori original. The first example's segment also carries the English gloss
+    prose, so the Māori half is recovered with `_maori_tail` rather than by
+    sentence position alone. Collapses newlines first so multi-line sentences are
+    captured whole.
     """
     flat = " ".join(line.strip() for line in definition.split("\n") if line.strip())
     examples = []
-    for m in EXAMPLE_RE.finditer(flat):
-        ex = m.group(1).strip() + " " + m.group(2)
-        if len(ex) > 15:
-            examples.append(ex)
+    last_end = 0
+    for m in SRC_REF_RE.finditer(flat):
+        segment = flat[last_end:m.start()].strip()
+        last_end = m.end()
+        source_abbrev = m.group(0).strip("[]")
+        if not segment:
+            continue
+        parts = [p.strip() for p in SENT_SPLIT_RE.split(segment) if re.search(r"\w", p)]
+        if not parts:
+            continue
+        text_en = parts[-1]
+        text_mi = _maori_tail(parts[-2]) if len(parts) >= 2 else ""
+        # A lone sentence that is itself Māori is a Māori-only example, not a gloss.
+        if not text_mi and len(parts) == 1 and _maori_tail(text_en):
+            text_mi, text_en = _maori_tail(text_en), None
+        if not (text_mi or text_en):
+            continue
+        if len((text_mi or "") + (text_en or "")) <= 15:
+            continue
+        examples.append({
+            "text_mi": text_mi or None,
+            "text_en": text_en or None,
+            "source_abbrev": source_abbrev,
+        })
     return examples
 
 

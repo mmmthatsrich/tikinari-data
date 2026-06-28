@@ -95,10 +95,11 @@ py scripts/10_papakupu_strip_variant_blocks.py --apply
 py scripts/11_papakupu_pos_fix.py --apply
 py scripts/50_build_unified.py --source papakupu
 ```
-> Known issue: `02_papakupu_extract.py` drops the **Māori** half of each example, so
-> `example.text_mi` is NULL for Papakupu. The schema holds the slot; once the extractor
-> fix lands, re-run extract→import→unify and `text_mi` fills in. `dialect='Tai Tokerau'`
-> is set automatically from `source_metadata.default_dialect`.
+> Examples are bilingual: `02_papakupu_extract.py` emits `{text_mi, text_en, source_abbrev}`
+> per example, recovering the **Māori** half (glued to the English gloss with no period) via
+> the `_maori_tail` orthography heuristic. Both `example.text_mi` and `example.text_en` are
+> populated (10,071 / 10,211 have text_mi). `dialect='Tai Tokerau'` is set automatically from
+> `source_metadata.default_dialect`.
 
 ---
 

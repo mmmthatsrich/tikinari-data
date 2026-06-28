@@ -28,9 +28,9 @@ Design notes / current simplifications (see SCHEMA_PROPOSAL.md):
   * source_entry_id is unique within a source so the downstream device id
     '{source_id}:{source_entry_id}' never collides (He Pātaka Kupu word_id repeats
     across senses, so it is suffixed '~{sense}', per amendment 2).
-  * Papakupu example text_mi is still NULL — the Māori sentence is dropped upstream
-    in 02_papakupu_extract.py (the planned extractor fix). The schema now HOLDS it;
-    re-running this script after that fix will populate text_mi.
+  * Papakupu examples carry both halves: 02_papakupu_extract.py emits
+    {text_mi, text_en, source_abbrev} dicts, so example.text_mi is populated from
+    the Māori sentence (recovered via the orthography heuristic _maori_tail).
 """
 import argparse
 import json
@@ -363,16 +363,16 @@ def build_papakupu(con, b):
            "definition, usage_examples, variant_forms, see_also, source_code, "
            "loan_marker, pdf_page FROM papakupu_entries ORDER BY id")
     for (id_, hw, hs, hse, pos, d, ux, vf, sa, sc, lm, pg) in con.execute(sql):
-        examples = [e for e in jload(ux) if isinstance(e, str)]
+        # usage_examples are {text_mi, text_en, source_abbrev} dicts (02_papakupu_extract).
+        examples = [e for e in jload(ux) if isinstance(e, dict)]
         eid = b.add_entry(id_, hw, hs, hse, pos=pos, loan_marker=lm,
                           locator=f"pdf p{pg}; src {sc}" if pg else sc,
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "vf": jload(vf), "sa": jload(sa), "lm": lm})
         sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
-            text, src = split_src(ex)
-            # NOTE: Māori half is dropped upstream — only text_en is available today.
-            b.add_example(sid, eid, None, text, src, None, i)
+            b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
+                          ex.get("source_abbrev"), None, i)
         for v in jload(vf):
             b.add_form(eid, v if isinstance(v, str) else str(v), "variant")
         for t in jload(sa):

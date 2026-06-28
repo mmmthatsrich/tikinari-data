@@ -148,8 +148,10 @@ WHERE e.headword_search = ?            -- normalise_search_key(user input)
 ORDER BY e.source_id, s.sense_number, x.sort_no;
 ```
 
-> Note: Papakupu `example.text_mi` is NULL pending the upstream extractor fix (schema holds
-> the slot). Williams (20,193 senses / 11,910 entries) and Te Aka (59,472 senses / 47,878 entries)
+> Note: Papakupu examples are bilingual — `example.text_mi` (Māori) and `example.text_en`
+> (English) are both populated (10,071 of 10,211 have text_mi; the Māori half is recovered
+> by an orthography heuristic at extraction). Williams (20,193 senses / 11,910 entries) and
+> Te Aka (59,472 senses / 47,878 entries)
 > are multi-sense with per-sense POS and per-sense examples; the remaining sources are
 > one-sense-per-entry.
 
