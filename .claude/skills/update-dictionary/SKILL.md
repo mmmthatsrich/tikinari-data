@@ -59,7 +59,9 @@ scrape → parse(JSON) → import → <source>_entries → unify → entry/sense
   backup + verify.
 - If a unify step hits a `database is locked` error, ensure no other Python process holds
   the DB (a prior scrape/import), then retry.
-- Don't invent data: Papakupu `example.text_mi` is NULL by a known upstream extractor bug —
-  leave it until that fix lands; don't backfill from the English half.
+- Papakupu examples are bilingual (`text_mi` + `text_en`); the Māori half is recovered at
+  extraction by the `_maori_tail` orthography heuristic in `02_papakupu_extract.py`. ~140 of
+  10,211 examples have no recoverable `text_mi` (bracketed notes / single-sentence edges) —
+  that residue is expected; don't invent or backfill it from the English half.
 - A brand-new PDF source needs a new `<source>_entries` table, a `source_metadata` row, and
   a new builder in `50_build_unified.py` before it can be unified (see the doc's OCR path).
