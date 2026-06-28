@@ -417,9 +417,18 @@ def delete_source_slice(con, source_id):
 def resolve_te_aka_synonyms(con):
     """Resolve relation.note 'te_aka_word_id=N' stubs to target_entry_id (entry.id).
 
-    Runs after all te_aka entries exist. Synonym targets that don't resolve to a
-    te_aka entry (deleted/not-imported word_ids) keep target_entry_id NULL but retain
-    the note for provenance.
+    Runs after all te_aka entries exist. Two passes:
+      1. word_id match — synonym.word_id == entry.source_entry_id (the primary key).
+      2. headword fallback — for rows still NULL, match the synonym's target_headword
+         to a te_aka entry by headword_search, but ONLY when exactly one te_aka entry
+         carries that key (skip homographs to avoid mislinking). Te Aka renumbers
+         word_ids over time, so a stale word_id can miss an entry that still exists
+         under the same headword (e.g. synonym word_id=8095 -> 'tumera', which now
+         lives under source_entry_id 37049).
+
+    Targets that resolve by neither pass (headword absent from the corpus, or
+    ambiguous) keep target_entry_id NULL but retain the note for provenance; the app
+    renders them as plain (non-clickable) text.
     """
     con.execute("""
         UPDATE relation
@@ -430,6 +439,30 @@ def resolve_te_aka_synonyms(con):
          WHERE relation.note LIKE 'te_aka_word_id=%'
            AND relation.entry_id IN (SELECT id FROM entry WHERE source_id = 'te_aka')
     """)
+
+    # Pass 2: headword fallback for unresolved stubs. Build a search-key -> [entry.id]
+    # index over te_aka entries; only unambiguous (single-entry) keys are linkable.
+    by_key = {}
+    for eid, hwk in con.execute(
+            "SELECT id, headword_search FROM entry WHERE source_id = 'te_aka'"):
+        by_key.setdefault(hwk, []).append(eid)
+
+    unresolved = con.execute(
+        "SELECT r.id, r.target_headword FROM relation r "
+        "JOIN entry e ON e.id = r.entry_id "
+        "WHERE e.source_id = 'te_aka' AND r.rel_type = 'synonym' "
+        "  AND r.target_entry_id IS NULL "
+        "  AND r.note LIKE 'te_aka_word_id=%' "
+        "  AND r.target_headword IS NOT NULL").fetchall()
+
+    recovered = 0
+    for rid, target_hw in unresolved:
+        cands = by_key.get(normalise_search_key(target_hw))
+        if cands and len(cands) == 1:
+            con.execute("UPDATE relation SET target_entry_id=? WHERE id=?",
+                        (cands[0], rid))
+            recovered += 1
+    return recovered
 
 
 def resolve_williams_xrefs(con):
