@@ -7,7 +7,7 @@ This document describes `data/maori_dict.db` — a SQLite database containing M�
 >   surface the app reads: the unified core (`entry`/`sense`/`example`/`form`/
 >   `relation`/`entry_domain` + their FTS), the etymology layer (`pollex_cognatesets`/
 >   `pollex_reflexes`/`pollex_languages`/`lpo_cognatesets`/`acd_cognatesets`/
->   `etymology_links`/`protoform_ancestry`/`reconstruction_levels`), and the `source_*`
+>   `etymology_links`/`pollex_entry_links`/`protoform_ancestry`/`reconstruction_levels`), and the `source_*`
 >   support tables. **This is the only file you copy to the app repo.**
 > - **`data/staging_dictionary.db`** — the full working/build database (~210 MB):
 >   raw per-source `*_entries` landing zone, `pollex_entries`, cross-source candidates,
@@ -460,7 +460,13 @@ pollex_entries (Māori reflex)
             └── acd_cognatesets (Proto-Austronesian/Malayo-Polynesian, CC-BY-4.0)
 ```
 
-Connected by `etymology_links` — 229 links covering 7.8% of Māori-relevant POLLEX cognatesets (229 / 2,931).
+Connected by `etymology_links` — 421 links covering 14.4% of Māori-relevant POLLEX cognatesets (421 / 2,931).
+
+To go the *other* direction — from a word a user looked up to its proto-tree — use
+`pollex_entry_links`, which joins a POLLEX Māori reflex to the unified `entry`
+table by macron-neutral headword. **48,243 links** reach **20,779 distinct entries**
+across all five user-facing dictionaries (2,825 / 3,291 cognatesets covered). See
+[`pollex_entry_links`](#pollex_entry_links--48243-rows) below.
 
 ### `pollex_cognatesets` — 3,291 rows (2,931 with Māori reflex + 360 ancestor-only)
 
@@ -562,7 +568,7 @@ Austronesian Comparative Dictionary reconstructions (CC-BY-4.0).
 | `level` | TEXT | PAN \| PMP \| PWMP \| POC \| PPH \| PCEMP \| PCMP \| PEMP \| PSHWNG |
 | `etymon_id` | TEXT | Indexed; groups related reconstructions (PAN + PMP sharing an etymon) |
 
-### `etymology_links` — 229 rows
+### `etymology_links` — 421 rows
 
 | Column | Type | Notes |
 |---|---|---|
@@ -575,11 +581,39 @@ Austronesian Comparative Dictionary reconstructions (CC-BY-4.0).
 | `lpo_citation` | TEXT | Raw `"LPO N:NNN"` text from POLLEX notes |
 | `notes` | TEXT | Curation comments |
 
-**Match methods:**
-- `tier2_acd_citation` — ACD form explicitly cited in POLLEX notes (169 links, most reliable)
-- `tier2_lpo_citation` — LPO form cited in POLLEX notes (36 links)
-- `tier1_formkey` — form-key match at same proto-level (13 links)
-- Combinations of the above (11 links)
+**Match methods** (a row's method joins all that contributed, e.g. `tier2_acd_citation+tier3_bare_citation`):
+- `tier2_acd_citation` — ACD form explicitly cited in POLLEX notes with `(ACD)` tag (most reliable)
+- `tier2_lpo_citation` — LPO form cited with `(LPO vol:page)` tag
+- `tier3_bare_citation` — bare `POC */PMP */PAN *` ref in notes, no gloss/tag, validated against the set's own gloss (lower confidence 0.65)
+- `tier1_formkey` — form-key match at the mapped proto-level. Now includes the Polynesian levels PN→PPn, NP→PNPn, CE→PCEPn (LPO's own Polynesian reconstructions), plus macron-folded keys and comma-split multiforms
+
+### `pollex_entry_links` — 48,243 rows
+
+Reverse bridge: a POLLEX **Māori reflex** → a row in the unified `entry` table,
+matched by macron-neutral headword (`normalise_search_key`). This is how the app
+goes from *a word the user searched* to its full proto-tree. One cognateset can
+link to several entries (homonyms, multiple source dictionaries). Covers 2,825 /
+3,291 cognatesets and 20,779 distinct entries; built by
+`scripts/08b_pollex_entry_linker.py`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | |
+| `cognateset_id` | TEXT | FK → `pollex_cognatesets(id)` |
+| `reflex_id` | INTEGER | FK → `pollex_reflexes(id)`; the specific Māori reflex matched |
+| `entry_id` | INTEGER | FK → `entry(id)` |
+| `match_key` | TEXT | The `normalise_search_key` value that matched (= `entry.headword_search`) |
+| `match_method` | TEXT | `headword_exact` |
+| `match_confidence` | REAL | 1.0 (exact normalised match) |
+
+**Entry → proto-tree query:**
+```sql
+SELECT pc.protoform_name, pc.level_name, pc.description
+FROM entry e
+JOIN pollex_entry_links pel ON pel.entry_id = e.id
+JOIN pollex_cognatesets pc  ON pc.id = pel.cognateset_id
+WHERE e.headword_search = 'aho';
+```
 
 **Full etymology chain query:**
 ```sql

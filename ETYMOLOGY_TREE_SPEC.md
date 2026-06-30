@@ -34,6 +34,7 @@ Tables (full detail in `DATABASE_REFERENCE.md`):
 | `protoform_ancestry` | directed child→ancestor edges (~1,599). `ancestor_kind` ∈ `pollex`/`lpo`/`acd` routes `ancestor_id` to its table |
 | `lpo_cognatesets`, `acd_cognatesets` | external proto nodes (Proto-Oceanic; Proto-Austronesian/MP) |
 | `pollex_reflexes` | per-language reflexes (the horizontal axis) |
+| `pollex_entry_links` | unified `entry` → `cognateset_id` (the entry point: resolve a looked-up word to its tree without text matching) |
 | `pollex_languages` | language → subgroup/region (groups the horizontal axis) |
 | `reconstruction_levels` | level ladder; `depth_rank` orders the vertical axis (bigger = more recent) |
 
@@ -45,7 +46,16 @@ Tables (full detail in `DATABASE_REFERENCE.md`):
 
 ## 3. Queries (already designed — copy verbatim)
 
-**Resolve headword → cognateset_id:** look up the word in `pollex_entries` / `pollex_reflexes`, take its `cognateset_id`.
+**Resolve headword → cognateset_id (preferred):** from a unified `entry` the user
+looked up, join `pollex_entry_links` directly — no text matching needed:
+```sql
+SELECT pel.cognateset_id
+FROM pollex_entry_links pel
+WHERE pel.entry_id = :entry_id;
+```
+(One entry may map to several cognatesets — homonyms; render each as its own tree.)
+Fallback when you only have a raw word: look it up in `pollex_entries` /
+`pollex_reflexes` and take its `cognateset_id`.
 
 **A. Horizontal — same-level cognates:**
 ```sql

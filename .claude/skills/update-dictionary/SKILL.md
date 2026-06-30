@@ -42,7 +42,10 @@ scrape → parse(JSON) → import → <source>_entries → unify → entry/sense
    | POLLEX/LPO/ACD | _(none)_ | etymology layer — import only, **no unify** |
    - Web scrapes are long and resumable; OCR/PDF and `--refresh` modes per the doc.
 4. **Unify** the source: `py scripts/50_build_unified.py --source <name>` (skip for the
-   etymology layer).
+   etymology layer). After any source/etymology refresh, rebuild the etymology links:
+   `py scripts/08_etymology_linker.py --write --reset` (POLLEX↔LPO↔ACD), then
+   `py scripts/08b_pollex_entry_linker.py --write --reset` (POLLEX reflex → unified
+   `entry`; **must run after** `50_build_unified.py` since it reads the `entry` table).
 5. **Verify** — all must pass before stopping:
    ```bash
    py -m unittest discover -s tests -p "test_*.py"

@@ -115,8 +115,12 @@ py scripts/03_pollex_import.py               # pollex_entries
 py scripts/33_pollex_languages_import.py     # 67-language reference
 py scripts/06_lpo_import.py                  # CLDF CSV → lpo_cognatesets
 py scripts/07_acd_import.py                  # CLDF CSV → acd_cognatesets
-py scripts/08_etymology_linker.py            # POLLEX↔LPO↔ACD links
+py scripts/08_etymology_linker.py --write --reset    # POLLEX↔LPO↔ACD links
+py scripts/08b_pollex_entry_linker.py --write --reset # POLLEX reflex → unified entry (run after 50_build_unified.py)
 ```
+
+> `08b` depends on the unified `entry` table, so run it **after** `50_build_unified.py`.
+> Both linkers are idempotent with `--reset`; re-run after any source refresh.
 
 ---
 

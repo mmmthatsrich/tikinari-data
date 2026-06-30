@@ -17,13 +17,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding='utf-8')
-from utils import DB_PATH, normalise_proto_key
+from utils import DB_PATH, normalise_proto_key, normalise_sort_key
 
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
 
-# POLLEX level -> list of (db_name, target_level_key) to try
+# POLLEX level -> list of (db_name, target_level_key) to try.
+# Deep proto levels map to Oceanic/Austronesian reconstructions; the Polynesian
+# levels (PN/NP/CE) map to LPO's own Polynesian-level reconstructions, which
+# the original mapping omitted — see PPn/PNPn/PCEPn below.
 LEVEL_MAP = {
     'OC': [('lpo', 'POc'), ('acd', 'POC')],
     'AN': [('lpo', 'PAn'), ('acd', 'PAN')],
@@ -31,7 +34,22 @@ LEVEL_MAP = {
     'EO': [('lpo', 'PEOc')],
     'FJ': [('lpo', 'PCP')],
     'CP': [('lpo', 'PCP')],
+    'PN': [('lpo', 'PPn')],
+    'NP': [('lpo', 'PNPn')],
+    'CE': [('lpo', 'PCEPn')],
 }
+
+# Tier 3 — bare proto-form citations in notes (no quoted gloss / no (ACD)/(LPO)
+# attribution tag). label -> targets to try. Gloss-validated against the POLLEX
+# set's own description rather than a cited gloss, so confidence is lower.
+BARE_TARGETS = {
+    'POC': [('lpo', 'POc'), ('acd', 'POC')],
+    'POc': [('lpo', 'POc'), ('acd', 'POC')],
+    'PMP': [('lpo', 'PMP'), ('acd', 'PMP')],
+    'PAN': [('lpo', 'PAn'), ('acd', 'PAN')],
+    'PAn': [('lpo', 'PAn'), ('acd', 'PAN')],
+}
+_BARE_RE = re.compile(r'\b(POC|POc|PMP|PAN|PAn)\s*\*\s*([^\s",;()*]+)')
 
 TIER1_GLOSS_THRESHOLD = 0.20  # Jaccard similarity floor for Tier 1 acceptance
 TIER2_GLOSS_THRESHOLD = 0.10  # Floor for Tier 2 — lighter but catches clear mismatches
@@ -71,32 +89,69 @@ def _jaccard(a: frozenset, b: frozenset) -> float:
     return len(a & b) / len(a | b)
 
 
+def _norm(form: str) -> str:
+    """Match key: proto-notation stripped AND macrons folded (ā→a) so that
+    sources that write vowel length differently still collide. Does NOT collapse
+    double vowels — proto reconstructions treat aa ≠ a as distinct."""
+    return normalise_sort_key(normalise_proto_key(form))
+
+
+def _norm_multi(name_key: str) -> list[str]:
+    """LPO/ACD name_key may pack several variant forms separated by commas
+    (e.g. 'giru,guri'). Yield a folded match key for each part."""
+    keys = []
+    for part in name_key.split(','):
+        k = _norm(part)
+        if k:
+            keys.append(k)
+    return keys
+
+
 def _pollex_form_key(protoform_name: str) -> str:
     """POLLEX protoform_name is 'LEVEL.FORM[.N]'. Extract and normalise FORM."""
     form = protoform_name.split('.', 1)[1] if '.' in protoform_name else protoform_name
     form = _DISAMBIG_RE.sub('', form)
-    return normalise_proto_key(form)
+    return _norm(form)
 
 
 # ---------------------------------------------------------------------------
 # In-memory index builders
 # ---------------------------------------------------------------------------
 
+def _index_levels(level: str) -> list[str]:
+    """Levels under which to file a row. Slash-levels (e.g. 'PAn/PMP', 'PCP/PPn')
+    are also filed under each component so they resolve to either target key."""
+    levels = [level]
+    if '/' in level:
+        levels += level.split('/')
+    return levels
+
+
+def _add_to_index(idx: dict, level: str, name_key: str, rowid, desc) -> None:
+    """File a cognateset under every (level, folded-key) it can match by."""
+    for lvl in _index_levels(level):
+        bucket = idx.setdefault(lvl, {})
+        for key in _norm_multi(name_key):
+            bucket.setdefault(key, []).append((rowid, desc or ''))
+
+
 def _build_lpo_index(conn: sqlite3.Connection) -> dict:
-    """Return {level: {name_key: [(id, description)]}}."""
+    """Return {level: {match_key: [(id, description)]}}."""
     idx: dict = {}
     for row in conn.execute('SELECT id, name_key, level, description FROM lpo_cognatesets'):
         lid, key, level, desc = row
-        idx.setdefault(level, {}).setdefault(key, []).append((lid, desc or ''))
+        if key:
+            _add_to_index(idx, level, key, lid, desc)
     return idx
 
 
 def _build_acd_index(conn: sqlite3.Connection) -> dict:
-    """Return {level: {name_key: [(id, description)]}}."""
+    """Return {level: {match_key: [(id, description)]}}."""
     idx: dict = {}
     for row in conn.execute('SELECT id, name_key, level, description FROM acd_cognatesets'):
         aid, key, level, desc = row
-        idx.setdefault(level, {}).setdefault(key, []).append((aid, desc or ''))
+        if key:
+            _add_to_index(idx, level, key, aid, desc)
     return idx
 
 
@@ -160,7 +215,7 @@ def find_links(pollex_id: str, protoform_name: str, level: str,
     # -----------------------------------------------------------------------
     for m in _ACD_RE.finditer(notes):
         cited_level, cited_form, cited_gloss = m.group(1), m.group(2), m.group(3)
-        key = normalise_proto_key(cited_form)
+        key = _norm(cited_form)
         candidates = acd_idx.get(cited_level, {}).get(key, [])
         if not candidates:
             continue
@@ -173,13 +228,36 @@ def find_links(pollex_id: str, protoform_name: str, level: str,
     # -----------------------------------------------------------------------
     for m in _LPO_RE.finditer(notes):
         cited_form, cited_gloss, lpo_ref = m.group(1), m.group(2), m.group(3).strip()
-        key = normalise_proto_key(cited_form)
+        key = _norm(cited_form)
         candidates = lpo_idx.get('POc', {}).get(key, [])
         if not candidates:
             continue
         result = _best_match(candidates, cited_gloss, 'tier2_lpo_citation', 0.9)
         if result and (best_lpo is None or result[1] > best_lpo[1]):
             best_lpo = (result[0], result[1], result[2], lpo_ref)
+
+    # -----------------------------------------------------------------------
+    # Tier 3: bare proto-form citations (no quoted gloss / no attribution tag)
+    # e.g. "Cf. POC *natu", "PMP *qatay". Validated against this set's own desc.
+    # -----------------------------------------------------------------------
+    for m in _BARE_RE.finditer(notes):
+        label, cited_form = m.group(1), m.group(2)
+        key = _norm(cited_form)
+        for db_name, target_level in BARE_TARGETS[label]:
+            if db_name == 'lpo':
+                candidates = lpo_idx.get(target_level, {}).get(key, [])
+                if not candidates:
+                    continue
+                result = _best_match(candidates, desc, 'tier3_bare_citation', 0.65)
+                if result and (best_lpo is None or result[1] > best_lpo[1]):
+                    best_lpo = (result[0], result[1], result[2], '')
+            else:  # acd
+                candidates = acd_idx.get(target_level, {}).get(key, [])
+                if not candidates:
+                    continue
+                result = _best_match(candidates, desc, 'tier3_bare_citation', 0.65)
+                if result and (best_acd is None or result[1] > best_acd[1]):
+                    best_acd = (result[0], result[1], result[2])
 
     if best_lpo is None and best_acd is None:
         return []

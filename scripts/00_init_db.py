@@ -244,6 +244,25 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_etymology_pollex
             ON etymology_links(pollex_cognateset_id);
 
+        -- ── POLLEX reflex → unified entry links ───────────────────────────────
+        -- Bridges the comparative layer to the user-facing dictionary: a POLLEX
+        -- Māori reflex matched to an `entry` row by macron-neutral headword key.
+        -- Lets the app surface the whole proto-tree on the word a user looks up.
+        -- (entry is defined further below; SQLite allows the forward FK ref.)
+        CREATE TABLE IF NOT EXISTS pollex_entry_links (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            cognateset_id    TEXT    NOT NULL REFERENCES pollex_cognatesets(id),
+            reflex_id        INTEGER REFERENCES pollex_reflexes(id),
+            entry_id         INTEGER NOT NULL REFERENCES entry(id),
+            match_key        TEXT,    -- normalise_search_key value that matched
+            match_method     TEXT,    -- 'headword_exact'
+            match_confidence REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_pollex_entry_links_cs
+            ON pollex_entry_links(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_pollex_entry_links_entry
+            ON pollex_entry_links(entry_id);
+
         -- ── Personal Lexicon ─────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS personal_lexicon (
             id             INTEGER PRIMARY KEY,

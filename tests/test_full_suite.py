@@ -137,6 +137,7 @@ class TestSchema(unittest.TestCase):
     ETYMOLOGY_TABLES = [
         "pollex_cognatesets", "pollex_reflexes",
         "lpo_cognatesets", "acd_cognatesets", "etymology_links",
+        "pollex_entry_links",
     ]
     AUX_TABLES = [
         "source_metadata", "source_abbreviations",
@@ -245,6 +246,12 @@ class TestSchema(unittest.TestCase):
         self._assert_cols("etymology_links", [
             "id", "pollex_cognateset_id", "lpo_cognateset_id", "acd_cognateset_id",
             "match_confidence", "match_method", "lpo_citation", "notes",
+        ])
+
+    def test_pollex_entry_links_columns(self):
+        self._assert_cols("pollex_entry_links", [
+            "id", "cognateset_id", "reflex_id", "entry_id",
+            "match_key", "match_method", "match_confidence",
         ])
 
     def test_source_abbreviations_columns(self):
@@ -736,6 +743,69 @@ class TestEtymologyTables(unittest.TestCase):
             any("tier1_formkey" in m for m in methods),
             "No tier1_formkey method links found",
         )
+
+    def test_etymology_links_polynesian_level_matches(self):
+        # PN/NP/CE → LPO PPn/PNPn/PCEPn mapping should produce form-key matches
+        # at Polynesian levels (the original LEVEL_MAP omitted these).
+        n = self.conn.execute(
+            "SELECT COUNT(*) FROM etymology_links el"
+            " JOIN pollex_cognatesets pc ON el.pollex_cognateset_id = pc.id"
+            " JOIN lpo_cognatesets lc ON el.lpo_cognateset_id = lc.id"
+            " WHERE pc.level IN ('PN','NP','CE')"
+            "   AND lc.level IN ('PPn','PNPn','PCEPn')"
+        ).fetchone()[0]
+        self.assertGreater(n, 0, "No POLLEX Polynesian-level links to LPO PPn/PNPn/PCEPn")
+
+
+# ── 8b. POLLEX reflex → entry links ───────────────────────────────────────────
+
+class TestPollexEntryLinks(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conn = _open()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+
+    def test_populated(self):
+        n = _count(self.conn, "pollex_entry_links")
+        self.assertGreater(n, 10000, f"pollex_entry_links has only {n} rows (expected > 10000)")
+
+    def test_no_orphan_cognateset(self):
+        orphans = self.conn.execute(
+            "SELECT COUNT(*) FROM pollex_entry_links pel"
+            " LEFT JOIN pollex_cognatesets pc ON pel.cognateset_id = pc.id"
+            " WHERE pc.id IS NULL"
+        ).fetchone()[0]
+        self.assertEqual(orphans, 0, f"{orphans} pollex_entry_links reference unknown cognatesets")
+
+    def test_no_orphan_entry(self):
+        orphans = self.conn.execute(
+            "SELECT COUNT(*) FROM pollex_entry_links pel"
+            " LEFT JOIN entry e ON pel.entry_id = e.id"
+            " WHERE e.id IS NULL"
+        ).fetchone()[0]
+        self.assertEqual(orphans, 0, f"{orphans} pollex_entry_links reference unknown entries")
+
+    def test_match_keys_align(self):
+        # Every link's match_key must equal the linked entry's headword_search.
+        bad = self.conn.execute(
+            "SELECT COUNT(*) FROM pollex_entry_links pel"
+            " JOIN entry e ON pel.entry_id = e.id"
+            " WHERE pel.match_key <> e.headword_search"
+        ).fetchone()[0]
+        self.assertEqual(bad, 0, f"{bad} pollex_entry_links have match_key ≠ entry.headword_search")
+
+    def test_spans_multiple_sources(self):
+        # Links should reach the major user-facing dictionaries, not just one.
+        sources = {r[0] for r in self.conn.execute(
+            "SELECT DISTINCT e.source_id FROM pollex_entry_links pel"
+            " JOIN entry e ON pel.entry_id = e.id"
+        ).fetchall()}
+        for s in ("te_aka", "williams"):
+            self.assertIn(s, sources, f"pollex_entry_links never reaches {s}")
 
 
 # ── 9. Source abbreviations ───────────────────────────────────────────────────

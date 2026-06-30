@@ -18,7 +18,8 @@ WHAT GOES IN THE APP DB
                          (+ entry_fts / sense_fts / example_fts, rebuilt)
   * Etymology layer .... pollex_cognatesets, pollex_reflexes, pollex_languages,
                          lpo_cognatesets, acd_cognatesets, etymology_links,
-                         protoform_ancestry, reconstruction_levels
+                         protoform_ancestry, reconstruction_levels,
+                         pollex_entry_links
   * Support ............ source_abbreviations, source_metadata
 
 Everything else (the raw `*_entries` landing zone, `pollex_entries`,
@@ -59,6 +60,7 @@ APP_TABLES = [
     "etymology_links",
     "reconstruction_levels",
     "protoform_ancestry",
+    "pollex_entry_links",
 ]
 
 # FTS5 virtual tables rebuilt from their content tables after the copy.
