@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Māori Dictionary — Source Update Workflow</title>
+<style>
+  :root{
+    --bg:#0f1b2d; --panel:#16273f; --panel2:#1d3554;
+    --ink:#eaf1fb; --muted:#9fb4d0;
+    --accent:#3ec6b4; --accent2:#f2a93b; --accent3:#e2607a;
+    --stage:#5b8def;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:radial-gradient(1200px 600px at 50% -10%,#1b3052,#0f1b2d 60%);
+    color:var(--ink); font:15px/1.5 "Segoe UI",system-ui,Arial,sans-serif;
+    padding:32px 20px 56px;
+  }
+  .wrap{max-width:1080px;margin:0 auto}
+  header{text-align:center;margin-bottom:8px}
+  header .kicker{letter-spacing:3px;text-transform:uppercase;color:var(--accent);font-size:12px;font-weight:700}
+  header h1{margin:6px 0 4px;font-size:30px}
+  header p{margin:0;color:var(--muted)}
+  .sub{font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--accent2)}
+
+  h2.section{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);
+    border-bottom:1px solid #29405f;padding-bottom:6px;margin:38px 0 18px}
+
+  /* pipeline */
+  .pipe{display:flex;align-items:stretch;gap:8px;flex-wrap:wrap;justify-content:center}
+  .stage{background:var(--panel);border:1px solid #284a72;border-radius:12px;
+    padding:14px 16px;min-width:120px;text-align:center;position:relative;flex:1}
+  .stage .n{position:absolute;top:-10px;left:-10px;width:24px;height:24px;border-radius:50%;
+    background:var(--stage);color:#fff;font-size:12px;font-weight:700;display:grid;place-items:center}
+  .stage .t{font-weight:700;font-size:15px}
+  .stage .d{color:var(--muted);font-size:12px;margin-top:4px;font-family:ui-monospace,Consolas,monospace}
+  .arrow{align-self:center;color:var(--accent);font-size:22px;font-weight:700}
+  .stage.export{background:linear-gradient(160deg,#1d4d44,#16273f);border-color:var(--accent)}
+  .zone{display:flex;justify-content:center;gap:6px;margin-top:14px;flex-wrap:wrap}
+  .tag{font-size:11px;font-family:ui-monospace,Consolas,monospace;padding:4px 10px;border-radius:20px}
+  .tag.staging{color:var(--accent2);border:1px dashed var(--accent2)}
+  .tag.app{color:var(--accent);border:1px dashed var(--accent)}
+
+  /* steps */
+  .steps{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .card{background:var(--panel);border:1px solid #284a72;border-radius:12px;padding:16px}
+  .card .h{display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:6px}
+  .card .num{width:26px;height:26px;border-radius:7px;background:var(--accent3);color:#fff;
+    display:grid;place-items:center;font-size:13px;font-weight:700;flex:none}
+  .card p{margin:0;color:var(--muted);font-size:13px}
+  .card code{background:#0c1726;color:#bfe9e0;padding:1px 6px;border-radius:5px;font-size:12px}
+
+  /* sources */
+  table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:12px;overflow:hidden}
+  th,td{padding:10px 14px;text-align:left;font-size:13px;border-bottom:1px solid #233b58}
+  th{background:var(--panel2);color:var(--accent);text-transform:uppercase;letter-spacing:1px;font-size:11px}
+  td code{background:#0c1726;color:#f2c98b;padding:1px 6px;border-radius:5px;font-size:12px}
+  tr:last-child td{border-bottom:none}
+  .etym td{color:var(--muted)}
+
+  /* guardrails */
+  .rails{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+  .rail{background:#1a2235;border-left:3px solid var(--accent2);border-radius:8px;padding:12px 14px;font-size:13px}
+  .rail b{color:var(--accent2)}
+  footer{text-align:center;color:var(--muted);font-size:12px;margin-top:40px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">Te Papakupu Māori · Database Pipeline</div>
+    <h1>Source Update Workflow</h1>
+    <p>Refresh <span class="sub">ONE source at a time</span> · scrape → parse → import → unify → export</p>
+  </header>
+
+  <h2 class="section">The Pipeline · every word-list source</h2>
+  <div class="pipe">
+    <div class="stage"><span class="n">1</span><div class="t">scrape</div><div class="d">web / PDF / OCR</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><span class="n">2</span><div class="t">parse</div><div class="d">→ JSON</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><span class="n">3</span><div class="t">import</div><div class="d">&lt;source&gt;_entries</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><span class="n">4</span><div class="t">unify</div><div class="d">50_build_unified</div></div>
+    <div class="arrow">→</div>
+    <div class="stage export"><span class="n">5</span><div class="t">export</div><div class="d">maori_dict.db</div></div>
+  </div>
+  <div class="zone">
+    <span class="tag staging">stages 1–4 live in &nbsp;staging_dictionary.db</span>
+    <span class="tag app">stage 5 → slim app DB (only file copied to app repo)</span>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:12.5px;margin-top:14px">
+    The per-source <code style="color:#f2c98b">*_entries</code> table is the <b style="color:var(--ink)">curated landing zone</b> —
+    definition / POS / variant cleanups live there, not in JSON. Always go through <b style="color:var(--ink)">import</b>; never feed unify from JSON.
+    <code style="color:#f2c98b">unify</code> is an idempotent DB→DB projection.
+  </p>
+
+  <h2 class="section">The Checklist · run from repo root, prefix <code style="color:#f2c98b">PYTHONUTF8=1</code></h2>
+  <div class="steps">
+    <div class="card"><div class="h"><span class="num">1</span>Identify source</div>
+      <p>Confirm <b style="color:#fff">which</b> source with the user, and full re-scrape vs delta.</p></div>
+    <div class="card"><div class="h"><span class="num">2</span>Init + back up</div>
+      <p><code>py scripts/00_init_db.py</code> then copy <code>staging_dictionary.db</code> → timestamped <code>.bak</code>. <b style="color:#fff">Never skip the backup.</b></p></div>
+    <div class="card"><div class="h"><span class="num">3</span>Run the recipe</div>
+      <p>Per-source recipe from <code>docs/UPDATE_WORKFLOW.md</code>. Web scrapes are long &amp; resumable.</p></div>
+    <div class="card"><div class="h"><span class="num">4</span>Unify</div>
+      <p><code>py scripts/50_build_unified.py --source &lt;name&gt;</code>. Skip for the etymology layer.</p></div>
+    <div class="card"><div class="h"><span class="num">5</span>Verify</div>
+      <p><code>py -m unittest discover -s tests</code>. All must pass. For delta, report <code>data_refresh_runs</code>.</p></div>
+    <div class="card"><div class="h"><span class="num">6</span>Export app DB</div>
+      <p><code>py scripts/60_export_app_db.py</code> rebuilds slim <code>maori_dict.db</code> from staging.</p></div>
+    <div class="card" style="grid-column:1/-1"><div class="h"><span class="num">7</span>Update trackers</div>
+      <p>Add a <code>SESSIONS.md</code> row (source, row counts, changes, date). Update <code>DATABASE_REFERENCE.md</code> only if counts / schema changed.</p></div>
+  </div>
+
+  <h2 class="section">Source → unify map</h2>
+  <table>
+    <tr><th>Source</th><th>unify <code style="color:#f2c98b">--source</code></th><th>Notes</th></tr>
+    <tr><td>Te Aka</td><td><code>te_aka</code></td><td>import <code>--refresh</code> for annual delta</td></tr>
+    <tr><td>Paekupu</td><td><code>paekupu</code></td><td>import <code>--refresh</code>; 2-phase scrape</td></tr>
+    <tr><td>He Pātaka Kupu</td><td><code>hepatakakupu</code></td><td>—</td></tr>
+    <tr><td>Williams</td><td><code>williams</code></td><td>Wayback source (historical)</td></tr>
+    <tr><td>Papakupu o Tai Tokerau</td><td><code>papakupu</code></td><td>cleanups 09/10/11 <code>--apply</code>; dialect auto</td></tr>
+    <tr class="etym"><td>POLLEX / LPO / ACD</td><td><i>none</i></td><td>etymology layer — import only, <b>no unify</b></td></tr>
+  </table>
+
+  <h2 class="section">Etymology / comparative layer · import only — never unified</h2>
+  <div class="pipe">
+    <div class="stage"><div class="t">03 pollex</div><div class="d">scrape → import</div></div>
+    <div class="arrow">→</div>
+    <div class="stage"><div class="t">33 languages</div><div class="d">67-lang ref</div></div>
+    <div class="arrow">+</div>
+    <div class="stage"><div class="t">06 lpo</div><div class="d">CLDF → cognatesets</div></div>
+    <div class="arrow">+</div>
+    <div class="stage"><div class="t">07 acd</div><div class="d">CLDF → cognatesets</div></div>
+    <div class="arrow">→</div>
+    <div class="stage export"><div class="t">08 linker</div><div class="d">POLLEX↔LPO↔ACD</div></div>
+  </div>
+  <p style="text-align:center;color:var(--muted);font-size:12.5px;margin-top:12px">
+    Layer feeds <b style="color:var(--ink)">etymology links</b>, not the unified core — <b style="color:var(--ink)">no</b> <code style="color:#f2c98b">50_build_unified.py</code>.
+    <code style="color:#f2c98b">15_pollex_translate_glosses.py</code> translates reflex glosses (Spanish/French → English).
+  </p>
+
+  <h2 class="section">POS normalisation · resolved via <code style="color:#f2c98b">std_pos</code> at unify</h2>
+  <div class="steps">
+    <div class="card"><div class="h"><span class="num" style="background:var(--stage)">A</span>Build / fill</div>
+      <p><code>13_build_pos_normalisation.py</code> auto-loads <code>seeds/std_pos_seed.csv</code> <b style="color:#fff">fill-only</b> — never overwrites a reviewed row.</p></div>
+    <div class="card"><div class="h"><span class="num" style="background:var(--stage)">B</span>Apply review</div>
+      <p><code>15_apply_pos_review.py --csv docs/POS_REVIEW_atomic.csv</code> → then re-run <code>50_build_unified.py</code> + <code>60_export_app_db.py</code>.</p></div>
+    <div class="card"><div class="h"><span class="num" style="background:var(--stage)">C</span>Persist seed</div>
+      <p><code>16_dump_std_pos_seed.py</code> → <code>seeds/std_pos_seed.csv</code> (commit it). <code>14_seed_williams_pos.py</code> = one-off Williams seeding.</p></div>
+  </div>
+
+  <h2 class="section">After any update · cross-cutting</h2>
+  <div class="rails">
+    <div class="rail" style="border-left-color:var(--accent)"><b style="color:var(--accent)">06_fts_rebuild.py</b> — rebuild FTS index after any bulk table edit.</div>
+    <div class="rail" style="border-left-color:var(--accent)"><b style="color:var(--accent)">35_detect_pairs.py</b> — refresh cross-source "also in" candidates.</div>
+    <div class="rail" style="border-left-color:var(--accent)"><b style="color:var(--accent)">60_export_app_db.py</b> — rebuild slim <code style="color:#f2c98b">maori_dict.db</code>; copy THIS to the app repo.</div>
+  </div>
+
+  <h2 class="section">Guardrails</h2>
+  <div class="rails">
+    <div class="rail"><b>One source per run.</b> Several named → do sequentially, each with own backup + verify.</div>
+    <div class="rail"><b>database is locked?</b> Ensure no other Python process holds the DB, then retry the unify.</div>
+    <div class="rail"><b>Papakupu examples</b> are bilingual (text_mi + text_en). ~140 / 10,211 have no recoverable text_mi — expected residue, don't backfill from English.</div>
+    <div class="rail"><b>New PDF source</b> needs a new <code style="color:#f2c98b">*_entries</code> table, a source_metadata row, and a builder in 50_build_unified.py before unifying.</div>
+  </div>
+
+  <footer>Te Papakupu Māori dictionary DB · workflow per <code>.claude/skills/update-dictionary</code> &amp; <code>docs/UPDATE_WORKFLOW.md</code></footer>
+</div>
+</body>
+</html>
