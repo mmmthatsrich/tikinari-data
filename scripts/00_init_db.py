@@ -230,6 +230,121 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_acd_level ON acd_cognatesets(level);
         CREATE INDEX IF NOT EXISTS idx_acd_etymon ON acd_cognatesets(etymon_id);
 
+        -- ── ABVD — Austronesian Basic Vocabulary Database ─────────────────────
+        -- CLDF from github.com/lexibank/abvd (CC-BY-4.0). Unlike POLLEX/LPO/ACD,
+        -- ABVD has NO reconstructed protoforms — a cognateset is an attested
+        -- cognacy class scoped to ONE concept (e.g. 'hand-1'); members are real
+        -- forms across Austronesian languages. Filtered at import (07b) to sets
+        -- with >=1 Polynesian/Oceanic member (matched against pollex_languages).
+        CREATE TABLE IF NOT EXISTS abvd_parameters (
+            id                TEXT PRIMARY KEY,   -- CLDF concept ID
+            name              TEXT NOT NULL,      -- concept gloss
+            concepticon_id    TEXT,
+            concepticon_gloss TEXT
+        );
+        CREATE TABLE IF NOT EXISTS abvd_languages (
+            id             TEXT PRIMARY KEY,   -- CLDF language ID
+            name           TEXT NOT NULL,
+            glottocode     TEXT,
+            glottolog_name TEXT,
+            iso_code       TEXT,
+            macroarea      TEXT,
+            family         TEXT,
+            is_polynesian  INTEGER NOT NULL DEFAULT 0,  -- matched pollex_languages
+            subgroup       TEXT,               -- POLLEX subgroup where matched
+            url            TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_abvd_lang_iso ON abvd_languages(iso_code);
+        CREATE TABLE IF NOT EXISTS abvd_cognatesets (
+            cognateset_id  TEXT PRIMARY KEY,   -- e.g. 'hand-1' (per-concept class)
+            parameter_id   TEXT,               -- concept (FK abvd_parameters.id)
+            concept_name   TEXT,
+            n_members      INTEGER NOT NULL DEFAULT 0,
+            n_poly_members INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_abvd_cs_param ON abvd_cognatesets(parameter_id);
+        CREATE TABLE IF NOT EXISTS abvd_forms (
+            id           TEXT PRIMARY KEY,   -- CLDF form ID
+            language_id  TEXT NOT NULL,      -- FK abvd_languages.id
+            parameter_id TEXT,               -- concept
+            value        TEXT,
+            form         TEXT,
+            segments     TEXT,
+            loan         TEXT,
+            comment      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_abvd_form_lang ON abvd_forms(language_id);
+        CREATE INDEX IF NOT EXISTS idx_abvd_form_param ON abvd_forms(parameter_id);
+        CREATE TABLE IF NOT EXISTS abvd_cognates (
+            id            TEXT PRIMARY KEY,   -- CLDF cognate judgment ID
+            form_id       TEXT NOT NULL,      -- FK abvd_forms.id
+            cognateset_id TEXT NOT NULL,      -- FK abvd_cognatesets.cognateset_id
+            doubt         TEXT,
+            method        TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_abvd_cog_set ON abvd_cognates(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_abvd_cog_form ON abvd_cognates(form_id);
+
+        -- ── Walworth — Polynesian comparative wordlist ───────────────────────
+        -- CLDF from github.com/lexibank/walworthpolynesian (CC-BY-4.0). A
+        -- Polynesian-only LingPy cognacy dataset (Walworth 2014); cognatesets are
+        -- bare integer IDs (the form's `Cognacy` value), expert-coded per concept.
+        -- Imported FULL + UNFILTERED (07c) — the whole set is already Polynesian,
+        -- so no Polynesian-member filter (cf. ABVD). subgroup tagged where the
+        -- language matches the curated pollex_languages; gap-fill source for ETY_*.
+        CREATE TABLE IF NOT EXISTS walworth_parameters (
+            id                TEXT PRIMARY KEY,   -- CLDF concept ID (e.g. '210_onethousand')
+            name              TEXT NOT NULL,      -- concept gloss
+            concepticon_id    TEXT,
+            concepticon_gloss TEXT
+        );
+        CREATE TABLE IF NOT EXISTS walworth_languages (
+            id             TEXT PRIMARY KEY,   -- CLDF language ID
+            name           TEXT NOT NULL,
+            glottocode     TEXT,
+            glottolog_name TEXT,
+            iso_code       TEXT,
+            macroarea      TEXT,
+            family         TEXT,
+            latitude       TEXT,
+            longitude      TEXT,
+            is_polynesian  INTEGER NOT NULL DEFAULT 0,  -- matched pollex_languages
+            subgroup       TEXT                -- POLLEX subgroup where matched
+        );
+        CREATE INDEX IF NOT EXISTS idx_walworth_lang_iso ON walworth_languages(iso_code);
+        CREATE TABLE IF NOT EXISTS walworth_cognatesets (
+            cognateset_id TEXT PRIMARY KEY,   -- bare integer cognacy class id
+            parameter_id  TEXT,              -- concept (FK walworth_parameters.id)
+            concept_name  TEXT,
+            n_members     INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_walworth_cs_param ON walworth_cognatesets(parameter_id);
+        CREATE TABLE IF NOT EXISTS walworth_forms (
+            id           TEXT PRIMARY KEY,   -- CLDF form ID
+            local_id     TEXT,
+            language_id  TEXT NOT NULL,      -- FK walworth_languages.id
+            parameter_id TEXT,              -- concept
+            value        TEXT,
+            form         TEXT,
+            segments     TEXT,
+            cognacy      TEXT,              -- cognateset id (== Cognateset_ID)
+            loan         TEXT,
+            comment      TEXT,
+            source       TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_walworth_form_lang ON walworth_forms(language_id);
+        CREATE INDEX IF NOT EXISTS idx_walworth_form_param ON walworth_forms(parameter_id);
+        CREATE TABLE IF NOT EXISTS walworth_cognates (
+            id            TEXT PRIMARY KEY,   -- CLDF cognate judgment ID
+            form_id       TEXT NOT NULL,      -- FK walworth_forms.id
+            cognateset_id TEXT NOT NULL,      -- FK walworth_cognatesets.cognateset_id
+            doubt         TEXT,
+            method        TEXT,
+            alignment     TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_walworth_cog_set ON walworth_cognates(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_walworth_cog_form ON walworth_cognates(form_id);
+
         -- ── Etymology linking table ───────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS etymology_links (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -736,6 +851,8 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
         ("pollex_cognatesets", "POLLEX-Online (protoform cognate sets)",    None,              "https://pollex.eva.mpg.de/entry/",                        None, 0, "Full protoform records with cross-language reflexes; scraped"),
         ("lpo",                "The Lexicon of Proto Oceanic (tlopo)",      "CC-BY-4.0",       "https://tlopo.clld.org",                                  None, 0, "Proto-Oceanic layer; CLDF from github.com/lexibank/tlopo"),
         ("acd",                "Austronesian Comparative Dictionary",        "CC-BY-4.0",       "https://acd.clld.org",                                    None, 0, "PAN/PMP layer; CLDF from github.com/lexibank/acd"),
+        ("abvd",               "Austronesian Basic Vocabulary Database",     "CC-BY-4.0",       "https://abvd.eva.mpg.de/austronesian/",                   None, 0, "Attested cognate clusters across Austronesian; CLDF from github.com/lexibank/abvd; filtered to sets with a Polynesian member"),
+        ("walworth",           "Walworth Polynesian comparative wordlist",   "CC-BY-4.0",       "https://github.com/lexibank/walworthpolynesian",          None, 0, "Polynesian-only LingPy cognacy dataset (Walworth 2014); CLDF from github.com/lexibank/walworthpolynesian; full + unfiltered; ETY_* gap-fill source"),
         ("te_aka",             "Te Aka Maori Dictionary",                   "Restricted",      "https://maoridictionary.co.nz",                           None, 0, "Stub — permissions handled externally"),
         ("hepatakakupu",       "He Pataka Kupu",                            "Restricted",      "https://www.hepatakakapu.maori.nz",                       None, 0, "Monolingual Maori; stub — permissions handled externally"),
         ("paekupu",            "Paekupu (curriculum vocabulary)",           "Restricted",      "https://www.paekupu.co.nz",                               None, 0, "Curriculum subject areas; stub — permissions handled externally"),
