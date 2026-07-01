@@ -1,10 +1,11 @@
-"""Sessions 56–57: unified etymology layer (ETY_*) — schema, parity, integrity.
+"""Sessions 56–58: unified etymology layer (ETY_*) — schema, parity, integrity.
 
 Proves scripts/52_build_etymology_unified.py projected every comparative source
 into the ETY_* tables without loss: per-source cognateset/reflex counts equal the
 raw source tables (S56 POLLEX/LPO/ACD; S57 adds Tregear + ABVD), the cross-source
 ETY_link merge (etymology_links + protoform_ancestry + dedup) and the all-source
-ETY_entry_link bridge are populated and FK-clean. Walworth gap-fill lands in S58.
+ETY_entry_link bridge are populated and FK-clean. S58 adds Walworth as a gap-fill
+source (novel protoform / novel (proto_key, language) reflex only, stamped gap_fill=1).
 """
 
 import sqlite3
@@ -182,7 +183,7 @@ class TestEtymologyUnified(unittest.TestCase):
         # Every source that carries a Māori reflex should produce bridges.
         sources = {r[0] for r in self.conn.execute(
             "SELECT DISTINCT source FROM ETY_entry_link")}
-        for s in ("pollex", "tregear", "abvd"):
+        for s in ("pollex", "tregear", "abvd", "walworth"):
             self.assertIn(s, sources, f"no ETY_entry_link rows from {s}")
 
     def test_entry_link_only_from_maori_reflexes(self):
@@ -192,6 +193,76 @@ class TestEtymologyUnified(unittest.TestCase):
             "JOIN ETY_reflex r ON el.reflex_id = r.id "
             "WHERE r.lang_key != 'maori' OR r.lang_key IS NULL")
         self.assertEqual(bad, 0, "ETY_entry_link built from a non-Māori reflex")
+
+
+class TestWalworthGapFill(unittest.TestCase):
+    """S58: Walworth promoted only where it fills a gap (novel protoform or novel
+    (proto_key, language) reflex), and every promoted row is stamped gap_fill=1."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.conn = _open()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+
+    def _count(self, sql, *args):
+        return self.conn.execute(sql, args).fetchone()[0]
+
+    def test_gap_fill_is_a_strict_subset(self):
+        promoted = self._count("SELECT COUNT(*) FROM ETY_cognateset WHERE source='walworth'")
+        raw = self._count("SELECT COUNT(*) FROM walworth_cognatesets")
+        self.assertGreater(promoted, 0, "no Walworth sets promoted")
+        self.assertLess(promoted, raw, "gap-fill promoted every set — not gap-fill")
+
+    def test_all_walworth_rows_stamped_gap_fill(self):
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_cognateset WHERE source='walworth' AND gap_fill!=1"),
+            0, "a Walworth cognateset is not stamped gap_fill=1")
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_reflex WHERE source='walworth' AND gap_fill!=1"),
+            0, "a Walworth reflex is not stamped gap_fill=1")
+
+    def test_no_other_source_stamped_gap_fill(self):
+        # gap_fill is a Walworth-only flag under the current build.
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_cognateset WHERE gap_fill=1 AND source!='walworth'"),
+            0)
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_reflex WHERE gap_fill=1 AND source!='walworth'"),
+            0)
+
+    def test_every_walworth_set_has_a_protoform(self):
+        # only protoform-bearing sets are candidates, so every promoted set has a key.
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_cognateset "
+                        "WHERE source='walworth' AND (proto_key IS NULL OR proto_key='')"),
+            0, "a Walworth gap set has no proto_key")
+
+    def test_every_reflex_is_novel(self):
+        # the core gap-fill invariant: no promoted (proto_key, language) reflex may
+        # already be covered by a NON-walworth set sharing that proto_key.
+        dup = self._count(
+            "SELECT COUNT(*) FROM ETY_cognateset wcs "
+            "JOIN ETY_reflex wr ON wr.cognateset_id = wcs.id "
+            "JOIN ETY_cognateset ocs "
+            "  ON ocs.proto_key = wcs.proto_key AND ocs.source != 'walworth' "
+            "JOIN ETY_reflex orf "
+            "  ON orf.cognateset_id = ocs.id AND orf.lang_key = wr.lang_key "
+            "WHERE wcs.source='walworth'")
+        self.assertEqual(dup, 0, "a Walworth reflex duplicates an existing (proto_key, language)")
+
+    def test_reflex_fk_and_source_ref(self):
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_reflex r "
+                        "LEFT JOIN ETY_cognateset cs ON r.cognateset_id=cs.id "
+                        "WHERE r.source='walworth' AND cs.id IS NULL"),
+            0, "orphan Walworth reflex")
+        self.assertEqual(
+            self._count("SELECT COUNT(*) FROM ETY_reflex "
+                        "WHERE source='walworth' AND source_ref IS NULL"),
+            0, "Walworth reflex missing source_ref traceback")
 
 
 if __name__ == "__main__":

@@ -6,8 +6,9 @@ tables remain the curated landing zone; this script reads them and rebuilds:
 
     ETY_level      <- reconstruction_levels          (reference)
     ETY_language   <- pollex_languages (+ abvd/tregear langs not in POLLEX)
-    ETY_cognateset <- pollex + lpo + acd + tregear + abvd cognatesets
+    ETY_cognateset <- pollex + lpo + acd + tregear + abvd + walworth (gap-fill)
     ETY_reflex     <- pollex_reflexes + tregear cognates + abvd form-judgments
+                      + walworth novel forms (gap-fill)
     ETY_link       <- etymology_links + protoform_ancestry + cross-source dedup
     ETY_entry_link <- Māori reflexes of EVERY source -> unified `entry`
 
@@ -39,8 +40,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_proto_key, normalise_search_key,
                    normalise_sort_key)
 
-# Walworth joins at S58 (gap-fill only).
-SOURCES = ("pollex", "lpo", "acd", "tregear", "abvd")
+# Walworth is gap-fill only (S58) and MUST build LAST — its novelty test reads the
+# already-projected coverage of the other five sources from ETY_*.
+SOURCES = ("pollex", "lpo", "acd", "tregear", "abvd", "walworth")
 # Delete order matters (FK: ETY_reflex -> ETY_cognateset). Children first.
 ETY_TABLES = (
     "ETY_entry_link", "ETY_link", "ETY_reflex", "ETY_cognateset",
@@ -325,8 +327,124 @@ def build_abvd(con, resolver) -> dict:
     return {"cognateset": len(sets), "reflex": len(rows), "orphan_reflex": orphans}
 
 
+WALWORTH_PROTO_LANG = "Polynesian"   # walworth_languages.id of "Proto Polynesian"
+
+
+def build_walworth(con, resolver) -> dict:
+    """Gap-fill only. Walworth (a Polynesian LingPy cognacy wordlist) is promoted
+    into ETY_* ONLY where it fills a gap the other five sources miss.
+
+    Walworth cognatesets are bare cognacy classes; a set's reconstructed protoform
+    lives in the "Proto Polynesian" pseudo-language form (walworth_languages.id
+    'Polynesian'). Only the sets that carry such a protoform are candidates — a set
+    with no protoform has no proto_key to dedup against, so it can't be judged a gap
+    and is skipped (its attested reflexes only duplicate ABVD's comparative role).
+
+    A candidate set is promoted when either:
+      * novel protoform — its proto_key is absent from every existing
+        ETY_cognateset -> promote the set + ALL its (non-proto) reflexes; or
+      * novel language — its proto_key already exists, but it attests a reflex for a
+        (proto_key, language) pair no existing set covers -> promote the set with
+        ONLY those novel-language reflexes.
+    Otherwise the set is skipped. Promoted sets and reflexes are stamped gap_fill=1.
+    The shared proto_key lets the cross-source dedup in build_links link a promoted
+    set to its canonical equivalent automatically. Runs LAST (see SOURCES) so the
+    coverage it reads already holds the other five sources.
+    """
+    by_iso, by_name = resolver
+
+    # existing coverage from the already-built non-walworth ETY_* slice
+    existing_keys = {k for (k,) in con.execute(
+        "SELECT DISTINCT proto_key FROM ETY_cognateset "
+        "WHERE proto_key IS NOT NULL AND proto_key != ''")}
+    key_langs = {}
+    for k, lk in con.execute(
+            "SELECT cs.proto_key, r.lang_key FROM ETY_cognateset cs "
+            "JOIN ETY_reflex r ON r.cognateset_id = cs.id "
+            "WHERE cs.proto_key IS NOT NULL AND cs.proto_key != ''"):
+        key_langs.setdefault(k, set()).add(lk)
+
+    # walworth language -> (lang_key, name); collect the unresolved ones
+    added_langs = {}
+    lang_meta = {}
+    for lid, name, iso, subgroup in con.execute(
+            "SELECT id, name, iso_code, subgroup FROM walworth_languages"):
+        lang_key = resolve_lang(by_iso, by_name, iso=iso, name=name)
+        if lang_key is None:
+            lang_key = "walworth:" + lid
+            added_langs[lang_key] = (name, iso, subgroup, "walworth")
+        lang_meta[lid] = (lang_key, name)
+
+    # protoform per cognateset (from the Proto Polynesian pseudo-language)
+    proto = {}
+    for cs_id, form in con.execute(
+            "SELECT cog.cognateset_id, COALESCE(f.form, f.value) "
+            "FROM walworth_cognates cog JOIN walworth_forms f ON f.id = cog.form_id "
+            "WHERE f.language_id = ?", (WALWORTH_PROTO_LANG,)):
+        proto[cs_id] = form
+
+    concept = dict(con.execute(
+        "SELECT cognateset_id, concept_name FROM walworth_cognatesets"))
+
+    # member reflexes per cognateset (exclude the proto pseudo-language itself)
+    members = {}
+    for cs_id, cog_id, lang_id, form in con.execute(
+            "SELECT cog.cognateset_id, cog.id, f.language_id, COALESCE(f.form, f.value) "
+            "FROM walworth_cognates cog JOIN walworth_forms f ON f.id = cog.form_id "
+            "WHERE f.language_id != ?", (WALWORTH_PROTO_LANG,)):
+        members.setdefault(cs_id, []).append((cog_id, lang_id, form))
+
+    n_sets = n_reflex = 0
+    n_novel_proto = n_novel_lang = n_skipped = 0
+    for cs_id, form in proto.items():
+        pkey = normalise_proto_key(form or "")
+        if not pkey:                                  # protoform reduces to nothing
+            n_skipped += 1
+            continue
+        mem = members.get(cs_id, [])
+        if pkey not in existing_keys:
+            promote = mem                             # novel protoform: all reflexes
+            n_novel_proto += 1
+        else:
+            have = key_langs.get(pkey, set())
+            promote = [m for m in mem
+                       if lang_meta.get(m[1], ("walworth:" + m[1],))[0] not in have]
+            if not promote:                           # every language already covered
+                n_skipped += 1
+                continue
+            n_novel_lang += 1
+
+        gloss = concept.get(cs_id)
+        cur = con.execute(
+            "INSERT INTO ETY_cognateset "
+            "(source, source_ref, protoform, proto_key, level, gloss, set_group, notes, url, gap_fill) "
+            "VALUES ('walworth', ?, ?, ?, NULL, ?, NULL, NULL, NULL, 1)",
+            (cs_id, form, pkey, gloss))
+        ety_set = cur.lastrowid
+        n_sets += 1
+        for cog_id, lang_id, refl_form in promote:
+            lang_key, lang_name = lang_meta.get(lang_id, ("walworth:" + lang_id, lang_id))
+            con.execute(
+                "INSERT INTO ETY_reflex "
+                "(cognateset_id, source, source_ref, lang_key, language, form, gloss, "
+                " source_code, source_author, flags, gap_fill) "
+                "VALUES (?, 'walworth', ?, ?, ?, ?, ?, NULL, NULL, NULL, 1)",
+                (ety_set, str(cog_id), lang_key, lang_name, refl_form, gloss))
+            n_reflex += 1
+
+    for lang_key, (name, iso, subgroup, src) in added_langs.items():
+        con.execute(
+            "INSERT OR IGNORE INTO ETY_language (lang_key, name, iso_code, subgroup, source) "
+            "VALUES (?, ?, ?, ?, ?)", (lang_key, name, iso, subgroup, src))
+
+    return {"cognateset": n_sets, "reflex": n_reflex, "orphan_reflex": 0,
+            "candidates": len(proto), "novel_proto": n_novel_proto,
+            "novel_lang": n_novel_lang, "skipped": n_skipped}
+
+
 BUILDERS = {"pollex": build_pollex, "lpo": build_lpo, "acd": build_acd,
-            "tregear": build_tregear, "abvd": build_abvd}
+            "tregear": build_tregear, "abvd": build_abvd,
+            "walworth": build_walworth}
 
 # raw-table row that each ETY source projects from, for the parity proof
 RAW_SET_TABLE = {
@@ -335,6 +453,7 @@ RAW_SET_TABLE = {
     "acd": "acd_cognatesets",
     "tregear": "tregear_entries",
     "abvd": "abvd_cognatesets",
+    "walworth": "walworth_cognatesets",
 }
 RAW_REFLEX_TABLE = {"pollex": "pollex_reflexes", "abvd": "abvd_cognates"}
 
@@ -492,6 +611,17 @@ def parity_check(con, targets) -> bool:
         raw_sets = _count(con, RAW_SET_TABLE[src])
         ety_sets = con.execute(
             "SELECT COUNT(*) FROM ETY_cognateset WHERE source=?", (src,)).fetchone()[0]
+        if src == "walworth":
+            # gap-fill: ETY holds only the promoted novel subset, never the raw
+            # total — so the invariant is 0 < promoted <= raw, not equality.
+            set_ok = 0 <= ety_sets <= raw_sets
+            ok &= set_ok
+            ety_ref = con.execute(
+                "SELECT COUNT(*) FROM ETY_reflex WHERE source='walworth'").fetchone()[0]
+            print(f"  [walworth] cognateset  raw={raw_sets:>6}  ETY={ety_sets:>6}  "
+                  f"{'OK' if set_ok else 'MISMATCH'}  (gap-fill: promoted subset)")
+            print(f"  [walworth] reflex      gap-fill  ETY={ety_ref:>6}  (novel only)")
+            continue
         set_ok = raw_sets == ety_sets
         ok &= set_ok
         print(f"  [{src}] cognateset  raw={raw_sets:>6}  ETY={ety_sets:>6}  "
@@ -586,6 +716,10 @@ def main():
         con.commit()
         extra = f"  (dropped {c['orphan_reflex']} orphan reflexes)" if c["orphan_reflex"] else ""
         print(f"[{src}] cognateset {c['cognateset']}, reflex {c['reflex']}{extra}")
+        if src == "walworth":
+            print(f"    gap-fill: {c['novel_proto']} novel-protoform + "
+                  f"{c['novel_lang']} novel-language sets promoted "
+                  f"({c['candidates']} candidates, {c['skipped']} covered/keyless skipped)")
 
     # Global links span all sources — only rebuild on a full run.
     full_build = set(targets) >= set(SOURCES)
