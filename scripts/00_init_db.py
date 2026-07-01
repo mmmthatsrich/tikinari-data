@@ -411,6 +411,111 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_pollex_entry_links_entry
             ON pollex_entry_links(entry_id);
 
+        -- ════════════════════════════════════════════════════════════════════
+        --  UNIFIED ETYMOLOGY LAYER  (ETY_*)  — etymology-unification plan, S56+
+        --  Mirror of the entry/sense/relation core for the comparative layer.
+        --  A rebuildable projection of the raw pollex_*/lpo_*/acd_*/tregear_*/
+        --  abvd_*/walworth_* tables, built by scripts/52_build_etymology_unified.py.
+        --  The raw per-source etymology tables stay STAGING-ONLY; the slim app DB
+        --  ships ONLY these ETY_* tables (hard cutover, no compat views — S59).
+        --  Provenance on every set/reflex: source, source_ref (raw id), gap_fill.
+        -- ════════════════════════════════════════════════════════════════════
+
+        -- ── ETY_level: reconstruction levels (AN>MP>OC>…>PN>NP>CE) ────────────
+        -- Reference/ordering table; mirrors reconstruction_levels. level codes on
+        -- ETY_cognateset are free text (not FK-enforced) — a set may carry a code
+        -- absent here (e.g. 'XO').
+        CREATE TABLE IF NOT EXISTS ETY_level (
+            code        TEXT PRIMARY KEY,   -- AN|MP|OC|PN|NP|CE|…
+            name        TEXT,               -- full name, e.g. "Central Eastern Polynesian"
+            parent_code TEXT,               -- next level up (ancestry ordering)
+            depth_rank  INTEGER             -- 0 = deepest (AN); higher = shallower
+        );
+
+        -- ── ETY_language: comparative language reference ─────────────────────
+        -- Mirrors pollex_languages. S56 seeds the POLLEX 67; ABVD/Tregear language
+        -- sets are folded in at S57 (distinguished by `source`).
+        CREATE TABLE IF NOT EXISTS ETY_language (
+            lang_key   TEXT PRIMARY KEY,    -- language slug/key (POLLEX language_slug)
+            name       TEXT NOT NULL,
+            iso_code   TEXT,
+            subgroup   TEXT,                -- Tongic|Eastern Polynesian|Samoic-Outlier|…
+            region     TEXT,
+            country    TEXT,                -- country_or_island_group
+            notes      TEXT,
+            source     TEXT NOT NULL        -- pollex|abvd|tregear
+        );
+        CREATE INDEX IF NOT EXISTS idx_ety_language_subgroup ON ETY_language(subgroup);
+
+        -- ── ETY_cognateset: one reconstructed protoform (mirrors entry) ──────
+        CREATE TABLE IF NOT EXISTS ETY_cognateset (
+            id          INTEGER PRIMARY KEY,  -- surrogate; VOLATILE across rebuilds
+            source      TEXT NOT NULL,        -- pollex|lpo|acd|tregear|abvd|walworth
+            source_ref  TEXT NOT NULL,        -- raw cognateset id (traceback)
+            protoform   TEXT NOT NULL,        -- reconstructed form / set name
+            proto_key   TEXT,                 -- normalise_proto_key(protoform); cross-source dedup (S57)
+            level       TEXT,                 -- level code (-> ETY_level.code, not enforced)
+            gloss       TEXT,                 -- description / gloss
+            set_group   TEXT,                 -- ACD etymon_id / LPO chapter_id (ancestry grouping)
+            notes       TEXT,
+            url         TEXT,
+            gap_fill    INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_ety_cognateset_source   ON ETY_cognateset(source);
+        CREATE INDEX IF NOT EXISTS idx_ety_cognateset_protokey ON ETY_cognateset(proto_key);
+        CREATE INDEX IF NOT EXISTS idx_ety_cognateset_srcref   ON ETY_cognateset(source, source_ref);
+        CREATE INDEX IF NOT EXISTS idx_ety_cognateset_level    ON ETY_cognateset(level);
+
+        -- ── ETY_reflex: one language reflex of a set (mirrors sense/form) ────
+        CREATE TABLE IF NOT EXISTS ETY_reflex (
+            id            INTEGER PRIMARY KEY,  -- surrogate; VOLATILE across rebuilds
+            cognateset_id INTEGER NOT NULL REFERENCES ETY_cognateset(id),
+            source        TEXT NOT NULL,        -- pollex|abvd|tregear|walworth
+            source_ref    TEXT,                 -- raw reflex/form id (traceback)
+            lang_key      TEXT,                 -- -> ETY_language.lang_key
+            language      TEXT,                 -- display name
+            form          TEXT,                 -- the reflex form
+            gloss         TEXT,
+            source_code   TEXT,                 -- citation code (POLLEX)
+            source_author TEXT,
+            flags         TEXT,                 -- JSON array
+            gap_fill      INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_ety_reflex_set  ON ETY_reflex(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_ety_reflex_lang ON ETY_reflex(lang_key);
+        CREATE INDEX IF NOT EXISTS idx_ety_reflex_src  ON ETY_reflex(source, source_ref);
+
+        -- ── ETY_link: set↔set ancestry / equivalence (mirrors relation) ─────
+        --  Populated at S57 from etymology_links + protoform_ancestry.
+        CREATE TABLE IF NOT EXISTS ETY_link (
+            id               INTEGER PRIMARY KEY,
+            source_set_id    INTEGER NOT NULL REFERENCES ETY_cognateset(id),
+            target_set_id    INTEGER REFERENCES ETY_cognateset(id),
+            link_type        TEXT NOT NULL,     -- ancestry|equivalence|cross_ref
+            relation         TEXT,              -- cf|descends_from|same_as
+            match_confidence REAL,
+            match_method     TEXT,
+            origin           TEXT,              -- etymology_links|protoform_ancestry|notes
+            notes            TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_ety_link_source ON ETY_link(source_set_id);
+        CREATE INDEX IF NOT EXISTS idx_ety_link_target ON ETY_link(target_set_id);
+
+        -- ── ETY_entry_link: reflex/set → unified Māori entry bridge ─────────
+        --  Populated at S57 (extends pollex_entry_links to all sources).
+        CREATE TABLE IF NOT EXISTS ETY_entry_link (
+            id               INTEGER PRIMARY KEY,
+            cognateset_id    INTEGER NOT NULL REFERENCES ETY_cognateset(id),
+            reflex_id        INTEGER REFERENCES ETY_reflex(id),
+            entry_id         INTEGER NOT NULL REFERENCES entry(id),
+            source           TEXT NOT NULL,     -- etymology source that produced the bridge
+            match_key        TEXT,
+            match_method     TEXT,
+            match_confidence REAL
+        );
+        CREATE INDEX IF NOT EXISTS idx_ety_entry_link_set   ON ETY_entry_link(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_ety_entry_link_entry ON ETY_entry_link(entry_id);
+
         -- ── Personal Lexicon ─────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS personal_lexicon (
             id             INTEGER PRIMARY KEY,
