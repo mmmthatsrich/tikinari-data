@@ -9,7 +9,7 @@ This document describes `data/maori_dict.db` — a SQLite database containing M�
 >   (`ETY_level`/`ETY_language`/`ETY_cognateset`/`ETY_reflex`/`ETY_link`/
 >   `ETY_entry_link`), and the `source_*` support tables. **This is the only file
 >   you copy to the app repo.**
-> - **`data/staging_dictionary.db`** — the full working/build database (~210 MB):
+> - **`data/staging_dictionary.db`** — the full working/build database (~390 MB):
 >   raw per-source `*_entries` landing zone, `pollex_entries`, the raw per-source
 >   etymology tables (`pollex_cognatesets`/`pollex_reflexes`/`pollex_languages`/
 >   `lpo_cognatesets`/`acd_cognatesets`/`etymology_links`/`protoform_ancestry`/
@@ -33,8 +33,8 @@ This document describes `data/maori_dict.db` — a SQLite database containing M�
 
 | Property | Value |
 |---|---|
-| App DB (copy this) | `data/maori_dict.db` — ~117 MB |
-| Working/build DB | `data/staging_dictionary.db` — ~210 MB (stays in repo) |
+| App DB (copy this) | `data/maori_dict.db` — ~166 MB |
+| Working/build DB | `data/staging_dictionary.db` — ~390 MB (stays in repo) |
 | Format | SQLite 3 with WAL journal mode |
 | FTS engine | FTS5 (built into SQLite) |
 | Encoding | UTF-8 throughout |
@@ -104,11 +104,11 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 
 | Table | Rows | What it holds |
 |---|---|---|
-| `entry` | 105,898 | one row per source headword-entry; provenance kept (not merged across sources) |
-| `sense` | 125,775 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
-| `example` | 89,896 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
+| `entry` | 105,908 | one row per source headword-entry; provenance kept (not merged across sources) |
+| `sense` | 125,782 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
+| `example` | 90,425 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
-| `relation` | 107,445 | `synonym` / `see_also` / `cross_ref` / `citation` (Te Aka synonyms resolved to `target_entry_id`; Williams `‖` refs → `see_also` headword links + `citation` literature refs, e.g. `J. vii, 120`). Williams `see_also` rows are resolved to `target_entry_id` at build (3,490 / 4,230 = 83%): multi-target strings like `mataaho, tiaho` are split into one row each, `(i)`/`(ii)` sense pointers prefer the matching homograph, and cognate/citation/relative pointers (`Tah, ao`, `J. vii, 120`, `6, below`) stay NULL with the raw text kept in `note`. The app renders resolved rows as clickable links and unresolved rows as plain text |
+| `relation` | 107,835 | `synonym` / `see_also` / `cross_ref` / `citation` (Te Aka synonyms resolved to `target_entry_id`; Williams `‖` refs → `see_also` headword links + `citation` literature refs, e.g. `J. vii, 120`). Williams `see_also` rows are resolved to `target_entry_id` at build (3,490 / 4,230 = 83%): multi-target strings like `mataaho, tiaho` are split into one row each, `(i)`/`(ii)` sense pointers prefer the matching homograph, and cognate/citation/relative pointers (`Tah, ao`, `J. vii, 120`, `6, below`) stay NULL with the raw text kept in `note`. The app renders resolved rows as clickable links and unresolved rows as plain text |
 | `entry_domain` | 59,570 | subject / semantic-domain tags (`domain_lang` = mi/en) |
 
 Key columns on `entry`:
@@ -131,7 +131,7 @@ Key columns on `entry`:
 Key columns on `sense`:
 - `sense_number` — 1-based integer ordering within the entry. **Williams and Te Aka are multi-sense**:
   numbered senses are split into separate `sense` rows under a single `entry`. Williams: 11,910
-  entries → 20,193 senses (avg 1.70). Te Aka: 47,878 entries → 59,472 senses (avg 1.24); exact
+  entries → 20,187 senses (avg 1.70). Te Aka: 47,888 entries → 59,485 senses (avg 1.24); exact
   duplicate senses in the source are collapsed and survivors renumbered 1..n.
 - `part_of_speech` — per-sense POS, drawn from the source. Williams: inline abbreviation expanded
   to a canonical English label (e.g. `n.` → `Noun`). Te Aka: the genuine per-sense POS recovered
@@ -160,8 +160,8 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 
 > Note: Papakupu examples are bilingual — `example.text_mi` (Māori) and `example.text_en`
 > (English) are both populated (10,071 of 10,211 have text_mi; the Māori half is recovered
-> by an orthography heuristic at extraction). Williams (20,193 senses / 11,910 entries) and
-> Te Aka (59,472 senses / 47,878 entries)
+> by an orthography heuristic at extraction). Williams (20,187 senses / 11,910 entries) and
+> Te Aka (59,485 senses / 47,888 entries)
 > are multi-sense with per-sense POS and per-sense examples; the remaining sources are
 > one-sense-per-entry.
 
@@ -174,15 +174,15 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 | `williams` | Williams Dictionary (1844/1971) | 11,910 | CC BY-SA 3.0 NZ | Open licence; primary source |
 | `papakupu` | Papakupu o Tai Tokerau | 4,683 | **For Private Use Only** | Northland dialect; do NOT distribute |
 | `pollex` | POLLEX-Online (Māori reflexes) | 3,424 | Permission pending | Etymological; Māori subset |
-| `te_aka` | Te Aka Māori Dictionary | 47,878 | **Restricted** | Permissions handled externally |
+| `te_aka` | Te Aka Māori Dictionary | 47,888 | **Restricted** | Permissions handled externally |
 | `hepatakakupu` | He Pātaka Kupu | 24,941 senses | **Restricted** | Monolingual Māori; permissions externally |
 | `paekupu` | Paekupu (curriculum vocabulary) | 16,486 | **Restricted** | Subject-area vocabulary; permissions externally |
 | `personal` | Personal Lexicon | 0 (user-filled) | User-owned | User's own words |
-| `pollex_cognatesets` | POLLEX protoform records | 2,931 | Permission pending | Research/etymology layer |
+| `pollex_cognatesets` | POLLEX protoform records | 3,291 | Permission pending | Research/etymology layer |
 | `lpo` | Lexicon of Proto Oceanic | 2,820 | CC-BY-4.0 | Etymology layer |
 | `acd` | Austronesian Comparative Dictionary | 10,857 | CC-BY-4.0 | Etymology layer |
 
-**Total searchable entries across dictionary sources: ~108,000**
+**Total searchable entries across dictionary sources: ~106,000** (unified `entry` = 105,908)
 
 ---
 
@@ -212,7 +212,7 @@ FTS table: `williams_fts` — covers `headword`, `definition`, `usage_examples`.
 
 ---
 
-### `te_aka_entries` — 47,878 rows
+### `te_aka_entries` — 47,888 rows
 
 Te Aka Māori-English/English-Māori Dictionary. Largest source. Has audio URLs, synonyms, source citations, and sense-level word filters. Supports incremental refresh.
 
@@ -671,9 +671,10 @@ Order ancestors by `ETY_level.depth_rank` (bigger = more recent); grey out tenta
 
 ## Supporting Tables
 
-### `source_metadata` — 10 rows
+### `source_metadata` — 13 rows
 
-Registry of all data sources.
+Registry of all data sources (5 word-list sources + `personal` + the 7 etymology
+sources: `pollex`, `pollex_cognatesets`, `lpo`, `acd`, `abvd`, `walworth`, `tregear`).
 
 | Column | Type |
 |---|---|

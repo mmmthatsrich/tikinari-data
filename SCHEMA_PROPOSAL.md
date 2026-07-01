@@ -16,12 +16,27 @@
 > `staging_dictionary.db` (full working DB) and `maori_dict.db` (slim app projection, built
 > by `scripts/60_export_app_db.py`); see `DATABASE_REFERENCE.md`.
 
+> ## Etymology-layer cutover update (2026-07-01, sessions 56–59)
+> **§1's "keep as-is" note and §9 below are superseded for the app read surface.** The raw
+> per-source etymology tables (`pollex_*`, `lpo_cognatesets`, `acd_cognatesets`,
+> `etymology_links`, `protoform_ancestry`, `reconstruction_levels`, `pollex_entry_links`)
+> have been folded into a **unified `ETY_*` layer** — `ETY_level`, `ETY_language`,
+> `ETY_cognateset`, `ETY_reflex`, `ETY_link`, `ETY_entry_link` — that now also carries
+> Tregear (1891), ABVD and Walworth. Session 59 was a **hard cutover**: the app DB ships
+> only `ETY_*` (no raw etymology tables, no backward-compat views); the raw tables are
+> staging-only. The recommendation in §9 to "keep POLLEX as the etymology/comparative layer
+> it already is" still holds *in spirit* — POLLEX is not a sixth dictionary — but the concrete
+> table names there are historical. **`DATABASE_REFERENCE.md` → "Etymology Layer" is the
+> authoritative schema** (old→new table map included there).
+
 > ## Grain refinement update (2026-06-27)
 > Williams multi-sense split is now **implemented and shipped**. The Williams parser
 > (`scripts/williams_senses.py`) splits numbered senses (1, 2, 3…) into separate
 > `sense` rows under a single `entry`; each sense carries its own `sense.part_of_speech`
 > (canonical English label from the inline abbreviation). Result: 11,910 Williams entries →
-> 20,193 senses (avg 1.70). All other sources remain one-sense-per-entry for now.
+> 20,187 senses (avg 1.70). **Te Aka has since also been multi-sense split** (47,888 entries →
+> 59,485 senses, avg 1.24, with per-sense POS recovered from the raw HTML). He Pātaka Kupu,
+> Paekupu and Papakupu remain one-sense-per-entry for now.
 >
 > POS is now **sense-level** (`sense.part_of_speech`) with an **entry-level wrap-up**
 > (`entry.part_of_speech_en` / `entry.part_of_speech_mi`) across all sources. The wrap-up
@@ -98,7 +113,7 @@ problems.
 
 | Field / concept        | Williams | Te Aka | He Pātaka Kupu | Paekupu | Papakupu |
 |------------------------|:--------:|:------:|:--------------:|:-------:|:--------:|
-| rows                   | 11,910   | 47,878 | 24,941         | 16,486  | 4,683    |
+| rows                   | 11,910   | 47,888 | 24,941         | 16,486  | 4,683    |
 | `definition` language  | English  | English| **Māori**      | English | English  |
 | Māori monolingual def  | —        | —      | (in `definition`) | `definition_mi` (3,435) | — |
 | English headword       | —        | —      | —              | `headword_en` | — |
@@ -458,7 +473,7 @@ call: **extend `source_abbreviations`** into that shared role (add `author`, bro
 
 ## 10. Part-of-speech normalisation (`std_pos`)
 
-The five sources use **315 distinct raw `part_of_speech` strings** — abbreviations
+The five sources use many distinct raw `part_of_speech` strings — abbreviations
 (`n.`, `v.t.`), words (`noun`, `transitive verb`), Te Aka compounds (`loan, noun`,
 `proper noun - person`), and He Pātaka Kupu's Māori codes (`ing`, `mahp, ing, āhua`).
 To normalise **and** translate to Māori, the DB now contains a seeding table:
@@ -477,13 +492,15 @@ CREATE TABLE std_pos (
 );
 ```
 
-State after `scripts/13_build_pos_normalisation.py`:
-- **315** distinct raw values captured, one row each, with per-source usage counts.
-- **66 seeded** mappings covering **73.7% of all entry-rows** (the high-frequency
-  English/abbreviation forms), with Māori from Paekupu's authoritative `pos_mi`:
-  `Noun→Tūingoa`, `Verb→Tūmahi`, `Verb (transitive)→Tūmahi whiti`,
+State after `scripts/13_build_pos_normalisation.py` and subsequent curation (as of
+2026-07-01, **241 rows** total):
+- distinct raw values captured, one row each, with per-source usage counts.
+- **62 `seeded`** + **128 `reviewed`** canonical mappings (the high-frequency
+  English/abbreviation forms plus curated ones), with Māori from Paekupu's authoritative
+  `pos_mi`: `Noun→Tūingoa`, `Verb→Tūmahi`, `Verb (transitive)→Tūmahi whiti`,
   `Verb (intransitive)→Tūmahi poro`, `Stative→Tūāhua`, `Locative→Tūwāhi`.
-- **249 `needs_review`**, dominated by He Pātaka Kupu **compound** codes
+- **39 `not_pos`** — raw values that turned out not to be part-of-speech tags.
+- **12 `needs_review`** remaining, dominated by He Pātaka Kupu **compound** codes
   (`ing`, `mahp`, `mahw`, `āhua`, `tūkē` …). These are not single POS values — HPK lists
   **every grammatical function a word can take** (e.g. `mahp, ing, āhua` = verb + noun +
   stative). That is a genuinely different (multi-POS) model and needs the HPK legend +
