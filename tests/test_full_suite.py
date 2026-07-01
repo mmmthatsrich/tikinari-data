@@ -572,7 +572,7 @@ class TestSourceMetadata(unittest.TestCase):
     EXPECTED_SOURCES = {
         "williams", "papakupu", "pollex", "te_aka",
         "hepatakakupu", "paekupu", "personal",
-        "pollex_cognatesets", "lpo", "acd", "abvd", "walworth",
+        "pollex_cognatesets", "lpo", "acd", "abvd", "walworth", "tregear",
     }
     COUNT_SOURCES = {
         "williams":          "williams_entries",

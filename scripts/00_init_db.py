@@ -345,6 +345,39 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_walworth_cog_set ON walworth_cognates(cognateset_id);
         CREATE INDEX IF NOT EXISTS idx_walworth_cog_form ON walworth_cognates(form_id);
 
+        -- ── Tregear — Maori-Polynesian Comparative Dictionary (1891) ─────────
+        -- Edward Tregear 1891; NZETC TEI (CC BY-SA 3.0 NZ), scraped from the
+        -- natlib.govt.nz webarchive snapshot (nzetc.victoria.ac.nz now redirects
+        -- there). Source pages tei-TreMaor-c1-1..c1-15 = the 15 Maori letter
+        -- sections (A E H I K M N NG O P R T U W WH). Each entry is a Maori
+        -- headword + English gloss + a block of comparative cognates keyed by
+        -- full Polynesian/Oceanic language name (Samoan, Hawaiian, Tongan, ...).
+        -- Long vowels are grave/circumflex-marked in the pronunciation, not
+        -- macrons. Staging-only ETY_* comparative source (no unify until S57).
+        CREATE TABLE IF NOT EXISTS tregear_entries (
+            id            INTEGER PRIMARY KEY,
+            headword      TEXT NOT NULL,   -- raw as printed, e.g. 'HA', 'Whaka-HAERE'
+            headword_norm TEXT,            -- normalise_search_key (macron/vowel-fold) for the entry bridge
+            homonym_index INTEGER NOT NULL DEFAULT 1,  -- 1..n for repeated headwords
+            pronunciation TEXT,            -- from (<i>..</i>); grave/circumflex length marks
+            gloss_en      TEXT,            -- definition + Cf. cross-refs, plain text
+            letter        TEXT,            -- source letter section: A/E/H/.../WH
+            tei_ref       TEXT,            -- e.g. 'tei-TreMaor-c1-3#n40'
+            page_no       INTEGER          -- nearest preceding page-break number
+        );
+        CREATE INDEX IF NOT EXISTS idx_tregear_entry_norm ON tregear_entries(headword_norm);
+        CREATE TABLE IF NOT EXISTS tregear_cognates (
+            id               INTEGER PRIMARY KEY,
+            tregear_entry_id INTEGER NOT NULL,          -- FK tregear_entries.id
+            language         TEXT NOT NULL,             -- normalised full name, e.g. 'Hawaiian'
+            extra_polynesian INTEGER NOT NULL DEFAULT 0,-- 1 if 'Ext. Poly.' (non-Polynesian Austronesian)
+            form             TEXT,                      -- lead comparative form
+            gloss            TEXT,                      -- full comparative text for this language
+            seq              INTEGER                    -- order within the entry
+        );
+        CREATE INDEX IF NOT EXISTS idx_tregear_cog_entry ON tregear_cognates(tregear_entry_id);
+        CREATE INDEX IF NOT EXISTS idx_tregear_cog_lang  ON tregear_cognates(language);
+
         -- ── Etymology linking table ───────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS etymology_links (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -853,6 +886,7 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
         ("acd",                "Austronesian Comparative Dictionary",        "CC-BY-4.0",       "https://acd.clld.org",                                    None, 0, "PAN/PMP layer; CLDF from github.com/lexibank/acd"),
         ("abvd",               "Austronesian Basic Vocabulary Database",     "CC-BY-4.0",       "https://abvd.eva.mpg.de/austronesian/",                   None, 0, "Attested cognate clusters across Austronesian; CLDF from github.com/lexibank/abvd; filtered to sets with a Polynesian member"),
         ("walworth",           "Walworth Polynesian comparative wordlist",   "CC-BY-4.0",       "https://github.com/lexibank/walworthpolynesian",          None, 0, "Polynesian-only LingPy cognacy dataset (Walworth 2014); CLDF from github.com/lexibank/walworthpolynesian; full + unfiltered; ETY_* gap-fill source"),
+        ("tregear",            "Tregear Maori-Polynesian Comparative Dictionary (1891)", "CC BY-SA 3.0 NZ", "https://nzetc.victoria.ac.nz/tm/scholarly/tei-TreMaor.html", None, 0, "Comparative etymological (Tregear 1891); NZETC TEI scraped from natlib.govt.nz webarchive snapshot 20210104; Maori headword + English gloss + per-language Polynesian/Oceanic cognates; staging-only ETY_* source"),
         ("te_aka",             "Te Aka Maori Dictionary",                   "Restricted",      "https://maoridictionary.co.nz",                           None, 0, "Stub — permissions handled externally"),
         ("hepatakakupu",       "He Pataka Kupu",                            "Restricted",      "https://www.hepatakakapu.maori.nz",                       None, 0, "Monolingual Maori; stub — permissions handled externally"),
         ("paekupu",            "Paekupu (curriculum vocabulary)",           "Restricted",      "https://www.paekupu.co.nz",                               None, 0, "Curriculum subject areas; stub — permissions handled externally"),
