@@ -5,13 +5,23 @@ This document describes `data/maori_dict.db` — a SQLite database containing M�
 > **Two databases — copy only `maori_dict.db`.** The repo holds two SQLite files:
 > - **`data/maori_dict.db`** — the slim, app-serving database. Contains *only* the
 >   surface the app reads: the unified core (`entry`/`sense`/`example`/`form`/
->   `relation`/`entry_domain` + their FTS), the etymology layer (`pollex_cognatesets`/
->   `pollex_reflexes`/`pollex_languages`/`lpo_cognatesets`/`acd_cognatesets`/
->   `etymology_links`/`pollex_entry_links`/`protoform_ancestry`/`reconstruction_levels`), and the `source_*`
->   support tables. **This is the only file you copy to the app repo.**
+>   `relation`/`entry_domain` + their FTS), the **unified etymology layer**
+>   (`ETY_level`/`ETY_language`/`ETY_cognateset`/`ETY_reflex`/`ETY_link`/
+>   `ETY_entry_link`), and the `source_*` support tables. **This is the only file
+>   you copy to the app repo.**
 > - **`data/staging_dictionary.db`** — the full working/build database (~210 MB):
->   raw per-source `*_entries` landing zone, `pollex_entries`, cross-source candidates,
->   refresh logs, the personal lexicon, and `std_pos`. Never leaves this repo.
+>   raw per-source `*_entries` landing zone, `pollex_entries`, the raw per-source
+>   etymology tables (`pollex_cognatesets`/`pollex_reflexes`/`pollex_languages`/
+>   `lpo_cognatesets`/`acd_cognatesets`/`etymology_links`/`protoform_ancestry`/
+>   `reconstruction_levels`/`pollex_entry_links` and the `tregear_*`/`abvd_*`/
+>   `walworth_*` staging sets), cross-source candidates, refresh logs, the personal
+>   lexicon, and `std_pos`. Never leaves this repo.
+>
+> **Session 59 hard cutover:** the app DB no longer ships the raw per-source
+> etymology tables — they are folded into the unified `ETY_*` layer and kept
+> staging-only, with **no backward-compat views**. If your app queried
+> `pollex_cognatesets`/`pollex_reflexes`/`etymology_links`/`pollex_entry_links`
+> etc. directly, migrate to `ETY_*` (mapping in [Etymology Layer](#etymology-layer)).
 >
 > `maori_dict.db` is a **rebuildable projection** of staging — regenerate it any time with
 > `py scripts/60_export_app_db.py`. Everything below describes tables present in the app DB
@@ -451,284 +461,211 @@ SELECT headword FROM te_aka_fts WHERE te_aka_fts MATCH '"fishing line"'
 
 ## Etymology Layer
 
-Three-tier chain tracing Māori words back through proto-languages:
+**Unified `ETY_*` layer (session 59 hard cutover).** Every comparative source —
+POLLEX, LPO, ACD, Tregear (1891, public domain), ABVD (CC-BY-4.0) and Walworth
+(CC-BY-4.0, gap-fill only) — is projected into six normalised tables. The raw
+per-source tables (`pollex_cognatesets`, `pollex_reflexes`, `pollex_languages`,
+`lpo_cognatesets`, `acd_cognatesets`, `etymology_links`, `pollex_entry_links`,
+`protoform_ancestry`, `reconstruction_levels`) are **staging-only** and no longer
+shipped in the app DB, with no backward-compat views.
 
 ```
-pollex_entries (Māori reflex)
-    └── pollex_cognatesets (Proto-Polynesian / Proto-Oceanic protoform)
-            ├── lpo_cognatesets (Proto-Oceanic, CC-BY-4.0)
-            └── acd_cognatesets (Proto-Austronesian/Malayo-Polynesian, CC-BY-4.0)
+entry (a Māori word the user looked up)
+  └── ETY_entry_link ── ETY_cognateset (a reconstructed protoform / cognate set)
+                            ├── ETY_reflex   (one language's reflex of the set)
+                            └── ETY_link     (set ↔ set: ancestry / equivalence)
+      ETY_language / ETY_level — reference tables (language subgroups, level ladder)
 ```
 
-Connected by `etymology_links` — 421 links covering 14.4% of Māori-relevant POLLEX cognatesets (421 / 2,931).
+Provenance is inline: `ETY_cognateset.source` / `ETY_reflex.source` name the
+originating source (`pollex|lpo|acd|tregear|abvd|walworth`); `gap_fill=1` marks
+Walworth rows promoted only to fill a novel gap; `source_ref` is the raw row id
+for traceback into staging.
 
-To go the *other* direction — from a word a user looked up to its proto-tree — use
-`pollex_entry_links`, which joins a POLLEX Māori reflex to the unified `entry`
-table by macron-neutral headword. **48,243 links** reach **20,779 distinct entries**
-across all five user-facing dictionaries (2,825 / 3,291 cognatesets covered). See
-[`pollex_entry_links`](#pollex_entry_links--48243-rows) below.
+> **Surrogate ids are volatile.** `ETY_cognateset.id` / `ETY_reflex.id` are
+> integer surrogates re-minted on every rebuild. Never persist them client-side —
+> re-resolve through `ETY_entry_link` / `source`+`source_ref`.
 
-### `pollex_cognatesets` — 3,291 rows (2,931 with Māori reflex + 360 ancestor-only)
+### Migration from the old raw tables
+
+| Old app table | Now query |
+|---|---|
+| `pollex_cognatesets` / `lpo_cognatesets` / `acd_cognatesets` | `ETY_cognateset` (filter `source=`) |
+| `pollex_reflexes` | `ETY_reflex WHERE source='pollex'` |
+| `pollex_languages` | `ETY_language WHERE source='pollex'` |
+| `reconstruction_levels` | `ETY_level` |
+| `etymology_links` + `protoform_ancestry` | `ETY_link` |
+| `pollex_entry_links` | `ETY_entry_link WHERE source='pollex'` (all sources: drop the filter) |
+
+### `ETY_cognateset` — 29,823 rows (1 per reconstructed protoform / cognate set)
+
+By source: ACD 10,857 · Tregear 9,638 · POLLEX 3,291 · ABVD 3,020 · LPO 2,820 · Walworth 197 (gap-fill).
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | TEXT PK | URL slug (e.g. `"aho"`) |
-| `protoform_name` | TEXT | Bare name (e.g. `"AHO"`) |
-| `level` | TEXT | Proto-language code (see below) |
-| `level_name` | TEXT | Full name (e.g. `"Central-Eastern Polynesian"`) |
-| `description` | TEXT | Gloss |
-| `reconstruction` | TEXT | Full reconstructed form |
-| `notes` | TEXT | POLLEX `*N`-coded cross-refs (`*0 <<`/`>>`, `*1 Cf.`, `*4 POC`, `*6 PAN`…); parsed into `protoform_ancestry` |
-| `pollex_url` | TEXT | Source URL |
-| `origin` | TEXT | `maori_reflex` (searchable entry) \| `ancestor_only` (higher protoform with no Māori reflex; tree node only). See [Reconstruction & Ancestry](#reconstruction--ancestry-decomposition-tree) |
+| `id` | INTEGER PK | Surrogate — **volatile across rebuilds** |
+| `source` | TEXT | `pollex\|lpo\|acd\|tregear\|abvd\|walworth` |
+| `source_ref` | TEXT | Raw cognateset id (traceback into staging) |
+| `protoform` | TEXT | Reconstructed form / set name |
+| `proto_key` | TEXT | `normalise_proto_key(protoform)`; cross-source dedup key (NULL for ABVD attested-concept sets) |
+| `level` | TEXT | Level code → `ETY_level.code` (not FK-enforced) |
+| `gloss` | TEXT | Description / gloss |
+| `set_group` | TEXT | ACD `etymon_id` / LPO `chapter_id` (ancestry grouping) |
+| `notes` | TEXT | |
+| `url` | TEXT | Source URL |
+| `gap_fill` | INTEGER | 1 = Walworth novel-gap promotion; else 0 |
 
-**Level codes and counts (top 10):**
+Indexed on `source`, `proto_key`, `source_ref`, `level`.
 
-| Code | Name | Count |
-|---|---|---|
-| PN | Polynesian | 841 |
-| CE | Central-Eastern Polynesian | 492 |
-| NP | Nuclear Polynesian | 374 |
-| OC | Oceanic | 175 |
-| MP | Malayo-Polynesian | 169 |
-| AN | Austronesian | 160 |
-| TA | Tahitic | 156 |
-| EP | Eastern Polynesian | 143 |
-| FJ | Fijian | 112 |
-| CK | Cook Islands Māori | 79 |
+### `ETY_reflex` — 256,402 rows (1 per language reflex of a set)
 
-### `pollex_reflexes` — 49,760 rows
-
-Cross-language reflexes across all 67 POLLEX languages (not just Māori). `language_slug` is a FK into `pollex_languages`.
+By source: ABVD 181,023 · POLLEX 49,760 · Tregear 22,201 · Walworth 3,418. 13,642 are Māori reflexes (`lang_key='maori'`).
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | INTEGER PK | |
-| `cognateset_id` | TEXT | FK → `pollex_cognatesets(id)` |
-| `language` | TEXT | Language name |
-| `language_slug` | TEXT | FK → `pollex_languages(language_slug)` |
-| `reflex` | TEXT | The reflex form in that language |
+| `id` | INTEGER PK | Surrogate — volatile across rebuilds |
+| `cognateset_id` | INTEGER | FK → `ETY_cognateset(id)` |
+| `source` | TEXT | `pollex\|abvd\|tregear\|walworth` |
+| `source_ref` | TEXT | Raw reflex/form id |
+| `lang_key` | TEXT | → `ETY_language.lang_key` (e.g. `maori`) |
+| `language` | TEXT | Display name |
+| `form` | TEXT | The reflex form |
 | `gloss` | TEXT | English gloss |
-| `source_code` | TEXT | Citation code |
+| `source_code` | TEXT | Citation code (POLLEX) |
 | `source_author` | TEXT | Author name |
-| `flags` | TEXT | JSON array (e.g. `["Borrowed"]`) |
+| `flags` | TEXT | JSON array |
+| `gap_fill` | INTEGER | 1 = Walworth; else 0 |
 
-### `pollex_languages` — 67 rows
+Indexed on `cognateset_id`, `lang_key`, `source`.
 
-Reference table for every language in the POLLEX dataset. Joined via `language_slug` when you need subgroup or region filtering on reflex queries.
+### `ETY_language` — 2,067 rows (reference)
+
+By source: ABVD 1,807 · Tregear 186 · POLLEX 67 · Walworth 7. Joined via `lang_key` for subgroup / region filtering on reflex queries.
 
 | Column | Type | Notes |
 |---|---|---|
-| `language_slug` | TEXT PK | Matches `pollex_reflexes.language_slug` |
-| `language` | TEXT | Full language name |
-| `iso_code` | TEXT | ISO 639-3 code; NULL for extinct/uncertain varieties |
-| `subgroup` | TEXT NOT NULL | Indexed; see values below |
-| `region` | TEXT | Geographic region (`Pacific` for all current entries) |
-| `country_or_island_group` | TEXT | Country or island group |
+| `lang_key` | TEXT PK | Language slug/key (POLLEX `language_slug`) |
+| `name` | TEXT | Full language name |
+| `iso_code` | TEXT | ISO 639-3; NULL where uncertain |
+| `subgroup` | TEXT | e.g. `Tongic`, `Eastern Polynesian`, `Samoic-Outlier` |
+| `region` | TEXT | Geographic region |
+| `country` | TEXT | Country / island group |
 | `notes` | TEXT | Dialects, alternate names, ISO uncertainty |
+| `source` | TEXT | `pollex\|abvd\|tregear\|walworth` |
 
 Indexed on `subgroup`.
 
-**Subgroup breakdown:**
+### `ETY_level` — 25 rows (reference)
 
-| Subgroup | Languages |
-|---|---|
-| Eastern Polynesian | 19 |
-| Other Oceanic | 19 |
-| Polynesian Outlier | 12 |
-| Samoic-Outlier | 8 |
-| Tongic | 5 |
-| Fijian | 3 |
-| Rotuman | 1 |
-
-### `lpo_cognatesets` — 2,820 rows
-
-Proto-Oceanic reconstructions from the Lexicon of Proto Oceanic (CC-BY-4.0).
+The Austronesian → Polynesian subgrouping ladder — order the "levels above" axis and validate that an ancestor ranks strictly higher.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | TEXT PK | CLDF ID |
-| `name` | TEXT | Reconstructed form (no asterisk, e.g. `"Rumaq"`) |
-| `name_key` | TEXT | Indexed; normalised form for matching |
-| `description` | TEXT | Gloss |
-| `level` | TEXT | POc \| PAn \| PMP \| PEOc \| PNGOc \| PEMP \| PCP \| PPT |
-| `chapter_id` | TEXT | Chapter reference |
-| `chapter_title` | TEXT | Chapter name |
+| `code` | TEXT PK | `AN, MP, OC, EO, RO, CP, … PN, NP, CE, TA, CK` + peripheral codes |
+| `name` | TEXT | e.g. `Central-Eastern Polynesian` |
+| `parent_code` | TEXT | Next level up on the spine (`AN` has none) |
+| `depth_rank` | INTEGER | 0 = deepest (AN); bigger = more recent |
 
-### `acd_cognatesets` — 10,857 rows
+### `ETY_link` — 2,230 rows (set ↔ set)
 
-Austronesian Comparative Dictionary reconstructions (CC-BY-4.0).
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | TEXT PK | CLDF ID |
-| `name` | TEXT | Reconstructed form |
-| `name_key` | TEXT | Indexed; normalised form for matching |
-| `description` | TEXT | Gloss |
-| `level` | TEXT | PAN \| PMP \| PWMP \| POC \| PPH \| PCEMP \| PCMP \| PEMP \| PSHWNG |
-| `etymon_id` | TEXT | Indexed; groups related reconstructions (PAN + PMP sharing an etymon) |
-
-### `etymology_links` — 421 rows
+Cross-set relations: ancestry 1,358, equivalence 872. By origin: `protoform_ancestry` 1,358, `etymology_links` 530, `dedup` 342 (cross-source protoform-key merges).
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `pollex_cognateset_id` | TEXT | FK → `pollex_cognatesets(id)` |
-| `lpo_cognateset_id` | TEXT | FK → `lpo_cognatesets(id)`; nullable |
-| `acd_cognateset_id` | TEXT | FK → `acd_cognatesets(id)`; nullable |
+| `source_set_id` | INTEGER | FK → `ETY_cognateset(id)` |
+| `target_set_id` | INTEGER | FK → `ETY_cognateset(id)`; nullable |
+| `link_type` | TEXT | `ancestry\|equivalence\|cross_ref` |
+| `relation` | TEXT | `cf\|descends_from\|same_as` |
 | `match_confidence` | REAL | 0.0–1.0 |
-| `match_method` | TEXT | How the link was found (see below) |
-| `lpo_citation` | TEXT | Raw `"LPO N:NNN"` text from POLLEX notes |
-| `notes` | TEXT | Curation comments |
+| `match_method` | TEXT | How the link was found |
+| `origin` | TEXT | `etymology_links\|protoform_ancestry\|dedup\|notes` |
+| `notes` | TEXT | |
 
-**Match methods** (a row's method joins all that contributed, e.g. `tier2_acd_citation+tier3_bare_citation`):
-- `tier2_acd_citation` — ACD form explicitly cited in POLLEX notes with `(ACD)` tag (most reliable)
-- `tier2_lpo_citation` — LPO form cited with `(LPO vol:page)` tag
-- `tier3_bare_citation` — bare `POC */PMP */PAN *` ref in notes, no gloss/tag, validated against the set's own gloss (lower confidence 0.65)
-- `tier1_formkey` — form-key match at the mapped proto-level. Now includes the Polynesian levels PN→PPn, NP→PNPn, CE→PCEPn (LPO's own Polynesian reconstructions), plus macron-folded keys and comma-split multiforms
+Indexed on `source_set_id`, `target_set_id`.
 
-### `pollex_entry_links` — 48,243 rows
+### `ETY_entry_link` — 115,564 rows (reflex → unified `entry` bridge)
 
-Reverse bridge: a POLLEX **Māori reflex** → a row in the unified `entry` table,
+Reverse bridge from a **Māori reflex** to a row in the unified `entry` table,
 matched by macron-neutral headword (`normalise_search_key`). This is how the app
-goes from *a word the user searched* to its full proto-tree. One cognateset can
-link to several entries (homonyms, multiple source dictionaries). Covers 2,825 /
-3,291 cognatesets and 20,779 distinct entries; built by
-`scripts/08b_pollex_entry_linker.py`.
+goes from *a word the user searched* to its proto-tree. By source: Tregear 61,789
+· POLLEX 48,243 · ABVD 4,588 · Walworth 944. Reaches 41,542 distinct entries.
 
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | |
-| `cognateset_id` | TEXT | FK → `pollex_cognatesets(id)` |
-| `reflex_id` | INTEGER | FK → `pollex_reflexes(id)`; the specific Māori reflex matched |
+| `cognateset_id` | INTEGER | FK → `ETY_cognateset(id)` |
+| `reflex_id` | INTEGER | FK → `ETY_reflex(id)`; the specific Māori reflex matched (nullable) |
 | `entry_id` | INTEGER | FK → `entry(id)` |
+| `source` | TEXT | Etymology source that produced the bridge |
 | `match_key` | TEXT | The `normalise_search_key` value that matched (= `entry.headword_search`) |
-| `match_method` | TEXT | `headword_exact` |
-| `match_confidence` | REAL | 1.0 (exact normalised match) |
+| `match_method` | TEXT | e.g. `headword_exact` |
+| `match_confidence` | REAL | 1.0 for exact normalised match |
+
+Indexed on `cognateset_id`, `entry_id`.
 
 **Entry → proto-tree query:**
 ```sql
-SELECT pc.protoform_name, pc.level_name, pc.description
+SELECT cs.protoform, cs.level, cs.gloss, cs.source
 FROM entry e
-JOIN pollex_entry_links pel ON pel.entry_id = e.id
-JOIN pollex_cognatesets pc  ON pc.id = pel.cognateset_id
+JOIN ETY_entry_link el ON el.entry_id = e.id
+JOIN ETY_cognateset cs ON cs.id = el.cognateset_id
 WHERE e.headword_search = 'aho';
 ```
 
-**Full etymology chain query:**
+**Full cross-source chain (equivalent sets + ancestors):**
 ```sql
-SELECT
-    pe.headword            AS maori_word,
-    pc.protoform_name      AS pollex_proto,
-    pc.level_name          AS pollex_level,
-    lc.name                AS lpo_form,
-    lc.description         AS lpo_gloss,
-    ac.name                AS acd_form,
-    ac.level               AS acd_level,
-    ac.description         AS acd_gloss
-FROM pollex_entries pe
-JOIN pollex_cognatesets pc ON pe.cognateset_id = pc.id
-LEFT JOIN etymology_links el ON el.pollex_cognateset_id = pc.id
-LEFT JOIN lpo_cognatesets lc ON el.lpo_cognateset_id = lc.id
-LEFT JOIN acd_cognatesets ac ON el.acd_cognateset_id = ac.id
-WHERE pe.headword_search = 'aho'
+SELECT cs.source, cs.protoform, cs.level, cs.gloss,
+       lk.link_type, lk.relation,
+       tgt.source AS to_source, tgt.protoform AS to_protoform, tgt.gloss AS to_gloss
+FROM entry e
+JOIN ETY_entry_link el  ON el.entry_id = e.id
+JOIN ETY_cognateset cs  ON cs.id = el.cognateset_id
+LEFT JOIN ETY_link lk        ON lk.source_set_id = cs.id
+LEFT JOIN ETY_cognateset tgt ON tgt.id = lk.target_set_id
+WHERE e.headword_search = 'aho';
 ```
 
 ---
 
 ## Reconstruction & Ancestry (Decomposition Tree)
 
-Layer that lets an app render a **decomposition tree** for a word: the Māori
-reflex at the top, its same-level cognates from other languages below, then the
-ancestral reconstructions climbing as far back as POLLEX asserts (e.g.
-`CE → PN → POc → PAn`). Built by `scripts/pollex_ancestry.py` from POLLEX's own
-`*N`-coded cross-references in `pollex_cognatesets.notes` plus the curated
-`etymology_links`. POLLEX has **no structured parent pointer** — these tables
-derive it.
+Render a **decomposition tree** for a word: the Māori reflex at the top, its
+same-level cognates from other languages below, then the ancestral reconstructions
+climbing as far back as the sources assert. All of this now lives in `ETY_*`:
+`ETY_reflex` (the wide top — sibling-language reflexes of a set), `ETY_link`
+(`link_type='ancestry'` edges climbing the levels, plus `equivalence` edges tying
+equivalent sets across POLLEX/LPO/ACD), and `ETY_level` (the level ladder for
+ordering / validating "higher = older").
 
 > **Reality check:** ancestry is sparse *by design*. Most protoforms are
-> single-level innovations with **no** higher ancestor (e.g. `CE.PUAGA` "Rigel"
-> stops at Central-Eastern). ~1,189 of 2,931 Māori-relevant cognatesets reach a
-> higher level; 325 reach Proto-Austronesian. The rest are correctly terminal —
-> not a gap to fill.
+> single-level innovations with **no** higher ancestor and are correctly
+> terminal — not a gap to fill.
 
-### `reconstruction_levels` — 25 rows
-
-The Austronesian → Polynesian subgrouping ladder. Lets the app order the
-"levels above" axis and validate edges (an ancestor must rank strictly higher).
-
-| Column | Type | Notes |
-|---|---|---|
-| `code` | TEXT PK | Level code: `AN, MP, OC, EO, RO, CP, FJ, PN, TO, NP, SO, EC, CC, EP, CE, TA, MQ, CK`, + peripheral codes |
-| `name` | TEXT | e.g. `Central-Eastern Polynesian` |
-| `parent_code` | TEXT | Immediately higher level on the main spine (`AN` has none) |
-| `depth_rank` | INTEGER | 0 = deepest (AN) … 12 = shallowest (CK). Bigger = more recent |
-
-### `protoform_ancestry` — ~1,600 rows
-
-Directed edges: a cognateset (child) → its ancestor reconstruction. Walk
-`child_id` upward to build the vertical chain.
-
-| Column | Type | Notes |
-|---|---|---|
-| `id` | INTEGER PK | |
-| `child_id` | TEXT | FK → `pollex_cognatesets(id)` |
-| `child_level` | TEXT | Level code of the child |
-| `ancestor_kind` | TEXT | `pollex` (internal cognateset) \| `lpo` (Proto-Oceanic) \| `acd` (Proto-Austronesian/MP) |
-| `ancestor_id` | TEXT | FK → `pollex_cognatesets(id)` / `lpo_cognatesets(id)` / `acd_cognatesets(id)` per `ancestor_kind` |
-| `ancestor_level` | TEXT | Level code / `POc` / `PAn/PMP` |
-| `relation` | TEXT | `descends` (POLLEX `<<` / external proto) \| `cf` (POLLEX `Cf.` compare) |
-| `source` | TEXT | `notes` \| `etymology_links` \| `notes_ext` |
-| `confidence` | REAL | `0.95` curated/`<<`, `0.75` internal `Cf.`, `0.7` name-matched external |
-
-Counts: ~706 internal (`pollex`), ~408 `lpo`, ~485 `acd`. Index on `child_id`.
-
-### `pollex_cognatesets.origin` (new column)
-
-| Value | Meaning |
-|---|---|
-| `maori_reflex` | Original 2,931 sets that have a Māori reflex — searchable dictionary entries |
-| `ancestor_only` | ~360 higher-level protoforms fetched from POLLEX that have **no** Māori reflex; exist only as ancestor nodes in the tree |
-
-**App rule:** filter `origin='maori_reflex'` for headword search; use **all** rows when rendering the tree.
-
-### Working tables (reference / audit, safe to ignore in app)
-
-- `pollex_slug_inventory` — 5,680 rows: every POLLEX protoform slug + level, crawled from the site; used to resolve note cross-refs to real slugs.
-- `pollex_fetch_log` — audit of ancestor-fetch attempts (resumable scraper state).
-
-### Decomposition-view queries
-
-**1. Same-level cognates (the wide top of the tree)** — every language that shares the reflex, grouped by subgroup:
+**1. Same-level cognates (wide top of the tree)** — every language sharing the set, by subgroup:
 ```sql
-SELECT r.language, pl.subgroup, r.reflex, r.gloss, te.audio_url
-FROM pollex_reflexes r
-LEFT JOIN pollex_languages pl ON pl.language_slug = r.language_slug
+SELECT r.language, l.subgroup, r.form, r.gloss
+FROM ETY_reflex r
+LEFT JOIN ETY_language l ON l.lang_key = r.lang_key
 WHERE r.cognateset_id = :cognateset_id
-ORDER BY pl.subgroup, r.language
+ORDER BY l.subgroup, r.language;
 ```
 
-**2. Ancestral chain (climbing the levels)** — recursive walk up `protoform_ancestry`:
+**2. Ancestral / equivalent sets (climbing + cross-source)** — walk `ETY_link` from the set:
 ```sql
-WITH RECURSIVE up(child_id, ancestor_kind, ancestor_id, ancestor_level, relation, confidence, depth) AS (
-    SELECT child_id, ancestor_kind, ancestor_id, ancestor_level, relation, confidence, 1
-        FROM protoform_ancestry WHERE child_id = :cognateset_id
+WITH RECURSIVE up(sid, tid, link_type, relation, depth) AS (
+    SELECT source_set_id, target_set_id, link_type, relation, 1
+        FROM ETY_link WHERE source_set_id = :cognateset_id
     UNION ALL
-    SELECT a.child_id, a.ancestor_kind, a.ancestor_id, a.ancestor_level, a.relation, a.confidence, up.depth + 1
-        FROM protoform_ancestry a
-        JOIN up ON a.child_id = up.ancestor_id AND up.ancestor_kind = 'pollex'
+    SELECT k.source_set_id, k.target_set_id, k.link_type, k.relation, up.depth + 1
+        FROM ETY_link k JOIN up ON k.source_set_id = up.tid
 )
-SELECT * FROM up ORDER BY depth, confidence DESC
+SELECT u.depth, u.link_type, u.relation,
+       cs.source, cs.protoform, cs.level, cs.gloss
+FROM up u JOIN ETY_cognateset cs ON cs.id = u.tid
+ORDER BY u.depth;
 ```
-Resolve each ancestor node: `ancestor_kind='pollex'` → `pollex_cognatesets`; `'lpo'` → `lpo_cognatesets`; `'acd'` → `acd_cognatesets`. Use `confidence` to grey out tentative (`cf`) links vs solid (`descends`).
-
-**Worked example** — Māori `wahine`:
-```
-CE.WAHINE  [CE]  "Woman, female"
- └─ AN.FAFINE [AN] "Woman, female"        (descends)
-     ├─ POc *papine "woman"   (LPO)       (descends)
-     └─ PAn *bahi  "female"   (ACD)       (descends)
-```
+Order ancestors by `ETY_level.depth_rank` (bigger = more recent); grey out tentative (`relation='cf'`) vs solid (`descends_from`) links.
 
 ---
 
@@ -903,22 +840,22 @@ WHERE te1.word_id = 79
 
 ### Cross-language reflexes with subgroup filtering
 ```sql
--- All reflexes for a protoform, annotated with subgroup and location
-SELECT pr.reflex, pr.gloss, pl.language, pl.subgroup, pl.country_or_island_group
-FROM pollex_cognatesets pc
-JOIN pollex_reflexes pr ON pr.cognateset_id = pc.id
-JOIN pollex_languages pl ON pl.language_slug = pr.language_slug
-WHERE pc.id = 'aho'
-ORDER BY pl.subgroup, pl.language
+-- All reflexes for a cognate set, annotated with subgroup and location
+SELECT r.form, r.gloss, l.name AS language, l.subgroup, l.country
+FROM ETY_cognateset cs
+JOIN ETY_reflex r   ON r.cognateset_id = cs.id
+LEFT JOIN ETY_language l ON l.lang_key = r.lang_key
+WHERE cs.source = 'pollex' AND cs.source_ref = 'aho'
+ORDER BY l.subgroup, l.name;
 
 -- Eastern Polynesian reflexes only (narrows to cognate Māori relatives)
-SELECT pr.reflex, pr.gloss, pl.language, pl.country_or_island_group
-FROM pollex_cognatesets pc
-JOIN pollex_reflexes pr ON pr.cognateset_id = pc.id
-JOIN pollex_languages pl ON pl.language_slug = pr.language_slug
-WHERE pc.id = 'aho'
-  AND pl.subgroup = 'Eastern Polynesian'
-ORDER BY pl.language
+SELECT r.form, r.gloss, l.name AS language, l.country
+FROM ETY_cognateset cs
+JOIN ETY_reflex r   ON r.cognateset_id = cs.id
+JOIN ETY_language l ON l.lang_key = r.lang_key
+WHERE cs.source = 'pollex' AND cs.source_ref = 'aho'
+  AND l.subgroup = 'Eastern Polynesian'
+ORDER BY l.name;
 ```
 
 ### Cross-source duplicate lookup (app "also in" panel)
@@ -959,7 +896,7 @@ WHERE headword_search = ?
 
 5. **Audio** — URLs are remote. Not bundled. Requires connectivity to play, or a separate offline audio download step.
 
-6. **DB size** — the app DB (`maori_dict.db`) is ~114 MB and already excludes the raw staging tables (it is the projection built by `scripts/60_export_app_db.py`). The etymology layer (`pollex_reflexes` 49,760 rows, `lpo_cognatesets`, `acd_cognatesets`) is included; if etymology is not a UI feature, dropping those tables from the export is the obvious further slim-down — edit `APP_TABLES` in `60_export_app_db.py`.
+6. **DB size** — the app DB (`maori_dict.db`) is ~166 MB and already excludes the raw staging tables (it is the projection built by `scripts/60_export_app_db.py`). The unified etymology layer (`ETY_reflex` 256,402 rows, `ETY_entry_link` 115,564, `ETY_cognateset` 29,823) is the bulk of it; if etymology is not a UI feature, dropping the `ETY_*` tables from the export is the obvious further slim-down — remove them from `APP_TABLES` in `60_export_app_db.py`.
 
 7. **WAL mode** — the DB uses WAL journal mode. Open with `PRAGMA journal_mode = WAL` if not already set; use a single shared connection per process.
 

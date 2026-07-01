@@ -265,5 +265,84 @@ class TestWalworthGapFill(unittest.TestCase):
             0, "Walworth reflex missing source_ref traceback")
 
 
+APP_DB = Path(__file__).parent.parent / "data" / "maori_dict.db"
+
+# The unified layer the app DB ships after the S59 hard cutover.
+ETY_TABLES = ("ETY_level", "ETY_language", "ETY_cognateset",
+              "ETY_reflex", "ETY_link", "ETY_entry_link")
+
+# Raw per-source etymology tables removed from the app surface (staging-only now).
+RAW_ETY_DROPPED = ("pollex_cognatesets", "pollex_reflexes", "pollex_languages",
+                   "lpo_cognatesets", "acd_cognatesets", "etymology_links",
+                   "protoform_ancestry", "reconstruction_levels",
+                   "pollex_entry_links")
+
+
+@unittest.skipUnless(
+    APP_DB.exists(),
+    "app DB not exported — run scripts/60_export_app_db.py first")
+class TestAppDBEtymologyCutover(unittest.TestCase):
+    """S59: the exported app DB (maori_dict.db) ships ONLY the unified ETY_*
+    layer — every raw per-source etymology table is dropped, ETY_* row counts
+    match staging exactly, and the projection is integrity- and FK-clean."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.app = sqlite3.connect(APP_DB)
+        cls.app.row_factory = sqlite3.Row
+        cls.stg = _open()  # staging (source of the projection)
+        cls.app_tables = {r[0] for r in cls.app.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.app.close()
+        cls.stg.close()
+
+    def test_ety_tables_shipped(self):
+        for t in ETY_TABLES:
+            self.assertIn(t, self.app_tables, f"app DB missing {t}")
+
+    def test_raw_etymology_tables_dropped(self):
+        leaked = [t for t in RAW_ETY_DROPPED if t in self.app_tables]
+        self.assertEqual(leaked, [], f"raw etymology tables leaked into app DB: {leaked}")
+
+    def test_no_raw_source_entries_shipped(self):
+        # sanity: the raw `*_entries` landing zone must never reach the app DB
+        raw = [t for t in self.app_tables if t.endswith("_entries")]
+        self.assertEqual(raw, [], f"raw source tables leaked into app DB: {raw}")
+
+    def test_ety_counts_match_staging(self):
+        for t in ETY_TABLES:
+            app_n = self.app.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+            stg_n = self.stg.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+            self.assertEqual(app_n, stg_n, f"{t}: app {app_n} != staging {stg_n}")
+
+    def test_integrity_and_fk_clean(self):
+        ok = self.app.execute("PRAGMA integrity_check").fetchone()[0]
+        self.assertEqual(ok, "ok", f"app DB integrity_check: {ok}")
+        fk = self.app.execute("PRAGMA foreign_key_check").fetchall()
+        self.assertEqual(list(fk), [], f"app DB has {len(fk)} dangling FK refs")
+
+    def test_ety_entry_link_resolves_in_app(self):
+        # every bridge row must resolve against app-shipped entry + cognateset + reflex
+        orphans = self.app.execute(
+            "SELECT COUNT(*) FROM ETY_entry_link el "
+            "LEFT JOIN entry e         ON el.entry_id = e.id "
+            "LEFT JOIN ETY_cognateset c ON el.cognateset_id = c.id "
+            "LEFT JOIN ETY_reflex r     ON el.reflex_id = r.id "
+            "WHERE e.id IS NULL OR c.id IS NULL "
+            "  OR (el.reflex_id IS NOT NULL AND r.id IS NULL)").fetchone()[0]
+        self.assertEqual(orphans, 0, "ETY_entry_link has unresolved refs in app DB")
+
+    def test_ety_indexes_shipped(self):
+        # the FK indexes added in S56 must ride along so app joins stay fast
+        idx = {r[0] for r in self.app.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'")}
+        for expected in ("idx_ety_reflex_set", "idx_ety_link_target",
+                         "idx_ety_entry_link_entry"):
+            self.assertIn(expected, idx, f"app DB missing index {expected}")
+
+
 if __name__ == "__main__":
     unittest.main()

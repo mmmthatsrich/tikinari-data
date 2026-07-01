@@ -16,30 +16,40 @@ WHAT GOES IN THE APP DB
 -----------------------
   * Unified core ....... entry, form, sense, example, relation, entry_domain
                          (+ entry_fts / sense_fts / example_fts, rebuilt)
-  * Etymology layer .... pollex_cognatesets, pollex_reflexes, pollex_languages,
-                         lpo_cognatesets, acd_cognatesets, etymology_links,
-                         protoform_ancestry, reconstruction_levels,
-                         pollex_entry_links
+  * Etymology layer .... ETY_level, ETY_language, ETY_cognateset, ETY_reflex,
+                         ETY_link, ETY_entry_link  (the unified `ETY_*` layer)
   * Support ............ source_abbreviations, source_metadata
 
-Everything else (the raw `*_entries` landing zone, `pollex_entries`,
-cross-source candidates, refresh logs, the personal lexicon, `std_pos`) stays
-in staging only.
+HARD CUTOVER (session 59)
+-------------------------
+The app DB ships ONLY the unified `ETY_*` etymology layer. The raw per-source
+etymology tables — `pollex_cognatesets`, `pollex_reflexes`, `pollex_languages`,
+`lpo_cognatesets`, `acd_cognatesets`, `etymology_links`, `protoform_ancestry`,
+`reconstruction_levels`, `pollex_entry_links` — are NO LONGER exported and have
+NO backward-compat views. They remain staging-only. This is safe because the new
+app-DB format has not yet shipped to the app.
+
+Everything else (the raw `*_entries` landing zone, `pollex_entries`, the raw
+etymology source tables above, cross-source candidates, refresh logs, the
+personal lexicon, `std_pos`) stays in staging only.
 
 The export is schema-driven: object DDL is pulled from staging's `sqlite_master`
 so the app DB never drifts from the source schema. Run it after any build:
 
     py scripts/60_export_app_db.py
 """
+import shutil
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding="utf-8")
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-STAGING  = DATA_DIR / "staging_dictionary.db"
-APP_DB   = DATA_DIR / "maori_dict.db"
+DATA_DIR    = Path(__file__).parent.parent / "data"
+STAGING     = DATA_DIR / "staging_dictionary.db"
+APP_DB      = DATA_DIR / "maori_dict.db"
+BACKUP_DIR  = Path(__file__).parent.parent / "backups"
 
 # Real (non-FTS) tables copied verbatim into the app DB, in FK-safe create order
 # (parents before children).
@@ -52,15 +62,14 @@ APP_TABLES = [
     "example",
     "relation",
     "entry_domain",
-    "pollex_cognatesets",
-    "pollex_languages",
-    "pollex_reflexes",
-    "lpo_cognatesets",
-    "acd_cognatesets",
-    "etymology_links",
-    "reconstruction_levels",
-    "protoform_ancestry",
-    "pollex_entry_links",
+    # Unified etymology layer (ETY_*) — parents before children.
+    # ETY_entry_link → entry(id) (already created above), ETY_cognateset, ETY_reflex.
+    "ETY_level",
+    "ETY_language",
+    "ETY_cognateset",
+    "ETY_reflex",
+    "ETY_link",
+    "ETY_entry_link",
 ]
 
 # FTS5 virtual tables rebuilt from their content tables after the copy.
@@ -82,6 +91,15 @@ def export():
             f"ERROR: staging DB not found: {STAGING}\n"
             f"Run the importers + 50_build_unified.py first."
         )
+
+    # Back up the existing app DB before we wipe it (hard cutover — the old app
+    # surface still carries the raw etymology tables; keep a restorable copy).
+    if APP_DB.exists():
+        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        backup = BACKUP_DIR / f"{APP_DB.stem}_{stamp}{APP_DB.suffix}"
+        shutil.copy2(APP_DB, backup)
+        print(f"Backed up existing {APP_DB.name} -> {backup.relative_to(APP_DB.parent.parent)}")
 
     # Fresh app DB every time — fully reproducible projection.
     for suffix in ("", "-wal", "-shm"):

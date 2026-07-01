@@ -115,12 +115,23 @@ py scripts/03_pollex_import.py               # pollex_entries
 py scripts/33_pollex_languages_import.py     # 67-language reference
 py scripts/06_lpo_import.py                  # CLDF CSV → lpo_cognatesets
 py scripts/07_acd_import.py                  # CLDF CSV → acd_cognatesets
-py scripts/08_etymology_linker.py --write --reset    # POLLEX↔LPO↔ACD links
+py scripts/07b_abvd_import.py                # CLDF → abvd_languages/forms/cognates
+py scripts/07c_walworth_import.py            # CLDF → walworth_* (gap-fill source)
+py scripts/17_tregear_scrape.py              # Tregear 1891 (NZETC TEI) → sources/tregear/raw
+py scripts/17_tregear_parse.py               # parse raw TEI
+py scripts/17_tregear_import.py              # tregear_entries + tregear_cognates
+py scripts/08_etymology_linker.py --write --reset    # POLLEX↔LPO↔ACD raw links
 py scripts/08b_pollex_entry_linker.py --write --reset # POLLEX reflex → unified entry (run after 50_build_unified.py)
+py scripts/52_build_etymology_unified.py --reset      # project ALL sources → unified ETY_* layer
 ```
 
-> `08b` depends on the unified `entry` table, so run it **after** `50_build_unified.py`.
-> Both linkers are idempotent with `--reset`; re-run after any source refresh.
+> `08b` and `52_build_etymology_unified.py` depend on the unified `entry` table, so run them
+> **after** `50_build_unified.py`. All are idempotent with `--reset`; re-run after any source refresh.
+>
+> **The app DB ships only the unified `ETY_*` layer** (`ETY_level`/`ETY_language`/`ETY_cognateset`/
+> `ETY_reflex`/`ETY_link`/`ETY_entry_link`). The raw per-source etymology tables are staging-only
+> (session 59 hard cutover). Always run `52_build_etymology_unified.py` **before** `60_export_app_db.py`,
+> or the app DB's `ETY_*` will be stale.
 
 ---
 

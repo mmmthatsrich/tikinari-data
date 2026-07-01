@@ -39,13 +39,18 @@ scrape → parse(JSON) → import → <source>_entries → unify → entry/sense
    | He Pātaka Kupu | `hepatakakupu` | — |
    | Williams | `williams` | Wayback source |
    | Papakupu | `papakupu` | run cleanups 09/10/11 `--apply`; dialect=Tai Tokerau auto |
-   | POLLEX/LPO/ACD | _(none)_ | etymology layer — import only, **no unify** |
+   | POLLEX/LPO/ACD/Tregear/ABVD/Walworth | _(none)_ | etymology layer — import only, **no unify** |
    - Web scrapes are long and resumable; OCR/PDF and `--refresh` modes per the doc.
 4. **Unify** the source: `py scripts/50_build_unified.py --source <name>` (skip for the
-   etymology layer). After any source/etymology refresh, rebuild the etymology links:
-   `py scripts/08_etymology_linker.py --write --reset` (POLLEX↔LPO↔ACD), then
-   `py scripts/08b_pollex_entry_linker.py --write --reset` (POLLEX reflex → unified
-   `entry`; **must run after** `50_build_unified.py` since it reads the `entry` table).
+   etymology layer). After any source/etymology refresh, rebuild the etymology links, then
+   the unified `ETY_*` layer:
+   `py scripts/08_etymology_linker.py --write --reset` (POLLEX↔LPO↔ACD raw links),
+   `py scripts/08b_pollex_entry_linker.py --write --reset` (POLLEX reflex → unified `entry`),
+   then `py scripts/52_build_etymology_unified.py --reset` (projects ALL etymology sources
+   into the `ETY_*` layer). The last two **must run after** `50_build_unified.py` (they read
+   the `entry` table). **The app DB ships only `ETY_*`** — the raw per-source etymology tables
+   are staging-only (session 59 hard cutover), so `52_build_etymology_unified.py` MUST run
+   before the export or the shipped `ETY_*` will be stale.
 5. **Verify** — all must pass before stopping:
    ```bash
    py -m unittest discover -s tests -p "test_*.py"
