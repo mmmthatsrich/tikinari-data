@@ -3,6 +3,7 @@ data/*.db
 data/*.db-shm
 data/*.db-wal
 data/*.db.bak*
+backups/
 
 # Source PDFs and scans (large binaries)
 *.pdf

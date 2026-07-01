@@ -33,7 +33,7 @@
 
 > ## Tikinari amendments (2026-06-25)
 > This generic research report has been reviewed against the actual Tikinari app +
-> build pipeline. Full analysis: **`docs/SCHEMA_PROPOSAL_APP_IMPACT.md`**. Binding
+> build pipeline. Full analysis: **`docs/SCHEMA_PROPOSAL_APP_IMPACT.md`** in the Tikinari app repo (not this repo). Binding
 > decisions that override / qualify the text below:
 >
 > 1. **§7's premise does not apply to this app.** The Flutter app **never reads the
@@ -327,7 +327,7 @@ app that currently queries the old per-source tables.
 > **Tikinari note (amend. 1):** this section's premise is **moot for the Tikinari app** —
 > it does not query the per-source tables. Only `scripts/build_app_db.py` does. Read the
 > field-map and breaking-changes below as a guide for **rewriting the build readers**,
-> not the app. Device impact is covered in `docs/SCHEMA_PROPOSAL_APP_IMPACT.md`.
+> not the app. Device impact is covered in the Tikinari app repo's `docs/SCHEMA_PROPOSAL_APP_IMPACT.md`.
 
 ### 7.1 Nature of the change
 
