@@ -62,6 +62,80 @@ LEVELS = [
     ("TU", "Tuvaluan",                 "EC", 9),
     ("LO", "Loans",                     0, 99),
     ("??", "Unknown",                   0, 99),
+
+    # ── ACD / LPO backbone codes, normalised onto the same depth axis ──────────
+    # These are the raw level codes ACD/LPO write straight into ETY_cognateset
+    # (never bridged to Māori entries — comparative backbone only). Mapping them
+    # here lets all ~30k sets sort by antiquity via ETY_level.depth_rank.
+    # Confidence: HIGH on the AN>MP>OC>CP>PN spine (Māori's lineage); MED on
+    # sibling Oceanic/Micronesian/Melanesian nodes (era-correct, node coarse).
+    # depth_rank NULL = attested modern language / unresolved -> excluded from sort.
+    ("PAN",  "Proto-Austronesian",                       0,      0),
+    ("PAn",  "Proto-Austronesian",                       0,      0),   # variant of PAN
+    ("PAn/PMP", "Austronesian / Malayo-Polynesian",   "AN",      1),   # boundary tag
+    ("PMP",  "Proto-Malayo-Polynesian",              "AN",       1),
+    ("PWMP", "Proto-Western-Malayo-Polynesian",      "PMP",      1),   # sibling branch
+    ("PPH",  "Proto-Philippine",                     "PWMP",     1),
+    ("PCEMP","Proto-Central-Eastern-Malayo-Polynesian","PMP",    1),
+    ("PCMP", "Proto-Central-Malayo-Polynesian",      "PCEMP",    1),   # sibling branch
+    ("PEMP", "Proto-Eastern-Malayo-Polynesian",      "PCEMP",    1),   # Māori's pre-Oceanic node
+    ("PSHWNG","Proto-South-Halmahera-West-New-Guinea","PEMP",    1),
+    ("POc",  "Proto-Oceanic",                        "PEMP",     2),
+    ("POC",  "Proto-Oceanic",                        "PEMP",     2),   # variant of POc
+    ("Early Oceanic", "Early Oceanic",               "PEMP",     2),
+    ("PWOc", "Proto-Western-Oceanic",                "POc",      2),
+    ("PNGOc","Proto-North-New-Guinea (Oceanic)",     "PWOc",     2),
+    ("PNNG", "Proto-North-New-Guinea",               "PWOc",     2),
+    ("PMM",  "Proto-Meso-Melanesian",                "PWOc",     2),
+    ("PPT",  "Proto-Papuan-Tip",                     "PWOc",     2),
+    ("PAdm", "Proto-Admiralty",                      "POc",      2),
+    ("PEAd", "Proto-Eastern-Admiralty",              "PAdm",     2),
+    ("Proto Bwaidoga", "Proto-Bwaidoga (Papuan Tip)","PPT",      2),
+    ("Proto Mengen", "Proto-Mengen (Meso-Melanesian)","PMM",     2),
+    ("Proto Kimbe", "Proto-Kimbe (Meso-Melanesian)", "PMM",      2),
+    ("Proto Willaumez","Proto-Willaumez (Meso-Melanesian)","PMM",2),
+    ("Proto Cenderawasih Bay","Proto-Cenderawasih-Bay","PWOc",   2),
+    ("Proto North Bougainville","Proto-North-Bougainville","PWOc",2),
+    ("Proto Northwest Solomonic","Proto-Northwest-Solomonic","PMM",2),
+    ("PEOc", "Proto-Eastern-Oceanic",                "POc",      3),
+    ("PROc", "Proto-Remote-Oceanic",                 "PEOc",     4),
+    ("PNCV", "Proto-North-Central-Vanuatu",          "PROc",     4),
+    ("PNCal","Proto-New-Caledonian",                 "PROc",     4),
+    ("Proto Central Vanuatu","Proto-Central-Vanuatu","PROc",     4),
+    ("Proto Torres-Banks","Proto-Torres-Banks",      "PNCV",     4),
+    ("Proto Erakor-Tafea","Proto-Erakor-Tafea",      "PROc",     4),
+    ("PSV",  "Proto-South-Vanuatu",                  "PROc",     4),
+    ("Proto South Melanesian","Proto-South-Melanesian","PROc",   4),
+    ("PSES", "Proto-Southeast-Solomonic",            "PROc",     4),
+    ("PSS",  "Proto-Southeast-Solomonic",            "PROc",     4),   # variant of PSES
+    ("Proto Malaita-Makira","Proto-Malaita-Makira",  "PSES",     4),
+    ("’Are’are","’Are’are (SE Solomonic language)",  "PSES",     4),
+    ("PMic", "Proto-Micronesian",                    "PROc",     4),
+    ("Proto Central Micronesian","Proto-Central-Micronesian","PMic",4),
+    ("PChk", "Proto-Chuukic",                        "PMic",     4),
+    ("Proto Chuukic-Ponapeic","Proto-Chuukic-Ponapeic","PMic",   4),
+    ("PGMic","Proto-Greater-Micronesian",            "PMic",     4),
+    ("PWMic","Proto-Western-Micronesian",            "PMic",     4),
+    ("Nauruan","Nauruan (Micronesian language)",     "PMic",     4),
+    ("PCP",  "Proto-Central-Pacific",                "PROc",     5),
+    ("PSOc", "Proto-Southern-Oceanic",               "PROc",     5),
+    ("PFij", "Proto-Fijian",                         "PCP",      6),
+    ("PCP/PPn","Central Pacific / Polynesian",       "PCP",      6),   # boundary tag
+    ("PPn",  "Proto-Polynesian",                     "PCP",      6),
+    ("PNPn", "Proto-Nuclear-Polynesian",             "PPn",      7),
+    ("Proto Samoic","Proto-Samoic",                  "NP",       8),
+    ("PCEPn","Proto-Central-Eastern-Polynesian",     "EP",      10),
+    ("Proto Tahitic","Proto-Tahitic",                "CE",      11),
+    # attested modern languages mistagged into `level` — kept but NULL-ranked
+    ("Ambai","Ambai (SHWNG language)",               "PSHWNG",  None),
+    ("Aria", "Aria (Oceanic language)",              0,         None),
+    ("Buru", "Buru (Central MP language)",           "PCMP",    None),
+    ("Hawu", "Hawu (Central MP language)",           "PCMP",    None),
+    ("Kambera","Kambera (Central MP language)",      "PCMP",    None),
+    ("Kéo",  "Kéo (Central MP language)",            "PCMP",    None),
+    ("Lamaholot","Lamaholot (Central MP language)",  "PCMP",    None),
+    ("Nauete","Nauete (Central MP language)",        "PCMP",    None),
+    ("XO",   "Unresolved tag",                       0,         None),
 ]
 RANK = {c: r for c, _, _, r in LEVELS}
 
