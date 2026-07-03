@@ -16,8 +16,8 @@ WHAT GOES IN THE APP DB
 -----------------------
   * Unified core ....... entry, form, sense, example, relation, entry_domain
                          (+ entry_fts / sense_fts / example_fts, rebuilt)
-  * Etymology layer .... ETY_level, ETY_language, ETY_cognateset, ETY_reflex,
-                         ETY_link, ETY_entry_link  (the unified `ETY_*` layer)
+  * Etymology layer .... ETY_level, ETY_depth, ETY_language, ETY_cognateset,
+                         ETY_reflex, ETY_link, ETY_entry_link  (unified `ETY_*` layer)
   * Support ............ source_abbreviations, source_metadata
 
 HARD CUTOVER (session 59)
@@ -65,6 +65,7 @@ APP_TABLES = [
     # Unified etymology layer (ETY_*) — parents before children.
     # ETY_entry_link → entry(id) (already created above), ETY_cognateset, ETY_reflex.
     "ETY_level",
+    "ETY_depth",
     "ETY_language",
     "ETY_cognateset",
     "ETY_reflex",

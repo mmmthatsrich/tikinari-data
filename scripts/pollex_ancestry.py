@@ -139,6 +139,27 @@ LEVELS = [
 ]
 RANK = {c: r for c, _, _, r in LEVELS}
 
+# One clean display label per depth_rank (many codes share a rank; this is the
+# Māori-lineage spine ancestor for that rung) -> reference table ETY_depth, so
+# sort output reads cleanly without an alphabetical MIN(name) pick.
+DEPTH_LABELS = [
+    # depth_rank, label, spine_code
+    (0,  "Austronesian",               "AN"),
+    (1,  "Malayo-Polynesian",          "MP"),
+    (2,  "Oceanic",                    "OC"),
+    (3,  "Eastern Oceanic",            "EO"),
+    (4,  "Remote Oceanic",             "RO"),
+    (5,  "Central Pacific",            "CP"),
+    (6,  "Polynesian",                 "PN"),
+    (7,  "Nuclear Polynesian",         "NP"),
+    (8,  "Ellicean",                   "EC"),
+    (9,  "East Polynesian",            "EP"),
+    (10, "Central-Eastern Polynesian", "CE"),
+    (11, "Tahitic",                    "TA"),
+    (12, "Cook Islands Maori",         "CK"),
+    (99, "Loans / Unknown",            None),
+]
+
 # POLLEX note prefix -> our level code
 PFX = {"PPN": "PN", "PN": "PN", "PNP": "NP", "NP": "NP", "PCE": "CE", "CE": "CE",
        "PEP": "EP", "EP": "EP", "PEC": "EC", "EC": "EC", "PSO": "SO", "SO": "SO",
@@ -256,6 +277,12 @@ def schema():
     for code, name, parent, rank in LEVELS:
         c.execute("INSERT INTO reconstruction_levels VALUES(?,?,?,?)",
                   (code, name, parent if parent else None, rank))
+    # one clean display label per depth_rank -> ETY_depth (via 52_build)
+    c.execute("""CREATE TABLE IF NOT EXISTS depth_labels(
+        depth_rank INTEGER PRIMARY KEY, label TEXT, spine_code TEXT)""")
+    c.execute("DELETE FROM depth_labels")
+    for rank, label, spine in DEPTH_LABELS:
+        c.execute("INSERT INTO depth_labels VALUES(?,?,?)", (rank, label, spine))
     c.execute("""CREATE TABLE IF NOT EXISTS protoform_ancestry(
         id INTEGER PRIMARY KEY,
         child_id TEXT NOT NULL,

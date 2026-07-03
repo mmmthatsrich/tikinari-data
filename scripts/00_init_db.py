@@ -432,6 +432,16 @@ def create_tables(conn: sqlite3.Connection) -> None:
             depth_rank  INTEGER             -- 0 = deepest (AN); higher = shallower
         );
 
+        -- ── ETY_depth: one clean display label per depth_rank ────────────────
+        -- Many level codes share a depth_rank; this gives ONE canonical name per
+        -- rung (the Māori-lineage spine ancestor) for clean sort/group output.
+        -- Mirrors staging depth_labels. Join: ETY_level.depth_rank = ETY_depth.depth_rank.
+        CREATE TABLE IF NOT EXISTS ETY_depth (
+            depth_rank INTEGER PRIMARY KEY,  -- 0 = deepest (AN); higher = shallower
+            label      TEXT,                 -- e.g. "Polynesian" (spine node for the rung)
+            spine_code TEXT                  -- representative ETY_level.code (NULL for 99)
+        );
+
         -- ── ETY_language: comparative language reference ─────────────────────
         -- Mirrors pollex_languages. S56 seeds the POLLEX 67; ABVD/Tregear language
         -- sets are folded in at S57 (distinguished by `source`).

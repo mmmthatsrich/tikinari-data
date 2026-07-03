@@ -6,8 +6,8 @@ This document describes `data/maori_dict.db` — a SQLite database containing M�
 > - **`data/maori_dict.db`** — the slim, app-serving database. Contains *only* the
 >   surface the app reads: the unified core (`entry`/`sense`/`example`/`form`/
 >   `relation`/`entry_domain` + their FTS), the **unified etymology layer**
->   (`ETY_level`/`ETY_language`/`ETY_cognateset`/`ETY_reflex`/`ETY_link`/
->   `ETY_entry_link`), and the `source_*` support tables. **This is the only file
+>   (`ETY_level`/`ETY_depth`/`ETY_language`/`ETY_cognateset`/`ETY_reflex`/
+>   `ETY_link`/`ETY_entry_link`), and the `source_*` support tables. **This is the only file
 >   you copy to the app repo.**
 > - **`data/staging_dictionary.db`** — the full working/build database (~390 MB):
 >   raw per-source `*_entries` landing zone, `pollex_entries`, the raw per-source
@@ -474,7 +474,7 @@ entry (a Māori word the user looked up)
   └── ETY_entry_link ── ETY_cognateset (a reconstructed protoform / cognate set)
                             ├── ETY_reflex   (one language's reflex of the set)
                             └── ETY_link     (set ↔ set: ancestry / equivalence)
-      ETY_language / ETY_level — reference tables (language subgroups, level ladder)
+      ETY_language / ETY_level / ETY_depth — reference tables (languages, level ladder, per-rank label)
 ```
 
 Provenance is inline: `ETY_cognateset.source` / `ETY_reflex.source` name the
@@ -555,16 +555,34 @@ By source: ABVD 1,807 · Tregear 186 · POLLEX 67 · Walworth 7. Joined via `lan
 
 Indexed on `subgroup`.
 
-### `ETY_level` — 25 rows (reference)
+### `ETY_level` — 90 rows (reference)
 
-The Austronesian → Polynesian subgrouping ladder — order the "levels above" axis and validate that an ancestor ranks strictly higher.
+The Austronesian → Polynesian subgrouping ladder — order the "levels above" axis and validate that an ancestor ranks strictly higher. Covers both the POLLEX 2-letter codes AND the ACD/LPO raw codes (`PAN, PMP, POc, PWMP, PPH`, Micronesian/Melanesian subgroups, …), so every `ETY_cognateset.level` resolves a `depth_rank`.
 
 | Column | Type | Notes |
 |---|---|---|
-| `code` | TEXT PK | `AN, MP, OC, EO, RO, CP, … PN, NP, CE, TA, CK` + peripheral codes |
+| `code` | TEXT PK | `AN, MP, OC, EO, RO, CP, … PN, NP, CE, TA, CK` + ACD/LPO codes + peripheral |
 | `name` | TEXT | e.g. `Central-Eastern Polynesian` |
 | `parent_code` | TEXT | Next level up on the spine (`AN` has none) |
-| `depth_rank` | INTEGER | 0 = deepest (AN); bigger = more recent |
+| `depth_rank` | INTEGER | 0 = deepest (AN); bigger = more recent; NULL for attested-language tags |
+
+### `ETY_depth` — 14 rows (reference)
+
+One clean display label per `depth_rank` (many `ETY_level.code`s share a rank). Join `ETY_level.depth_rank = ETY_depth.depth_rank` for readable sort/group output instead of an alphabetical `MIN(name)` pick.
+
+| Column | Type | Notes |
+|---|---|---|
+| `depth_rank` | INTEGER PK | 0 = deepest (AN) … 12 = Cook Islands Maori; 99 = Loans/Unknown |
+| `label` | TEXT | Māori-lineage spine name for the rung, e.g. `Polynesian` |
+| `spine_code` | TEXT | Representative `ETY_level.code` (NULL for rank 99) |
+
+```sql
+-- deepest-first cognate-set counts with clean labels
+SELECT d.depth_rank, d.label, COUNT(*)
+FROM ETY_cognateset cs JOIN ETY_level l ON l.code = cs.level
+JOIN ETY_depth d ON d.depth_rank = l.depth_rank
+GROUP BY d.depth_rank ORDER BY d.depth_rank;
+```
 
 ### `ETY_link` — 2,230 rows (set ↔ set)
 

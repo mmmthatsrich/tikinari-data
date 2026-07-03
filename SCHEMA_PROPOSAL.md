@@ -20,7 +20,7 @@
 > **§1's "keep as-is" note and §9 below are superseded for the app read surface.** The raw
 > per-source etymology tables (`pollex_*`, `lpo_cognatesets`, `acd_cognatesets`,
 > `etymology_links`, `protoform_ancestry`, `reconstruction_levels`, `pollex_entry_links`)
-> have been folded into a **unified `ETY_*` layer** — `ETY_level`, `ETY_language`,
+> have been folded into a **unified `ETY_*` layer** — `ETY_level`, `ETY_depth`, `ETY_language`,
 > `ETY_cognateset`, `ETY_reflex`, `ETY_link`, `ETY_entry_link` — that now also carries
 > Tregear (1891), ABVD and Walworth. Session 59 was a **hard cutover**: the app DB ships
 > only `ETY_*` (no raw etymology tables, no backward-compat views); the raw tables are

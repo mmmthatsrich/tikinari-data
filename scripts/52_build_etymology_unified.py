@@ -123,6 +123,12 @@ def build_refs(con) -> tuple:
         "SELECT code, name, parent_code, depth_rank FROM reconstruction_levels"
     ).rowcount
 
+    con.execute("DELETE FROM ETY_depth")
+    con.execute(
+        "INSERT INTO ETY_depth (depth_rank, label, spine_code) "
+        "SELECT depth_rank, label, spine_code FROM depth_labels"
+    )
+
     con.execute("DELETE FROM ETY_language WHERE source='pollex'")
     n_lang = con.execute(
         "INSERT INTO ETY_language (lang_key, name, iso_code, subgroup, region, country, notes, source) "
