@@ -71,7 +71,7 @@ py scripts/50_build_unified.py --source paekupu
 
 ### He Pātaka Kupu
 ```bash
-py scripts/05_hepataka_scrape.py
+py scripts/04_hepataka_scrape.py
 py scripts/05_hepataka_parse.py
 py scripts/05_hepataka_import.py          # merges + expands source abbreviations at import
 py scripts/50_build_unified.py --source hepatakakupu
@@ -89,6 +89,7 @@ py scripts/50_build_unified.py --source williams
 ```bash
 py scripts/02_papakupu_extract.py         # PyMuPDF text extract → papakupu_entries.json
 py scripts/02_papakupu_import.py
+py scripts/02_papakupu_website_update.py  # website gap-fill: merges archived-site entries (9 missing headwords + 682 WRRT-TAPEHA terms) into the JSON and re-imports
 # in-DB curation (re-runnable; dry-run by default, --apply to commit, auto-backup):
 py scripts/09_papakupu_clean_definitions.py --apply
 py scripts/10_papakupu_strip_variant_blocks.py --apply
@@ -100,6 +101,17 @@ py scripts/50_build_unified.py --source papakupu
 > the `_maori_tail` orthography heuristic. Both `example.text_mi` and `example.text_en` are
 > populated (10,071 / 10,211 have text_mi). `dialect='Tai Tokerau'` is set automatically from
 > `source_metadata.default_dialect`.
+
+### TaiKupu  (online JSON API; Ngāpuhi vocab from the Māori Minute app — used with owner's permission)
+```bash
+py scripts/40_taikupu_import.py --version-check   # cheap check: compare local vs live version, exit (no import)
+py scripts/40_taikupu_import.py --download        # refresh raw JSON from the API, then import
+py scripts/50_build_unified.py --source taikupu
+```
+> Single-request source: `GET https://maoriminute.com/api/dictionary` returns the whole
+> dataset (~2,265 entries); raw saved to `sources/taikupu/raw/taikupu_dictionary.json`.
+> Shown in-app under the Papakupu banner (`display_name='Papakupu o Tai Tokerau'`,
+> `default_dialect='Tai Tokerau'`). Duplicate headwords are distinct senses — no dedup.
 
 ---
 
@@ -215,10 +227,11 @@ Then update the trackers:
 |--------|--------|-------|--------|------------------|
 | Te Aka | `04_te_aka_scrape` | `04_te_aka_parse` | `04_te_aka_import --refresh` | `te_aka` |
 | Paekupu | `04_paekupu_scrape` | `04_paekupu_parse` | `04_paekupu_import --refresh` | `paekupu` |
-| He Pātaka Kupu | `05_hepataka_scrape` | `05_hepataka_parse` | `05_hepataka_import` | `hepatakakupu` |
+| He Pātaka Kupu | `04_hepataka_scrape` | `05_hepataka_parse` | `05_hepataka_import` | `hepatakakupu` |
 | Williams | `01_williams_download` | `01_williams_parse` | `01_williams_import` | `williams` |
-| Papakupu | `02_papakupu_extract` | — | `02_papakupu_import` (+09/10/11) | `papakupu` |
+| Papakupu | `02_papakupu_extract` | — | `02_papakupu_import` (+website update, 09/10/11) | `papakupu` |
+| TaiKupu | — (JSON API) | — | `40_taikupu_import --download` | `taikupu` |
 | POLLEX/LPO/ACD | `03/—/—` | — | `03/06/07_*_import` | _(etymology layer — no unify)_ |
 
 Run `py scripts/50_build_unified.py` with no `--source` to rebuild the whole core
-(all five word-list sources) at once.
+(all six word-list sources) at once.

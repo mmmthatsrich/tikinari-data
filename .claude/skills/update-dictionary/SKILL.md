@@ -1,6 +1,6 @@
 ---
 name: update-dictionary
-description: Use when refreshing the Māori dictionary DB from a source (Te Aka, Paekupu, He Pātaka Kupu, Williams, Papakupu, or POLLEX/LPO/ACD) after that source publishes new data — runs the scrape→parse→import→unify pipeline for ONE source at a time, then verifies. Triggers: "update <source>", "refresh the dictionary", "re-import te aka", "annual update".
+description: Use when refreshing the Māori dictionary DB from a source (Te Aka, Paekupu, He Pātaka Kupu, Williams, Papakupu, TaiKupu, or POLLEX/LPO/ACD) after that source publishes new data — runs the scrape→parse→import→unify pipeline for ONE source at a time, then verifies. Triggers: "update <source>", "refresh the dictionary", "re-import te aka", "annual update".
 ---
 
 # Update a dictionary source
@@ -39,6 +39,7 @@ scrape → parse(JSON) → import → <source>_entries → unify → entry/sense
    | He Pātaka Kupu | `hepatakakupu` | — |
    | Williams | `williams` | Wayback source |
    | Papakupu | `papakupu` | run cleanups 09/10/11 `--apply`; dialect=Tai Tokerau auto |
+   | TaiKupu | `taikupu` | `40_taikupu_import --version-check` then `--download`; single-request JSON API; dialect=Tai Tokerau auto |
    | POLLEX/LPO/ACD/Tregear/ABVD/Walworth | _(none)_ | etymology layer — import only, **no unify** |
    - Web scrapes are long and resumable; OCR/PDF and `--refresh` modes per the doc.
 4. **Unify** the source: `py scripts/50_build_unified.py --source <name>` (skip for the
@@ -51,14 +52,19 @@ scrape → parse(JSON) → import → <source>_entries → unify → entry/sense
    the `entry` table). **The app DB ships only `ETY_*`** — the raw per-source etymology tables
    are staging-only (session 59 hard cutover), so `52_build_etymology_unified.py` MUST run
    before the export or the shipped `ETY_*` will be stale.
-5. **Verify** — all must pass before stopping:
+5. **Refresh derived layers** (do every time):
+   ```bash
+   py scripts/06_fts_rebuild.py     # rebuild FTS if a table was bulk-edited
+   py scripts/35_detect_pairs.py    # refresh cross-source "also in" candidates
+   ```
+6. **Verify** — all must pass before stopping:
    ```bash
    py -m unittest discover -s tests -p "test_*.py"
    ```
    For a delta import, also report `data_refresh_runs` (new/modified/deleted counts).
-6. **Export the app DB**: `py scripts/60_export_app_db.py` — rebuilds the slim
+7. **Export the app DB**: `py scripts/60_export_app_db.py` — rebuilds the slim
    `data/maori_dict.db` from staging (this is the only file copied to the app repo).
-7. **Update trackers**: add a `SESSIONS.md` row (source, row counts, what changed, date);
+8. **Update trackers**: add a `SESSIONS.md` row (source, row counts, what changed, date);
    update `DATABASE_REFERENCE.md` only if counts/schema changed.
 
 ## Guardrails
