@@ -70,8 +70,7 @@ LEVELS = [
     # Confidence: HIGH on the AN>MP>OC>CP>PN spine (Māori's lineage); MED on
     # sibling Oceanic/Micronesian/Melanesian nodes (era-correct, node coarse).
     # depth_rank NULL = attested modern language / unresolved -> excluded from sort.
-    ("PAN",  "Proto-Austronesian",                       0,      0),
-    ("PAn",  "Proto-Austronesian",                       0,      0),   # variant of PAN
+    ("PAn",  "Proto-Austronesian",                       0,      0),   # canon; ACD's PAN normalised here
     ("PAn/PMP", "Austronesian / Malayo-Polynesian",   "AN",      1),   # boundary tag
     ("PMP",  "Proto-Malayo-Polynesian",              "AN",       1),
     ("PWMP", "Proto-Western-Malayo-Polynesian",      "PMP",      1),   # sibling branch
@@ -80,8 +79,7 @@ LEVELS = [
     ("PCMP", "Proto-Central-Malayo-Polynesian",      "PCEMP",    1),   # sibling branch
     ("PEMP", "Proto-Eastern-Malayo-Polynesian",      "PCEMP",    1),   # Māori's pre-Oceanic node
     ("PSHWNG","Proto-South-Halmahera-West-New-Guinea","PEMP",    1),
-    ("POc",  "Proto-Oceanic",                        "PEMP",     2),
-    ("POC",  "Proto-Oceanic",                        "PEMP",     2),   # variant of POc
+    ("POc",  "Proto-Oceanic",                        "PEMP",     2),   # canon; ACD's POC normalised here
     ("Early Oceanic", "Early Oceanic",               "PEMP",     2),
     ("PWOc", "Proto-Western-Oceanic",                "POc",      2),
     ("PNGOc","Proto-North-New-Guinea (Oceanic)",     "PWOc",     2),
@@ -106,8 +104,7 @@ LEVELS = [
     ("Proto Erakor-Tafea","Proto-Erakor-Tafea",      "PROc",     4),
     ("PSV",  "Proto-South-Vanuatu",                  "PROc",     4),
     ("Proto South Melanesian","Proto-South-Melanesian","PROc",   4),
-    ("PSES", "Proto-Southeast-Solomonic",            "PROc",     4),
-    ("PSS",  "Proto-Southeast-Solomonic",            "PROc",     4),   # variant of PSES
+    ("PSES", "Proto-Southeast-Solomonic",            "PROc",     4),   # canon; LPO's PSS normalised here
     ("Proto Malaita-Makira","Proto-Malaita-Makira",  "PSES",     4),
     ("’Are’are","’Are’are (SE Solomonic language)",  "PSES",     4),
     ("PMic", "Proto-Micronesian",                    "PROc",     4),

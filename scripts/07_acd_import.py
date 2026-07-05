@@ -14,7 +14,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import normalise_proto_key
+from utils import canonical_level, normalise_proto_key
 
 DB_PATH = Path(__file__).parent.parent / "data" / "staging_dictionary.db"
 CLDF_DIR = Path(__file__).parent.parent / "sources" / "acd" / "cldf"
@@ -45,7 +45,7 @@ def main() -> None:
                 form,
                 normalise_proto_key(form),
                 description,
-                level or None,
+                canonical_level(level) or None,
                 row["Etymon_ID"] or None,
             ))
 

@@ -12,7 +12,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding='utf-8')
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import normalise_proto_key
+from utils import canonical_level, normalise_proto_key
 
 DB_PATH = Path(__file__).parent.parent / "data" / "staging_dictionary.db"
 CLDF_DIR = Path(__file__).parent.parent / "sources" / "lpo" / "cldf"
@@ -53,7 +53,7 @@ def main() -> None:
                 name,
                 normalise_proto_key(name),
                 row["Description"] or None,
-                row["Level"] or None,
+                canonical_level(row["Level"] or None),
                 chapter_id,
                 chapters.get(chapter_id) if chapter_id else None,
             ))

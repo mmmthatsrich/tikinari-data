@@ -90,6 +90,25 @@ def expand_citations(text: str, abbrevs: dict[str, dict]) -> str:
     return _CITATION_RE.sub(_replace, text)
 
 
+# One reconstruction node, spelled differently across sources: ACD's CLDF writes
+# all-caps PAN/POC, LPO tags a couple of sets PSS. Collapse each onto the mixed-
+# case scholarly standard (also the parent_code spelling used in the depth ladder)
+# so ETY_cognateset.level and ETY_level carry exactly one code per node.
+LEVEL_VARIANT_CANON = {"PAN": "PAn", "POC": "POc", "PSS": "PSES"}
+
+
+def canonical_level(code: str | None) -> str | None:
+    """Return the canonical spelling of a reconstruction-level code.
+
+    Maps duplicate source spellings (PAN->PAn, POC->POc, PSS->PSES) onto one code;
+    any other code, and None/empty, passes through unchanged. Apply at every source
+    ingest so no variant reaches the unified ETY_* layer.
+    """
+    if not code:
+        return code
+    return LEVEL_VARIANT_CANON.get(code, code)
+
+
 def normalise_proto_key(form: str) -> str:
     """Strip proto-form notation for fuzzy comparison matching.
 
