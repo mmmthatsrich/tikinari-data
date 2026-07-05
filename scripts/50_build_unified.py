@@ -415,6 +415,25 @@ def core_tables_exist(con) -> bool:
     return all(t in have for t in CORE_TABLES)
 
 
+# External link tables that FK-reference entry.id: pollex_entry_links (08b) and
+# ETY_entry_link (52). Entry ids regenerate on every unify, so their links are
+# stale after any rebuild regardless; with foreign_keys=ON they also block
+# delete_source_slice. Clear them up front (same rule as 52's global link
+# tables) and re-run 08b + 52 afterwards (see docs/UPDATE_WORKFLOW.md).
+ENTRY_LINK_TABLES = ("pollex_entry_links", "ETY_entry_link")
+
+
+def clear_entry_link_tables(con) -> int:
+    have = {r[0] for r in con.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    n = 0
+    for t in ENTRY_LINK_TABLES:
+        if t in have:
+            n += con.execute(f"DELETE FROM {t}").rowcount
+    con.commit()
+    return n
+
+
 def delete_source_slice(con, source_id):
     """Remove one source's rows from every core table (children first, FK-safe)."""
     ids = [r[0] for r in con.execute(
@@ -586,6 +605,11 @@ def main():
     con.execute("PRAGMA foreign_keys = ON")
     if not core_tables_exist(con):
         sys.exit("Core tables missing. Run:  py scripts/00_init_db.py  first.")
+
+    cleared = clear_entry_link_tables(con)
+    if cleared:
+        print(f"cleared {cleared} stale entry-link rows "
+              f"({'/'.join(ENTRY_LINK_TABLES)}) — re-run 08b + 52 after this")
 
     grand = {t: 0 for t in CORE_TABLES}
     for src in targets:
