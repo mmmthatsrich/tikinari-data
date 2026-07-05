@@ -22,13 +22,17 @@ sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 
 # Canonical ordering: lower index = source_a so every pair has a unique direction.
+# Lexicographic order (source_a is always the lexicographically smaller source),
+# so every pair has one canonical direction. taikupu sorts between personal and
+# te_aka; te_aka/williams keep their relative order so no existing pair flips.
 SOURCE_ORDER = {
     "hepatakakupu": 0,
     "paekupu":      1,
     "papakupu":     2,
     "personal":     3,
-    "te_aka":       4,
-    "williams":     5,
+    "taikupu":      4,
+    "te_aka":       5,
+    "williams":     6,
 }
 
 _QUERIES = [
@@ -38,6 +42,7 @@ _QUERIES = [
     ("hepatakakupu", "SELECT headword_search, id FROM hepatakakupu_entries"),
     ("paekupu",      "SELECT headword_search, id FROM paekupu_entries"),
     ("personal",     "SELECT headword_search, id FROM personal_lexicon WHERE is_private = 0"),
+    ("taikupu",      "SELECT headword_search, id FROM taikupu_entries"),
 ]
 
 

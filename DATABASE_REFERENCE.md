@@ -173,6 +173,7 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 |---|---|---|---|---|
 | `williams` | Williams Dictionary (1844/1971) | 11,910 | CC BY-SA 3.0 NZ | Open licence; primary source |
 | `papakupu` | Papakupu o Tai Tokerau | 4,683 | **For Private Use Only** | Northland dialect; do NOT distribute |
+| `taikupu` | Papakupu o Tai Tokerau | 2,265 | Used with permission | Ngāpuhi vocab (Māori Minute); shown under the Papakupu banner (same `display_name`); Tai Tokerau dialect |
 | `pollex` | POLLEX-Online (Māori reflexes) | 3,424 | Permission pending | Etymological; Māori subset |
 | `te_aka` | Te Aka Māori Dictionary | 47,888 | **Restricted** | Permissions handled externally |
 | `hepatakakupu` | He Pātaka Kupu | 24,941 senses | **Restricted** | Monolingual Māori; permissions externally |
@@ -182,7 +183,7 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 | `lpo` | Lexicon of Proto Oceanic | 2,820 | CC-BY-4.0 | Etymology layer |
 | `acd` | Austronesian Comparative Dictionary | 10,857 | CC-BY-4.0 | Etymology layer |
 
-**Total searchable entries across dictionary sources: ~106,000** (unified `entry` = 105,908)
+**Total searchable entries across dictionary sources: ~108,000** (unified `entry` = 108,173)
 
 ---
 
@@ -363,6 +364,31 @@ FTS table: `papakupu_fts` — covers `headword`, `definition`, `usage_examples`.
 
 **Definition cleanup:** The PDF extraction left structured metadata inline in `definition`. The leading source code (`{RK2}`) and part-of-speech (`[Noun]`) tokens — which are already stored in `source_code` / `part_of_speech` — have been stripped (`scripts/09_papakupu_clean_definitions.py`; 3,774 of 4,683 rows). Only the single extracted occurrence is removed, so repeated per-sense codes survive. Definitions are display-ready prose.
 
+### `taikupu_entries` — 2,265 rows
+
+TaiKupu — a Ngāpuhi vocab app on the Māori Minute platform, imported with the owner's permission from its public JSON API (`GET https://maoriminute.com/api/dictionary`). Same Northland (Tai Tokerau) dialect as Papakupu, and **shown in-app under the same source banner** — `source_metadata.display_name` is `'Papakupu o Tai Tokerau'`, identical to `papakupu`, and `default_dialect='Tai Tokerau'` so it gets the same dialect boost. Storage is a separate table; only the display label is shared.
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | INTEGER PK | Local rowid |
+| `source_entry_id` | TEXT UNIQUE | TaiKupu API id (e.g. `e_1780218354352_y91cn1`); stable across refreshes; drives the device id `taikupu:{source_entry_id}` |
+| `headword` | TEXT | `maori`; with macrons (proper orthography) |
+| `headword_sort` | TEXT | Indexed |
+| `headword_search` | TEXT | Indexed |
+| `part_of_speech` | TEXT | Present in the API but currently always empty → NULL |
+| `definition` | TEXT | English gloss |
+| `usage_examples` | TEXT | JSON array of `{text_mi, text_en}` (one bilingual example per entry) |
+| `level` | INTEGER | Learning poutama position 1–100 (not linguistic) |
+| `notes` | TEXT | Rarely populated |
+| `content_hash` | TEXT | For refresh diffing |
+| `first_seen` | TEXT | ISO datetime |
+| `created_at` | TEXT | ISO datetime |
+| `last_updated` | TEXT | ISO datetime |
+
+FTS table: `taikupu_fts` — covers `headword`, `definition`, `usage_examples`.
+
+**Homographs:** duplicate `headword` values are distinct senses (e.g. `ao` = "the world" / "to scoop up"), not duplicate rows — no dedup is applied. **Refresh:** `scripts/40_taikupu_import.py --version-check` compares the local `version` against the live API; `--download` refreshes the raw JSON before importing.
+
 **Variant search:** To find an entry by any of its variant spellings:
 ```sql
 SELECT * FROM papakupu_entries
@@ -433,6 +459,7 @@ Every dictionary table has a corresponding FTS5 virtual table, kept in sync by I
 |---|---|
 | `williams_fts` | `williams_entries` |
 | `papakupu_fts` | `papakupu_entries` |
+| `taikupu_fts` | `taikupu_entries` |
 | `pollex_fts` | `pollex_entries` |
 | `te_aka_fts` | `te_aka_entries` |
 | `hepatakakupu_fts` | `hepatakakupu_entries` |
@@ -896,6 +923,7 @@ WHERE headword_search = ?
 | LPO / ACD | CC-BY-4.0 | Yes (with attribution) |
 | POLLEX | Permission pending | Clarify before shipping |
 | Papakupu | For Private Use Only | **No** |
+| TaiKupu | Used with permission (Māori Minute / Ngāpuhi) | Yes — per owner permission; shown under the Papakupu banner |
 | Te Aka | Restricted | Only with permission confirmed |
 | He Pātaka Kupu | Restricted | Only with permission confirmed |
 | Paekupu | Restricted | Only with permission confirmed |

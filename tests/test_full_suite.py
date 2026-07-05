@@ -571,7 +571,7 @@ class TestSourceMetadata(unittest.TestCase):
 
     EXPECTED_SOURCES = {
         "williams", "papakupu", "pollex", "te_aka",
-        "hepatakakupu", "paekupu", "personal",
+        "hepatakakupu", "paekupu", "personal", "taikupu",
         "pollex_cognatesets", "lpo", "acd", "abvd", "walworth", "tregear",
     }
     COUNT_SOURCES = {
@@ -581,6 +581,7 @@ class TestSourceMetadata(unittest.TestCase):
         "te_aka":            "te_aka_entries",
         "hepatakakupu":      "hepatakakupu_entries",
         "paekupu":           "paekupu_entries",
+        "taikupu":           "taikupu_entries",
         "pollex_cognatesets": "pollex_cognatesets",
         "lpo":               "lpo_cognatesets",
         "acd":               "acd_cognatesets",

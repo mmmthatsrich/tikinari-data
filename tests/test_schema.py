@@ -36,6 +36,7 @@ CONTENT_TABLES = [
     "te_aka_entries",
     "hepatakakupu_entries",
     "paekupu_entries",
+    "taikupu_entries",
 ]
 
 FTS_TABLES = [t.replace("_entries", "_fts").replace("personal_lexicon", "personal_fts")
@@ -69,9 +70,13 @@ REQUIRED_COLUMNS = {
     "paekupu_entries":       ["id", "headword", "headword_sort", "headword_search",
                                "part_of_speech", "definition", "usage_examples",
                                "headword_en", "subject_area", "created_at", "last_updated"],
+    "taikupu_entries":       ["id", "headword", "headword_sort", "headword_search",
+                               "part_of_speech", "definition", "usage_examples",
+                               "source_entry_id", "level", "notes", "content_hash",
+                               "first_seen", "created_at", "last_updated"],
 }
 
-SOURCE_IDS = {"williams", "papakupu", "pollex", "te_aka", "hepatakakupu", "paekupu", "personal"}
+SOURCE_IDS = {"williams", "papakupu", "pollex", "te_aka", "hepatakakupu", "paekupu", "personal", "taikupu"}
 
 
 def get_table_names(conn: sqlite3.Connection) -> set[str]:
@@ -123,7 +128,7 @@ def test_fts_tables_exist(conn: sqlite3.Connection):
     existing = get_table_names(conn)
     fts_names = [
         "williams_fts", "papakupu_fts", "pollex_fts", "personal_fts",
-        "te_aka_fts", "hepatakakupu_fts", "paekupu_fts",
+        "te_aka_fts", "hepatakakupu_fts", "paekupu_fts", "taikupu_fts",
     ]
     for name in fts_names:
         assert name in existing, f"Missing FTS table: {name}"

@@ -15,7 +15,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 
 CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
-SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu")
+SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu", "taikupu")
 
 
 def _open() -> sqlite3.Connection:
@@ -63,6 +63,7 @@ class UnifiedCore(unittest.TestCase):
             "hepatakakupu": "hepatakakupu_entries",
             "paekupu": "paekupu_entries",
             "papakupu": "papakupu_entries",
+            "taikupu": "taikupu_entries",
         }
         for src, tbl in pairs.items():
             core = self._one("SELECT COUNT(*) FROM entry WHERE source_id=?", src)
@@ -128,9 +129,17 @@ class UnifiedCore(unittest.TestCase):
             "AND (dialect IS NULL OR dialect <> 'Tai Tokerau')")
         self.assertEqual(non_tt, 0)
 
+    def test_taikupu_dialect_tagged(self):
+        # TaiKupu is Ngāpuhi vocab — same Tai Tokerau dialect boost as Papakupu.
+        non_tt = self._one(
+            "SELECT COUNT(*) FROM entry WHERE source_id='taikupu' "
+            "AND (dialect IS NULL OR dialect <> 'Tai Tokerau')")
+        self.assertEqual(non_tt, 0)
+
     def test_other_sources_have_no_dialect(self):
+        # Only the two Tai Tokerau sources carry a dialect tag.
         self.assertEqual(self._one(
-            "SELECT COUNT(*) FROM entry WHERE source_id <> 'papakupu' "
+            "SELECT COUNT(*) FROM entry WHERE source_id NOT IN ('papakupu', 'taikupu') "
             "AND dialect IS NOT NULL"), 0)
 
     # ── relation resolution ───────────────────────────────────────────────────

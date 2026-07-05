@@ -111,6 +111,49 @@ def create_tables(conn: sqlite3.Connection) -> None:
             VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
         END;
 
+        -- ── TaiKupu (Ngāpuhi vocab app; shown in-app under the Papakupu banner) ─
+        CREATE TABLE IF NOT EXISTS taikupu_entries (
+            id                  INTEGER PRIMARY KEY,
+            source_entry_id     TEXT NOT NULL UNIQUE,   -- TaiKupu API id (e.g. e_1780218354352_y91cn1); stable across refreshes
+            headword            TEXT NOT NULL,          -- maori
+            headword_sort       TEXT NOT NULL,
+            headword_search     TEXT NOT NULL,
+            part_of_speech      TEXT,                   -- present in API but currently always empty
+            definition          TEXT,                   -- english gloss
+            usage_examples      TEXT,                   -- JSON array of {text_mi, text_en}
+            level               INTEGER,                -- learning poutama position 1..100
+            notes               TEXT,
+            content_hash        TEXT,
+            first_seen          TEXT,
+            created_at          TEXT DEFAULT (datetime('now')),
+            last_updated        TEXT DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_taikupu_search
+            ON taikupu_entries(headword_search);
+        CREATE INDEX IF NOT EXISTS idx_taikupu_sort
+            ON taikupu_entries(headword_sort);
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS taikupu_fts USING fts5(
+            headword, definition, usage_examples,
+            content='taikupu_entries', content_rowid='id',
+            tokenize='unicode61'
+        );
+
+        CREATE TRIGGER IF NOT EXISTS taikupu_fts_ins AFTER INSERT ON taikupu_entries BEGIN
+            INSERT INTO taikupu_fts(rowid, headword, definition, usage_examples)
+            VALUES (new.id, new.headword, new.definition, new.usage_examples);
+        END;
+        CREATE TRIGGER IF NOT EXISTS taikupu_fts_upd AFTER UPDATE ON taikupu_entries BEGIN
+            INSERT INTO taikupu_fts(taikupu_fts, rowid, headword, definition, usage_examples)
+            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
+            INSERT INTO taikupu_fts(rowid, headword, definition, usage_examples)
+            VALUES (new.id, new.headword, new.definition, new.usage_examples);
+        END;
+        CREATE TRIGGER IF NOT EXISTS taikupu_fts_del AFTER DELETE ON taikupu_entries BEGIN
+            INSERT INTO taikupu_fts(taikupu_fts, rowid, headword, definition, usage_examples)
+            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
+        END;
+
         -- ── POLLEX ───────────────────────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS pollex_entries (
             id             INTEGER PRIMARY KEY,
@@ -984,17 +1027,13 @@ def migrate_tables(conn: sqlite3.Connection) -> None:
     if "default_dialect" not in meta_cols:
         conn.execute("ALTER TABLE source_metadata ADD COLUMN default_dialect TEXT")
         print("  migrated: source_metadata.default_dialect added")
-    # Seed the one known dialect default (idempotent; only fills NULLs).
-    conn.execute(
-        "UPDATE source_metadata SET default_dialect = 'Tai Tokerau' "
-        "WHERE source_id = 'papakupu' AND default_dialect IS NULL"
-    )
 
 
 def seed_source_metadata(conn: sqlite3.Connection) -> None:
     sources = [
         ("williams",           "Williams Dictionary (1844/1971)",           "CC BY-SA 3.0 NZ", "https://nzetc.victoria.ac.nz/tm/scholarly/tei-WillDict.html", None, 0, "Primary open-licence source; TEI encoding"),
         ("papakupu",           "Papakupu o Tai Tokerau",                    "For Private Use Only", None,                                              None, 0, "Northland dialect; local use only; do not distribute"),
+        ("taikupu",            "Papakupu o Tai Tokerau",                    "Used with permission", "https://maoriminute.com/taikupu-app",                     None, 0, "Ngapuhi vocab app (Maori Minute); used with owner permission; shown in-app under the Papakupu banner; public JSON API /api/dictionary"),
         ("pollex",             "POLLEX-Online (Maori reflexes)",            None,              "https://pollex.eva.mpg.de/language/maori/",               None, 0, "Etymological; permission contact pending"),
         ("pollex_cognatesets", "POLLEX-Online (protoform cognate sets)",    None,              "https://pollex.eva.mpg.de/entry/",                        None, 0, "Full protoform records with cross-language reflexes; scraped"),
         ("lpo",                "The Lexicon of Proto Oceanic (tlopo)",      "CC-BY-4.0",       "https://tlopo.clld.org",                                  None, 0, "Proto-Oceanic layer; CLDF from github.com/lexibank/tlopo"),
@@ -1012,6 +1051,12 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
                (source_id, display_name, licence, url, last_updated, entry_count, notes)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         sources,
+    )
+    # Seed the known dialect defaults (idempotent; only fills NULLs). Runs after the
+    # INSERT so brand-new Tai Tokerau sources are tagged on their first init too.
+    conn.execute(
+        "UPDATE source_metadata SET default_dialect = 'Tai Tokerau' "
+        "WHERE source_id IN ('papakupu', 'taikupu') AND default_dialect IS NULL"
     )
 
 

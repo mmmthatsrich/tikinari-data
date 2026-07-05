@@ -48,7 +48,7 @@ from papakupu_gloss import clean_gloss
 
 NOW = datetime.now(timezone.utc).isoformat()
 
-SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu")
+SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu", "taikupu")
 CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
 
 # trailing citation / source markers in example strings (same patterns as the prototype)
@@ -384,12 +384,28 @@ def build_papakupu(con, b):
             b.add_relation(eid, "see_also", t if isinstance(t, str) else str(t))
 
 
+def build_taikupu(con, b):
+    sql = ("SELECT source_entry_id, headword, headword_sort, headword_search, "
+           "definition, usage_examples, level FROM taikupu_entries ORDER BY id")
+    for (seid, hw, hs, hse, d, ux, lvl) in con.execute(sql):
+        # usage_examples are {text_mi, text_en} dicts (40_taikupu_import).
+        examples = [e for e in jload(ux) if isinstance(e, dict)]
+        eid = b.add_entry(seid, hw, hs, hse,
+                          locator=f"level {lvl}" if lvl is not None else None,
+                          material={"hw": hw, "def": d, "ex": examples, "lvl": lvl})
+        # english gloss -> gloss_en; raw blob preserved in definition_raw.
+        sid = b.add_sense(eid, None, d, None, d)
+        for i, ex in enumerate(examples):
+            b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"), None, None, i)
+
+
 BUILDERS = {
     "williams": build_williams,
     "te_aka": build_te_aka,
     "hepatakakupu": build_hepatakakupu,
     "paekupu": build_paekupu,
     "papakupu": build_papakupu,
+    "taikupu": build_taikupu,
 }
 
 
