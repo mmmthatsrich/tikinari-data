@@ -16,6 +16,23 @@
 > `staging_dictionary.db` (full working DB) and `maori_dict.db` (slim app projection, built
 > by `scripts/60_export_app_db.py`); see `DATABASE_REFERENCE.md`.
 
+> ## Sources + cleanup update (2026-07-05, sessions 61–63)
+> - **TaiKupu (session 63):** a **sixth word-list source** (`taikupu_entries`, 2,265 Ngāpuhi
+>   vocab entries from the Māori Minute platform, imported with the owner's permission from a
+>   public JSON API) now feeds the unified core via `build_taikupu` in `50_build_unified.py`.
+>   Stored in its own table but **shown in-app under the Papakupu banner** — its
+>   `source_metadata.display_name` is `'Papakupu o Tai Tokerau'` (identical to `papakupu`) and
+>   `default_dialect='Tai Tokerau'`. See §4 for its conversion mapping.
+> - **ETY level-code reconcile (session 61):** duplicate reconstruction-node spellings were
+>   collapsed at ingest (`PAN→PAn`, `POC→POc`, `PSS→PSES`), so **`ETY_level` is now 87 rows**
+>   (was 90).
+> - **Papakupu gloss cleanup (session 62):** `build_papakupu` now runs `papakupu_gloss.clean_gloss`
+>   so `sense.gloss_en` holds the definition only (usage-example text no longer bleeds into the
+>   gloss); `definition_raw` still keeps the full raw blob. §4's "`definition`→`gloss_en`" for
+>   Papakupu is unchanged in intent — this only sharpened the gloss/example boundary.
+> - Live counts (`DATABASE_REFERENCE.md` is authoritative): `entry` 108,173 · `sense` 128,047 ·
+>   `example` 92,690 · `source_metadata` 14 · `cross_source_candidates` 200,892.
+
 > ## Etymology-layer cutover update (2026-07-01, sessions 56–59)
 > **§1's "keep as-is" note and §9 below are superseded for the app read surface.** The raw
 > per-source etymology tables (`pollex_*`, `lpo_cognatesets`, `acd_cognatesets`,
@@ -77,8 +94,8 @@
 ## Executive Summary
 
 The DB currently stores each source dictionary in its **own table with its own column
-set**. The five word-list sources (`williams_entries`, `te_aka_entries`,
-`hepatakakupu_entries`, `paekupu_entries`, `papakupu_entries`) share a rough core
+set**. The six word-list sources (`williams_entries`, `te_aka_entries`,
+`hepatakakupu_entries`, `paekupu_entries`, `papakupu_entries`, `taikupu_entries`) share a rough core
 (`headword`, `headword_sort`, `headword_search`, `part_of_speech`, `definition`,
 `usage_examples`) but diverge badly on everything else — and, more dangerously, the
 **same column means different things in different sources**:
@@ -130,7 +147,7 @@ problems.
 **Already well-structured (keep as-is):** the etymology layer
 (`pollex_*`, `lpo_*`, `acd_*`, `protoform_ancestry`, `etymology_links`,
 `reconstruction_levels`), `source_metadata`, `source_abbreviations`, and
-`cross_source_candidates` (181,938 cross-source equivalence pairs). These are good and
+`cross_source_candidates` (200,892 cross-source equivalence pairs). These are good and
 the proposal builds on them rather than replacing them.
 
 ---
@@ -277,7 +294,8 @@ across sources — this is the "same word in N dictionaries" join the app needs)
 | **Te Aka** | headword, POS, `audio_url`, `word_id`→`source_entry_id` | split inline senses; `definition`→`gloss_en` | parse `usage_examples`: Māori→`text_mi`, trailing `(citation)`→`citation`/`source_abbrev` | `synonyms`→`relation(synonym, target_entry_id=word_id)`; `filters`→`entry_domain` |
 | **He Pātaka Kupu** | headword, POS, `word_id` | `sense_number` rows; `definition`→**`gloss_mi`** (monolingual!) | inline | `synonyms`→`relation`; `semantic_domain`→`entry_domain(mi)` |
 | **Paekupu** | headword, `headword_en`, POS/`pos_mi`, `audio_url`, `slug` | `definition`→`gloss_en`, `definition_mi`→`gloss_mi` | `usage_examples` (Māori)→`text_mi` | `alternative_words`→`form`; `subject_areas`→`entry_domain` |
-| **Papakupu** | headword, POS, `loan_marker`, `source_code`, `pdf_page` | inline senses; `definition`→`gloss_en` | **re-extract Māori sentence→`text_mi`** + existing English→`text_en` + `[SRC]`→`source_abbrev` | `variant_forms`→`form(variant)`; `see_also`→`relation(see_also)` |
+| **Papakupu** | headword, POS, `loan_marker`, `source_code`, `pdf_page` | inline senses; `definition`→`gloss_en` (via `clean_gloss`, S62) | **re-extract Māori sentence→`text_mi`** + existing English→`text_en` + `[SRC]`→`source_abbrev` | `variant_forms`→`form(variant)`; `see_also`→`relation(see_also)` |
+| **TaiKupu** | headword, `source_entry_id`, `level`→`locator` | single sense; `definition` (english)→`gloss_en` | one bilingual example: `text_mi` (example) + `text_en` (exampleTranslation) | — (dialect `Tai Tokerau`, shown under the Papakupu banner) |
 
 \* Williams headwords need macron restoration on import (legacy orthography) — already a known project task.
 
@@ -442,7 +460,7 @@ all first-class — none are possible with the current flat string array.
 
 ## 9. Where POLLEX fits (it is NOT a sixth dictionary)
 
-POLLEX is structurally different from the five word-lists and must **not** be flattened
+POLLEX is structurally different from the six word-lists and must **not** be flattened
 into `entry`/`sense`/`example`:
 
 - **It has zero usage examples** (`pollex_entries.usage_examples` is empty) — the

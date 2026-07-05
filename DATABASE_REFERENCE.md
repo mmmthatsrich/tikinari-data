@@ -104,9 +104,9 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 
 | Table | Rows | What it holds |
 |---|---|---|
-| `entry` | 105,908 | one row per source headword-entry; provenance kept (not merged across sources) |
-| `sense` | 125,782 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
-| `example` | 90,425 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
+| `entry` | 108,173 | one row per source headword-entry; provenance kept (not merged across sources) |
+| `sense` | 128,047 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
+| `example` | 92,690 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
 | `relation` | 107,835 | `synonym` / `see_also` / `cross_ref` / `citation` (Te Aka synonyms resolved to `target_entry_id`; Williams `‖` refs → `see_also` headword links + `citation` literature refs, e.g. `J. vii, 120`). Williams `see_also` rows are resolved to `target_entry_id` at build (3,490 / 4,230 = 83%): multi-target strings like `mataaho, tiaho` are split into one row each, `(i)`/`(ii)` sense pointers prefer the matching homograph, and cognate/citation/relative pointers (`Tah, ao`, `J. vii, 120`, `6, below`) stay NULL with the raw text kept in `note`. The app renders resolved rows as clickable links and unresolved rows as plain text |
 | `entry_domain` | 59,570 | subject / semantic-domain tags (`domain_lang` = mi/en) |
@@ -141,7 +141,7 @@ Key columns on `sense`:
 - `gloss_en` / `gloss_mi` — language-tagged gloss (see language-tagging note below).
 
 Language tagging (the core fix): He Pātaka Kupu glosses are **Māori** → `sense.gloss_mi`
-only; Te Aka/Williams/Papakupu → `gloss_en`; Paekupu is bilingual (both). Never infer the
+only; Te Aka/Williams/Papakupu/TaiKupu → `gloss_en`; Paekupu is bilingual (both). Never infer the
 gloss language from the source again.
 
 FTS over the core: `entry_fts(headword, headword_search)`, `sense_fts(gloss_en, gloss_mi,
@@ -582,7 +582,7 @@ By source: ABVD 1,807 · Tregear 186 · POLLEX 67 · Walworth 7. Joined via `lan
 
 Indexed on `subgroup`.
 
-### `ETY_level` — 90 rows (reference)
+### `ETY_level` — 87 rows (reference)
 
 The Austronesian → Polynesian subgrouping ladder — order the "levels above" axis and validate that an ancestor ranks strictly higher. Covers both the POLLEX 2-letter codes AND the ACD/LPO raw codes (`PAN, PMP, POc, PWMP, PPH`, Micronesian/Melanesian subgroups, …), so every `ETY_cognateset.level` resolves a `depth_rank`.
 
@@ -611,9 +611,9 @@ JOIN ETY_depth d ON d.depth_rank = l.depth_rank
 GROUP BY d.depth_rank ORDER BY d.depth_rank;
 ```
 
-### `ETY_link` — 2,230 rows (set ↔ set)
+### `ETY_link` — 2,076 rows (set ↔ set)
 
-Cross-set relations: ancestry 1,358, equivalence 872. By origin: `protoform_ancestry` 1,358, `etymology_links` 530, `dedup` 342 (cross-source protoform-key merges).
+Cross-set relations: `descends_from` 981, `same_as` 718, `cf` 377. By origin: `protoform_ancestry` 1,358, `etymology_links` 376, `dedup` 342 (cross-source protoform-key merges).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -629,12 +629,13 @@ Cross-set relations: ancestry 1,358, equivalence 872. By origin: `protoform_ance
 
 Indexed on `source_set_id`, `target_set_id`.
 
-### `ETY_entry_link` — 115,564 rows (reflex → unified `entry` bridge)
+### `ETY_entry_link` — 120,003 rows (reflex → unified `entry` bridge)
 
 Reverse bridge from a **Māori reflex** to a row in the unified `entry` table,
 matched by macron-neutral headword (`normalise_search_key`). This is how the app
-goes from *a word the user searched* to its proto-tree. By source: Tregear 61,789
-· POLLEX 48,243 · ABVD 4,588 · Walworth 944. Reaches 41,542 distinct entries.
+goes from *a word the user searched* to its proto-tree. By source: Tregear 64,243
+· POLLEX 49,967 · ABVD 4,804 · Walworth 989. Reaches 43,198 distinct entries
+(the S63 TaiKupu entries added new link targets).
 
 | Column | Type | Notes |
 |---|---|---|
@@ -716,9 +717,9 @@ Order ancestors by `ETY_level.depth_rank` (bigger = more recent); grey out tenta
 
 ## Supporting Tables
 
-### `source_metadata` — 13 rows
+### `source_metadata` — 14 rows
 
-Registry of all data sources (5 word-list sources + `personal` + the 7 etymology
+Registry of all data sources (6 word-list sources + `personal` + the 7 etymology
 sources: `pollex`, `pollex_cognatesets`, `lpo`, `acd`, `abvd`, `walworth`, `tregear`).
 
 | Column | Type |
@@ -748,7 +749,7 @@ Counts: Te Aka — 90, He Pātaka Kupu — 47, Williams — 8.
 
 **Note:** The `usage_examples` and `source_citations` text in Te Aka, Williams, and He Pātaka Kupu entries already has abbreviations expanded at import time. The app reads expanded text directly — no runtime expansion needed.
 
-### `cross_source_candidates` — 181,938 rows
+### `cross_source_candidates` — 200,892 rows
 
 Detected cross-source duplicate pairs — entries in two different dictionaries sharing the same normalised headword. Detected algorithmically, AI-reviewed by Claude Code, then optionally confirmed by a human reviewer. The app reads `approved` rows to surface "also in [source]" cross-links.
 
@@ -772,16 +773,21 @@ UNIQUE on `(source_a, entry_id_a, source_b, entry_id_b)`. Indexed on `status` an
 
 | Pair | Count |
 |---|---|
-| HPK × Te Aka | 58,318 |
+| HPK × Te Aka | 58,334 |
 | HPK × Williams | 31,003 |
-| Te Aka × Williams | 22,141 |
+| Te Aka × Williams | 22,142 |
 | HPK × Papakupu | 17,660 |
 | HPK × Paekupu | 14,508 |
 | Paekupu × Te Aka | 13,981 |
-| Papakupu × Te Aka | 11,595 |
+| Papakupu × Te Aka | 11,596 |
+| HPK × TaiKupu | 7,976 |
 | Papakupu × Williams | 5,455 |
+| TaiKupu × Te Aka | 5,243 |
 | Paekupu × Williams | 4,415 |
 | Paekupu × Papakupu | 2,862 |
+| TaiKupu × Williams | 2,281 |
+| Papakupu × TaiKupu | 2,100 |
+| Paekupu × TaiKupu | 1,336 |
 
 ### `cross_source_detection_runs`
 
@@ -943,7 +949,7 @@ WHERE headword_search = ?
 
 5. **Audio** — URLs are remote. Not bundled. Requires connectivity to play, or a separate offline audio download step.
 
-6. **DB size** — the app DB (`maori_dict.db`) is ~166 MB and already excludes the raw staging tables (it is the projection built by `scripts/60_export_app_db.py`). The unified etymology layer (`ETY_reflex` 256,402 rows, `ETY_entry_link` 115,564, `ETY_cognateset` 29,823) is the bulk of it; if etymology is not a UI feature, dropping the `ETY_*` tables from the export is the obvious further slim-down — remove them from `APP_TABLES` in `60_export_app_db.py`.
+6. **DB size** — the app DB (`maori_dict.db`) is ~166 MB and already excludes the raw staging tables (it is the projection built by `scripts/60_export_app_db.py`). The unified etymology layer (`ETY_reflex` 256,402 rows, `ETY_entry_link` 120,003, `ETY_cognateset` 29,823) is the bulk of it; if etymology is not a UI feature, dropping the `ETY_*` tables from the export is the obvious further slim-down — remove them from `APP_TABLES` in `60_export_app_db.py`.
 
 7. **WAL mode** — the DB uses WAL journal mode. Open with `PRAGMA journal_mode = WAL` if not already set; use a single shared connection per process.
 
