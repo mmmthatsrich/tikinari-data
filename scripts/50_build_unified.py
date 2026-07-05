@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import DB_PATH, normalise_search_key, compute_content_hash
 from williams_senses import split_senses
 from williams_xref import parse_see_also_targets
+from papakupu_gloss import clean_gloss
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -369,7 +370,11 @@ def build_papakupu(con, b):
                           locator=f"pdf p{pg}; src {sc}" if pg else sc,
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "vf": jload(vf), "sa": jload(sa), "lm": lm})
-        sid = b.add_sense(eid, None, d, None, d, part_of_speech=pos)
+        # gloss_en holds the definition only; the raw blob (def + examples + notes)
+        # is preserved in definition_raw. clean_gloss strips everything from the
+        # first example onward so example text never bleeds into the gloss.
+        gloss = clean_gloss(d, [e.get("text_mi") for e in examples])
+        sid = b.add_sense(eid, None, gloss, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)
