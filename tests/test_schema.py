@@ -5,12 +5,28 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import pytest
+
 # Allow imports from scripts/
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 
 from utils import normalise_search_key, normalise_sort_key
 
 DB_PATH = Path(__file__).parent.parent / "data" / "staging_dictionary.db"
+
+
+@pytest.fixture
+def conn():
+    """DB handle for the test_*(conn) functions when collected by pytest.
+
+    The script entry point (main(), run via `py tests/test_schema.py`) passes its
+    own connection explicitly and never triggers this fixture — so both run paths
+    work. Changes made by the FTS-trigger tests are self-deleted and never
+    committed here, so the connection rolls back on close.
+    """
+    c = sqlite3.connect(DB_PATH)
+    yield c
+    c.close()
 
 CONTENT_TABLES = [
     "williams_entries",
@@ -45,7 +61,7 @@ REQUIRED_COLUMNS = {
                                "created_at", "last_updated"],
     "te_aka_entries":        ["id", "headword", "headword_sort", "headword_search",
                                "part_of_speech", "definition", "usage_examples",
-                               "word_id", "definition_en", "definition_mi", "audio_url",
+                               "word_id", "senses", "audio_url",
                                "created_at", "last_updated"],
     "hepatakakupu_entries":  ["id", "headword", "headword_sort", "headword_search",
                                "part_of_speech", "definition", "usage_examples",
@@ -125,24 +141,31 @@ def test_columns(conn: sqlite3.Connection):
 def test_source_metadata(conn: sqlite3.Connection):
     rows = conn.execute("SELECT source_id FROM source_metadata").fetchall()
     present = {r[0] for r in rows}
-    assert present == SOURCE_IDS, f"source_metadata mismatch: {present} != {SOURCE_IDS}"
+    # SOURCE_IDS are the seven word-list sources that must always be present; the
+    # etymology/comparative sources (acd, lpo, tregear, abvd, walworth, …) are
+    # added by later sessions and allowed on top, so assert a subset not equality.
+    missing = SOURCE_IDS - present
+    assert not missing, f"source_metadata missing required word-list sources: {missing}"
     print("  source_metadata seeded OK")
 
 
 # ── Dummy row + FTS trigger tests ─────────────────────────────────────────────
 
 def test_williams_insert_fts(conn: sqlite3.Connection):
+    # Use a headword ('xqzstub') that cannot exist in the real corpus so the test
+    # is safe against the now-populated DB in both run paths (real rows also match
+    # 'cord', and the script path commits — deleting by a real headword would be
+    # data loss). Assert the stub appears among the FTS hits, not that it is first.
     conn.execute("""
         INSERT INTO williams_entries
             (headword, headword_sort, headword_search, definition, usage_examples)
-        VALUES ('āho', 'aho', 'aho', 'A line, cord.', '["Ko te āho o te hao."]')
+        VALUES ('xqzstub', 'xqzstub', 'xqzstub', 'A line, cord.', '["Ko te āho o te hao."]')
     """)
-    row = conn.execute(
+    hits = {r[0] for r in conn.execute(
         "SELECT headword FROM williams_fts WHERE williams_fts MATCH 'cord'"
-    ).fetchone()
-    assert row is not None, "FTS trigger did not index williams insert"
-    assert row[0] == "āho"
-    conn.execute("DELETE FROM williams_entries WHERE headword = 'āho'")
+    ).fetchall()}
+    assert "xqzstub" in hits, "FTS trigger did not index williams insert"
+    conn.execute("DELETE FROM williams_entries WHERE headword = 'xqzstub'")
     print("  williams insert -> FTS trigger OK")
 
 
@@ -153,14 +176,14 @@ def test_papakupu_insert_fts(conn: sqlite3.Connection):
         INSERT INTO papakupu_entries
             (headword, headword_sort, headword_search, definition,
              usage_examples, variant_forms, variant_search_keys)
-        VALUES ('āho', 'aho', 'aho', 'He aho, he taura.',
+        VALUES ('xqzstub', 'xqzstub', 'xqzstub', 'He aho, he taura.',
                 '[]', ?, ?)
     """, (variant_forms, variant_search_keys))
-    row = conn.execute(
+    hits = {r[0] for r in conn.execute(
         "SELECT headword FROM papakupu_fts WHERE papakupu_fts MATCH 'taura'"
-    ).fetchone()
-    assert row is not None, "FTS trigger did not index papakupu insert"
-    conn.execute("DELETE FROM papakupu_entries WHERE headword = 'āho'")
+    ).fetchall()}
+    assert "xqzstub" in hits, "FTS trigger did not index papakupu insert"
+    conn.execute("DELETE FROM papakupu_entries WHERE headword = 'xqzstub'")
     print("  papakupu insert -> FTS trigger OK")
 
 
@@ -168,13 +191,13 @@ def test_pollex_insert_fts(conn: sqlite3.Connection):
     conn.execute("""
         INSERT INTO pollex_entries
             (headword, headword_sort, headword_search, definition, usage_examples, protoform)
-        VALUES ('aho', 'aho', 'aho', 'Fishing line.', '[]', 'OC.ASO')
+        VALUES ('xqzstub', 'xqzstub', 'xqzstub', 'Fishing line.', '[]', 'OC.ASO')
     """)
-    row = conn.execute(
+    hits = {r[0] for r in conn.execute(
         "SELECT headword FROM pollex_fts WHERE pollex_fts MATCH 'Fishing'"
-    ).fetchone()
-    assert row is not None, "FTS trigger did not index pollex insert"
-    conn.execute("DELETE FROM pollex_entries WHERE headword = 'aho'")
+    ).fetchall()}
+    assert "xqzstub" in hits, "FTS trigger did not index pollex insert"
+    conn.execute("DELETE FROM pollex_entries WHERE headword = 'xqzstub'")
     print("  pollex insert -> FTS trigger OK")
 
 
@@ -182,37 +205,40 @@ def test_personal_insert_fts(conn: sqlite3.Connection):
     conn.execute("""
         INSERT INTO personal_lexicon
             (headword, headword_sort, headword_search, definition, usage_examples, tags)
-        VALUES ('aroha', 'aroha', 'aroha', 'Love, compassion.', '[]', '["emotion"]')
+        VALUES ('xqzstub', 'xqzstub', 'xqzstub', 'Love, compassion.', '[]', '["emotion"]')
     """)
-    row = conn.execute(
+    hits = {r[0] for r in conn.execute(
         "SELECT headword FROM personal_fts WHERE personal_fts MATCH 'compassion'"
-    ).fetchone()
-    assert row is not None, "FTS trigger did not index personal_lexicon insert"
-    conn.execute("DELETE FROM personal_lexicon WHERE headword = 'aroha'")
+    ).fetchall()}
+    assert "xqzstub" in hits, "FTS trigger did not index personal_lexicon insert"
+    conn.execute("DELETE FROM personal_lexicon WHERE headword = 'xqzstub'")
     print("  personal_lexicon insert -> FTS trigger OK")
 
 
 def test_stub_tables_insert(conn: sqlite3.Connection):
+    # Sentinel word_ids + a corpus-impossible headword so the inserts don't collide
+    # with real rows (te_aka/hepatakakupu word_id is UNIQUE) and the deletes can't
+    # touch real data in the committing script path.
     conn.execute("""
         INSERT INTO te_aka_entries
             (headword, headword_sort, headword_search, definition, usage_examples, word_id)
-        VALUES ('aroha', 'aroha', 'aroha', 'Love.', '[]', 1)
+        VALUES ('xqzstub', 'xqzstub', 'xqzstub', 'Love.', '[]', 900000001)
     """)
-    conn.execute("DELETE FROM te_aka_entries WHERE headword = 'aroha'")
+    conn.execute("DELETE FROM te_aka_entries WHERE word_id = 900000001")
 
     conn.execute("""
         INSERT INTO hepatakakupu_entries
             (headword, headword_sort, headword_search, definition, usage_examples, word_id)
-        VALUES ('aroha', 'aroha', 'aroha', 'He aroha.', '[]', 1)
+        VALUES ('xqzstub', 'xqzstub', 'xqzstub', 'He aroha.', '[]', 900000002)
     """)
-    conn.execute("DELETE FROM hepatakakupu_entries WHERE headword = 'aroha'")
+    conn.execute("DELETE FROM hepatakakupu_entries WHERE word_id = 900000002")
 
     conn.execute("""
         INSERT INTO paekupu_entries
-            (headword, headword_sort, headword_search, definition, usage_examples, subject_area)
-        VALUES ('pāngarau', 'pangarau', 'pangarau', 'Mathematics.', '[]', 'Pāngarau')
+            (slug, headword, headword_sort, headword_search, definition, usage_examples, subject_area)
+        VALUES ('xqzstub-slug', 'xqzstub', 'xqzstub', 'xqzstub', 'Mathematics.', '[]', 'Pāngarau')
     """)
-    conn.execute("DELETE FROM paekupu_entries WHERE headword = 'pāngarau'")
+    conn.execute("DELETE FROM paekupu_entries WHERE slug = 'xqzstub-slug'")
     print("  stub table inserts OK")
 
 

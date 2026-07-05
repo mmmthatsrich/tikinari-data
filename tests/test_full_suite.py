@@ -671,7 +671,9 @@ class TestEtymologyTables(unittest.TestCase):
         levels = {r[0] for r in self.conn.execute(
             "SELECT DISTINCT level FROM acd_cognatesets WHERE level IS NOT NULL"
         ).fetchall()}
-        for expected in ("PAN", "PMP", "POC"):
+        # ACD's raw all-caps PAN/POC are canonicalised at ingest (canonical_level)
+        # to the mixed-case node codes PAn/POc; PMP is already canonical.
+        for expected in ("PAn", "PMP", "POc"):
             self.assertIn(expected, levels, f"acd_cognatesets missing level {expected}")
 
     def test_acd_name_keys_populated(self):
