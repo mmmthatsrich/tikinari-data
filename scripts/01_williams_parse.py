@@ -119,11 +119,10 @@ def _sub_headword(p):
     return None
 
 
-def _build_entry(headword, head_elem, paragraphs, source_section, page_number,
-                 kind, parent_headword):
-    """Build one entry dict from its headword element and its own paragraphs."""
-    # Sense number and POS live in the tail of the headword element
-    tail = head_elem.tail or ""
+def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
+                 page_number, kind, parent_headword):
+    """Build one entry dict from pre-extracted strings."""
+    tail = head_tail or ""
 
     sense_number = ""
     roman_m = ROMAN_RE.match(tail)
@@ -134,25 +133,8 @@ def _build_entry(headword, head_elem, paragraphs, source_section, page_number,
     pos_m = POS_RE.match(tail)
     part_of_speech = pos_m.group(1) if pos_m else ""
 
-    # Usage examples = non-bold foreign mi spans within this entry's paragraphs.
-    # Cross-refs are NOT taken from bold spans any more — that capture was ~73%
-    # noise (sub-headwords, example fragments). Williams' real cross-ref notation
-    # is the '‖' marker, extracted from the definition text below via
-    # williams_xref.extract_xrefs.
-    usage_examples = []
-    for p in paragraphs:
-        for elem in p.iter("span"):
-            if elem.get("class") == "foreign" and elem.get("lang") == "mi":
-                ex = clean_text(elem.text_content())
-                if ex:
-                    usage_examples.append(ex)
-
-    para_texts = []
-    for p in paragraphs:
-        txt = clean_text(p.text_content())
-        if txt:
-            para_texts.append(txt)
-    full_text = " ".join(para_texts)
+    usage_examples = list(mi_examples)
+    full_text = " ".join(t for t in para_texts if t)
 
     # Strip headword prefix that appears at the start of the first paragraph
     if full_text.startswith(headword):
@@ -191,6 +173,23 @@ def _build_entry(headword, head_elem, paragraphs, source_section, page_number,
         "kind": kind,
         "parent_headword": parent_headword,
     }
+
+
+def _group_payload(g):
+    """Convert an element-based group to _build_entry's string inputs."""
+    elem = g["elem"]
+    head_tail = elem.tail or ""
+    para_texts, mi_examples = [], []
+    for p in g["paras"]:
+        txt = clean_text(p.text_content())
+        if txt:
+            para_texts.append(txt)
+        for sp in p.iter("span"):
+            if sp.get("class") == "foreign" and sp.get("lang") == "mi":
+                ex = clean_text(sp.text_content())
+                if ex:
+                    mi_examples.append(ex)
+    return g["headword"], head_tail, para_texts, mi_examples
 
 
 def parse_section_div(div, source_section, page_number):
@@ -246,7 +245,8 @@ def parse_section_div(div, source_section, page_number):
 
     entries = []
     for g in groups:
-        e = _build_entry(g["headword"], g["elem"], g["paras"], source_section,
+        hw, head_tail, para_texts, mi_examples = _group_payload(g)
+        e = _build_entry(hw, head_tail, para_texts, mi_examples, source_section,
                          page_number, g["kind"], g["parent"])
         if e:
             entries.append(e)
