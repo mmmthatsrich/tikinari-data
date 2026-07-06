@@ -76,6 +76,15 @@ SUBHEAD_POS_RE = re.compile(
     rf"^({_SUB_TOKEN}(?:, {_SUB_TOKEN})*), "
     r"(?:v\.t\.i|v\.t|v\.i|v|n|a|adv|ad|part|conj|prep|int|pron|num|suf|pref|loc)\.?$"
 )
+_POS_ALT = (r"(?:v\.t\.i|v\.t|v\.i|v|n|a|adv|ad|part|conj|prep|int|pron|num"
+            r"|suf|pref|loc)")
+# Bucket C: sub-head set as plain paragraph text — '<p>rainga, n. Undulation.'
+PLAIN_SUBHEAD_RE = re.compile(
+    rf"^({_SUB_TOKEN}(?:, {_SUB_TOKEN})*), ({_POS_ALT}\.) ")
+# Bucket D: POS and the first sense number both inside the bold —
+# '<b>māwhitiwhiti, n. 1</b>.'
+SUBHEAD_POS_NUM_RE = re.compile(
+    rf"^({_SUB_TOKEN}(?:, {_SUB_TOKEN})*), {_POS_ALT}\.? 1$")
 
 
 def _headword_span(hang_p):
@@ -102,6 +111,9 @@ def _sub_headword(p):
     # POS-in-bold first: '<b>whawhango, a</b>.' must read as headword+POS, not
     # as a variant list ('a'/'n' alone are valid-looking tokens).
     pm = SUBHEAD_POS_RE.match(word)
+    if pm:
+        return (pm.group(1), b)
+    pm = SUBHEAD_POS_NUM_RE.match(word)
     if pm:
         return (pm.group(1), b)
     if not SUBHEAD_RE.match(word):
