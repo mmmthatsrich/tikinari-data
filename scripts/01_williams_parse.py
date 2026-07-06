@@ -48,6 +48,7 @@ POS_RE = re.compile(
     r"|int\."
     r"|pron\."
     r"|particle"
+    r"|part\."
     r"|art\."
     r"|num\."
     r"|suf\."
@@ -63,32 +64,66 @@ def clean_text(text):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def parse_section_div(div, source_section, page_number):
-    """Parse one <div class="section"> into an entry dict, or None to skip."""
-    # Must have p.hang as a direct child
-    hang_p = None
-    for child in div:
-        if child.tag == "p" and child.get("class") == "hang":
-            hang_p = child
-            break
-    if hang_p is None:
-        return None
+# A sub-headword is a lowercase Māori token (optionally a comma-separated
+# variant list) printed bold at the very start of a paragraph, delimited by a
+# POS abbreviation ("piriahi, a. ...") or a numbered-sense run
+# ("whakapiri. 1. v.t. ...").
+_SUB_TOKEN = r"[a-zāēīōū][a-zāēīōū\-]*"
+SUBHEAD_RE = re.compile(rf"^{_SUB_TOKEN}(?:, {_SUB_TOKEN})*$")
+# Typesetting slip in ~14 places: the POS abbrev is bolded together with the
+# sub-headword, e.g. '<b>whakahenumi, v.t</b>.' — capture the headword part.
+SUBHEAD_POS_RE = re.compile(
+    rf"^({_SUB_TOKEN}(?:, {_SUB_TOKEN})*), "
+    r"(?:v\.t\.i|v\.t|v\.i|v|n|a|adv|ad|part|conj|prep|int|pron|num|suf|pref|loc)\.?$"
+)
 
-    # Headword = text of first span.foreign.bold[lang=mi] in the hang paragraph
-    hw_span = None
+
+def _headword_span(hang_p):
+    """First span.foreign.bold[lang=mi] in a hang paragraph, or None."""
     for elem in hang_p.iter("span"):
         if elem.get("class") == "foreign bold" and elem.get("lang") == "mi":
-            hw_span = elem
-            break
-    if hw_span is None:
-        return None
+            return elem
+    return None
 
-    headword = clean_text(hw_span.text_content())
-    if not headword:
-        return None
 
-    # Sense number and POS live in the tail of the headword span
-    tail = hw_span.tail or ""
+def _sub_headword(p):
+    """Return (headword, bold_elem) if this paragraph opens a sub-entry, else None."""
+    if clean_text(p.text or ""):
+        return None                       # e.g. '‖ <b>xref</b>.' paragraphs
+    b = next(iter(p), None)
+    if b is None:
+        return None
+    # Sub-headwords are usually <b>, but a handful are set like main headwords:
+    # <span class="foreign bold" lang="mi">ahatanga</span>, n. ...
+    if b.tag != "b" and not (b.tag == "span" and b.get("class") == "foreign bold"
+                             and b.get("lang") == "mi"):
+        return None
+    word = clean_text(b.text_content())
+    # POS-in-bold first: '<b>whawhango, a</b>.' must read as headword+POS, not
+    # as a variant list ('a'/'n' alone are valid-looking tokens).
+    pm = SUBHEAD_POS_RE.match(word)
+    if pm:
+        return (pm.group(1), b)
+    if not SUBHEAD_RE.match(word):
+        return None                       # numbered senses, phrases, capitals
+    tail = (b.tail or "").lstrip()
+    if tail.startswith(","):
+        return (word, b) if POS_RE.match(tail) else None
+    if tail.startswith("."):
+        rest = tail[1:].lstrip()
+        if rest:
+            return (word, b) if POS_RE.match(rest) else None
+        nxt = b.getnext()
+        if nxt is not None and nxt.tag == "b" and clean_text(nxt.text_content()) == "1":
+            return (word, b)
+    return None
+
+
+def _build_entry(headword, head_elem, paragraphs, source_section, page_number,
+                 kind, parent_headword):
+    """Build one entry dict from its headword element and its own paragraphs."""
+    # Sense number and POS live in the tail of the headword element
+    tail = head_elem.tail or ""
 
     sense_number = ""
     roman_m = ROMAN_RE.match(tail)
@@ -99,24 +134,24 @@ def parse_section_div(div, source_section, page_number):
     pos_m = POS_RE.match(tail)
     part_of_speech = pos_m.group(1) if pos_m else ""
 
-    # Usage examples = non-bold foreign mi spans. Cross-refs are NOT taken from
-    # bold spans any more — that capture was ~73% noise (sub-headwords, example
-    # fragments). Williams' real cross-ref notation is the '‖' marker, extracted
-    # from the definition text below via williams_xref.extract_xrefs.
+    # Usage examples = non-bold foreign mi spans within this entry's paragraphs.
+    # Cross-refs are NOT taken from bold spans any more — that capture was ~73%
+    # noise (sub-headwords, example fragments). Williams' real cross-ref notation
+    # is the '‖' marker, extracted from the definition text below via
+    # williams_xref.extract_xrefs.
     usage_examples = []
-    for elem in div.iter("span"):
-        if elem.get("class") == "foreign" and elem.get("lang") == "mi":
-            ex = clean_text(elem.text_content())
-            if ex:
-                usage_examples.append(ex)
+    for p in paragraphs:
+        for elem in p.iter("span"):
+            if elem.get("class") == "foreign" and elem.get("lang") == "mi":
+                ex = clean_text(elem.text_content())
+                if ex:
+                    usage_examples.append(ex)
 
-    # Build definition from all direct-child <p> elements
     para_texts = []
-    for child in div:
-        if child.tag == "p":
-            txt = clean_text(child.text_content())
-            if txt:
-                para_texts.append(txt)
+    for p in paragraphs:
+        txt = clean_text(p.text_content())
+        if txt:
+            para_texts.append(txt)
     full_text = " ".join(para_texts)
 
     # Strip headword prefix that appears at the start of the first paragraph
@@ -153,7 +188,88 @@ def parse_section_div(div, source_section, page_number):
         "cross_refs": cross_refs,
         "page_number": page_number,
         "source_section": source_section,
+        "kind": kind,
+        "parent_headword": parent_headword,
     }
+
+
+def parse_section_div(div, source_section, page_number):
+    """Parse one <div class="section"> into a list of entry dicts.
+
+    A printed section runs several entries together: the first p.hang is the
+    main headword ("kind": "main" — its position defines the stable
+    williams_entries.id), later p.hang paragraphs are further full headwords
+    ("kind": "hang", e.g. Pirikahu inside the Pirihonga div), and bold
+    lowercase paragraph-initial words with a POS/numbered-sense delimiter are
+    derivative sub-headwords ("kind": "sub", e.g. piriahi/whakapiri under
+    Piri). Every group keeps only its own paragraphs, so the parent's last
+    sense no longer swallows the sub-entries.
+    """
+    groups = []          # {"kind","headword","elem","paras","parent"}
+    current = None
+    main_hw = None
+    last_hang_hw = None
+
+    for child in div:
+        if child.tag != "p":
+            continue
+        if child.get("class") == "hang":
+            hw_span = _headword_span(child)
+            hw = clean_text(hw_span.text_content()) if hw_span is not None else ""
+            if hw:
+                kind = "main" if main_hw is None else "hang"
+                if main_hw is None:
+                    main_hw = hw
+                last_hang_hw = hw
+                current = {"kind": kind, "headword": hw, "elem": hw_span,
+                           "paras": [child],
+                           "parent": None if kind == "main" else main_hw}
+                groups.append(current)
+                continue
+            if main_hw is None:
+                # first hang has no headword span: unparseable div — skip it
+                # entirely, exactly as the pre-split parser did (id parity).
+                return []
+        elif main_hw is not None:
+            sub = _sub_headword(child)
+            if sub is not None:
+                word, b = sub
+                current = {"kind": "sub", "headword": word, "elem": b,
+                           "paras": [child], "parent": last_hang_hw}
+                groups.append(current)
+                continue
+        if current is not None:
+            current["paras"].append(child)
+
+    if not groups or groups[0]["kind"] != "main":
+        return []
+
+    entries = []
+    for g in groups:
+        e = _build_entry(g["headword"], g["elem"], g["paras"], source_section,
+                         page_number, g["kind"], g["parent"])
+        if e:
+            entries.append(e)
+
+    # Id parity: pre-split, a main whose own text was empty still produced an
+    # entry (the glued group text made it non-empty). Keep its positional slot
+    # with a synthesized pointer gloss to the recovered headwords.
+    if len(groups) > 1 and (not entries or entries[0]["kind"] != "main"):
+        others = [g["headword"] for g in groups[1:]]
+        g0 = groups[0]
+        entries.insert(0, {
+            "headword": g0["headword"],
+            "sense_number": "",
+            "part_of_speech": "",
+            "definition": "See " + ", ".join(others) + ".",
+            "usage_examples": [],
+            "cross_refs": [],
+            "page_number": page_number,
+            "source_section": source_section,
+            "kind": "main",
+            "parent_headword": None,
+        })
+    return entries
 
 
 def parse_file(filepath, source_section):
@@ -192,9 +308,7 @@ def parse_file(filepath, source_section):
         if kind == "pb":
             current_page = payload
         else:
-            entry = parse_section_div(payload, source_section, current_page)
-            if entry:
-                entries.append(entry)
+            entries.extend(parse_section_div(payload, source_section, current_page))
 
     return entries
 
