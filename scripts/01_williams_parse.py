@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from williams_xref import extract_xrefs
+from utils import normalise_search_key
 
 try:
     from lxml import html as lhtml
@@ -129,6 +130,105 @@ def _sub_headword(p):
         if nxt is not None and nxt.tag == "b" and clean_text(nxt.text_content()) == "1":
             return (word, b)
     return None
+
+
+_SENT_END_RE = re.compile(r'[.?!]["”)]?\s*$')
+
+
+def _strip_whaka(key):
+    return key[5:] if key.startswith("whaka") and len(key) > 7 else key
+
+
+def _related(candidate, parent):
+    """Derivative kinship: shared search-key prefix >=3 (whaka- dropped)."""
+    a = _strip_whaka(normalise_search_key(candidate))
+    b = _strip_whaka(normalise_search_key(parent))
+    if not a or not b:
+        return False
+    if a in b or b in a:
+        return True
+    common = 0
+    for x, y in zip(a, b):
+        if x != y:
+            break
+        common += 1
+    return common >= 3
+
+
+# bold text that is 'xref-list. newhead' — the split point is inside the bold
+_BOLD_TAIL_HEAD_RE = re.compile(
+    rf"^(.*\.)\s+({_SUB_TOKEN}(?:, {_SUB_TOKEN})*)$", re.DOTALL)
+
+
+def _split_midparagraph(p, parent_hw):
+    """Split one <p> at mid-paragraph derivative sub-heads (buckets A/B).
+
+    A bold child is a split point only when ALL THREE hold: the accumulated
+    preceding text ends a sentence; the bold (or its trailing token after an
+    'xref-list. ' prefix) is a lowercase token/variant list RELATED to the
+    governing headword; and a POS marker follows (in the tail, or already
+    inside the bold via SUBHEAD_POS_RE / SUBHEAD_POS_NUM_RE).
+
+    Returns a list of fragment dicts {"headword", "head_tail", "text"}.
+    Fragment 0 always has headword=None (the parent's own share of the
+    paragraph); if no split point is found it is the only fragment and its
+    "text" equals clean_text(p.text_content()) exactly. Text is accumulated
+    as raw (uncleaned) fragments and clean_text() is applied once at the end,
+    so no spurious whitespace is introduced at join points.
+    """
+    frags = [{"headword": None, "head_tail": "", "raw": p.text or ""}]
+
+    def _append(s):
+        if s:
+            frags[-1]["raw"] += s
+
+    def _append_spaced(s):
+        if not s:
+            return
+        raw = frags[-1]["raw"]
+        if raw and not raw[-1].isspace():
+            raw += " "
+        frags[-1]["raw"] = raw + s
+
+    for child in p:
+        sub_hw = None
+        keep_left = ""
+        head_tail = ""
+        if child.tag == "b":
+            word = clean_text(child.text_content())
+            tail = child.tail or ""
+            pm = SUBHEAD_POS_RE.match(word) or SUBHEAD_POS_NUM_RE.match(word)
+            if pm and _related(pm.group(1), parent_hw):
+                sub_hw = pm.group(1)
+                head_tail = word[len(sub_hw):] + tail   # ', a' + '. <rest>'
+            elif SUBHEAD_RE.match(word) and POS_RE.match(tail.lstrip()) \
+                    and _related(word, parent_hw):
+                sub_hw = word
+                head_tail = tail
+            else:
+                bm = _BOLD_TAIL_HEAD_RE.match(word)     # bucket B
+                if bm and POS_RE.match(tail.lstrip()) \
+                        and _related(bm.group(2), parent_hw):
+                    keep_left, sub_hw = bm.group(1), bm.group(2)
+                    head_tail = tail
+            if sub_hw is not None:
+                check_text = clean_text(frags[-1]["raw"])
+                if keep_left:
+                    check_text = (check_text + " " + keep_left).strip()
+                if not _SENT_END_RE.search(check_text):
+                    sub_hw = None                        # mid-sentence: keep glued
+        if sub_hw is None:
+            _append(child.text_content())
+            _append(child.tail)
+            continue
+        if keep_left:
+            _append_spaced(keep_left)
+        frags.append({"headword": sub_hw, "head_tail": head_tail, "raw": sub_hw})
+        _append(head_tail)
+
+    for f in frags:
+        f["text"] = clean_text(f.pop("raw"))
+    return frags
 
 
 def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
