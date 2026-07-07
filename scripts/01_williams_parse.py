@@ -100,7 +100,12 @@ def _headword_span(hang_p):
 
 
 def _sub_headword(p):
-    """Return (headword, bold_elem) if this paragraph opens a sub-entry, else None."""
+    """Return (headword, bold_elem, kind) if this paragraph opens a sub-entry,
+    else None. `kind` is "subx" only for bucket D (POS + bare sense-number
+    both fused inside the bold run, e.g. '<b>māwhitiwhiti, n. 1</b>'); every
+    other match is "sub", matching parse_section_div's classification so
+    callers don't need to re-derive it from the bold text themselves.
+    """
     if clean_text(p.text or ""):
         return None                       # e.g. '‖ <b>xref</b>.' paragraphs
     b = next(iter(p), None)
@@ -116,22 +121,22 @@ def _sub_headword(p):
     # as a variant list ('a'/'n' alone are valid-looking tokens).
     pm = SUBHEAD_POS_RE.match(word)
     if pm:
-        return (pm.group(1), b)
+        return (pm.group(1), b, "sub")
     pm = SUBHEAD_POS_NUM_RE.match(word)
     if pm:
-        return (pm.group(1), b)
+        return (pm.group(1), b, "subx")
     if not SUBHEAD_RE.match(word):
         return None                       # numbered senses, phrases, capitals
     tail = (b.tail or "").lstrip()
     if tail.startswith(","):
-        return (word, b) if POS_RE.match(tail) else None
+        return (word, b, "sub") if POS_RE.match(tail) else None
     if tail.startswith("."):
         rest = tail[1:].lstrip()
         if rest:
-            return (word, b) if POS_RE.match(rest) else None
+            return (word, b, "sub") if POS_RE.match(rest) else None
         nxt = b.getnext()
         if nxt is not None and nxt.tag == "b" and clean_text(nxt.text_content()) == "1":
-            return (word, b)
+            return (word, b, "sub")
     return None
 
 
@@ -143,7 +148,17 @@ def _strip_whaka(key):
 
 
 def _related(candidate, parent):
-    """Derivative kinship: shared search-key prefix >=3 (whaka- dropped)."""
+    """Derivative kinship: shared search-key prefix >=3 (whaka- dropped).
+
+    Identity on the RAW (un-whaka-stripped) search key is rejected before
+    any stripping: a dialect-cognate citation that merely restates the
+    parent's own headword (e.g. 'Ta. nawai' under parent 'Nāwai' — both
+    normalise to the same key) is not a derivative. This check must run
+    BEFORE _strip_whaka so genuine derivatives like whakawari/Wari, which
+    become equal only AFTER the whaka- prefix is dropped, still pass.
+    """
+    if normalise_search_key(candidate) == normalise_search_key(parent):
+        return False
     a = _strip_whaka(normalise_search_key(candidate))
     b = _strip_whaka(normalise_search_key(parent))
     if not a or not b:
@@ -268,8 +283,17 @@ def _split_midparagraph(p, parent_hw):
 
 
 def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
-                 page_number, kind, parent_headword):
-    """Build one entry dict from pre-extracted strings."""
+                 page_number, kind, parent_headword, fused_sense_num=None):
+    """Build one entry dict from pre-extracted strings.
+
+    `fused_sense_num` is an explicit opt-in used ONLY by the bucket-D
+    construction path in `_group_payload`/`parse_section_div`, for the rare
+    shape where the source fuses POS and the first sense number together
+    INSIDE one bold run ('<b>māwhitiwhiti, n. 1</b>'). It must stay None
+    for every other caller: a bare digit immediately following the POS is
+    the ordinary (and common) way Williams prints an entry's first sense
+    number in plain text, and that convention must be left untouched.
+    """
     tail = head_tail or ""
 
     sense_number = ""
@@ -296,6 +320,11 @@ def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
         # Strip POS if it's right at the start
         if part_of_speech and full_text.startswith(part_of_speech):
             full_text = full_text[len(part_of_speech):].strip()
+            if fused_sense_num and not sense_number:
+                dm = re.match(re.escape(fused_sense_num) + r"\.\s*", full_text)
+                if dm:
+                    sense_number = fused_sense_num
+                    full_text = full_text[dm.end():]
 
     definition = clean_text(full_text)
     definition, cross_refs = extract_xrefs(definition)
@@ -324,9 +353,30 @@ def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
 
 
 def _group_payload(g):
-    """Convert an element-based group to _build_entry's string inputs."""
+    """Convert an element-based group to _build_entry's string inputs.
+
+    Returns (headword, head_tail, para_texts, mi_examples, fused_sense_num).
+    fused_sense_num is "1" only for bucket D — where the source fuses POS
+    and the first sense number INSIDE the same bold run
+    ('<b>māwhitiwhiti, n. 1</b>') — else None. It is passed straight through
+    to _build_entry's opt-in parameter of the same name.
+    """
     elem = g["elem"]
-    head_tail = elem.tail or ""
+    tail = elem.tail or ""
+    fused_sense_num = None
+    if elem.tag == "b":
+        # Bucket D: POS + bare sense-number fused INSIDE the bold run itself
+        # ('<b>māwhitiwhiti, n. 1</b>') rather than following it in the
+        # tail. Only this exact shape (SUBHEAD_POS_NUM_RE) is recovered
+        # here: bucket-D's plain POS-in-bold sibling (SUBHEAD_POS_RE, e.g.
+        # '<b>whawhango, a</b>.') is intentionally left alone — those are
+        # frozen S65 'sub' entries, not this session's 'subx' recoveries.
+        bold_text = clean_text(elem.text_content())
+        pm = SUBHEAD_POS_NUM_RE.match(bold_text)
+        if pm and pm.group(1) == g["headword"]:
+            tail = bold_text[len(pm.group(1)):] + tail
+            fused_sense_num = "1"
+    head_tail = tail
     para_texts, mi_examples = [], []
     for p in g["paras"]:
         txt = clean_text(p.text_content())
@@ -337,7 +387,7 @@ def _group_payload(g):
                 ex = clean_text(sp.text_content())
                 if ex:
                     mi_examples.append(ex)
-    return g["headword"], head_tail, para_texts, mi_examples
+    return g["headword"], head_tail, para_texts, mi_examples, fused_sense_num
 
 
 def parse_section_div(div, source_section, page_number):
@@ -380,9 +430,7 @@ def parse_section_div(div, source_section, page_number):
         elif main_hw is not None:
             sub = _sub_headword(child)
             if sub is not None:
-                word, b = sub
-                bold_text = clean_text(b.text_content())
-                kind = "subx" if SUBHEAD_POS_NUM_RE.match(bold_text) else "sub"
+                word, b, kind = sub
                 current = {"kind": kind, "headword": word, "elem": b,
                            "paras": [child], "parent": last_hang_hw}
                 groups.append(current)
@@ -411,7 +459,7 @@ def parse_section_div(div, source_section, page_number):
             if e:
                 entries.append(e)
             continue
-        hw, head_tail, _texts_unused, mi_examples = _group_payload(g)
+        hw, head_tail, _texts_unused, mi_examples, fused_sense_num = _group_payload(g)
         own_texts, extra = [], []
         for p in g["paras"]:
             frags = _split_midparagraph(p, hw)
@@ -419,7 +467,8 @@ def parse_section_div(div, source_section, page_number):
                 own_texts.append(frags[0]["text"])
             extra.extend(frags[1:])
         e = _build_entry(hw, head_tail, own_texts, mi_examples,
-                         source_section, page_number, g["kind"], g["parent"])
+                         source_section, page_number, g["kind"], g["parent"],
+                         fused_sense_num=fused_sense_num)
         if e:
             entries.append(e)
         for fr in extra:

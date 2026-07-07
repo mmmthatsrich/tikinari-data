@@ -55,6 +55,19 @@ class TestRelated(unittest.TestCase):
         self.assertFalse(wparse._related("kereru", "Hinu"))
         self.assertFalse(wparse._related("titoki", "Topi"))
 
+    def test_identity_is_not_kinship(self):
+        # 'nawai' (Ta. dialect-cognate citation) vs 'Nāwai' (the parent
+        # headword): normalise_search_key() maps both to the same key, so
+        # the old 'a in b or b in a' test trivially passed on identity alone.
+        # A citation restating the parent's own headword is not a
+        # derivative and must not split off into its own entry.
+        self.assertFalse(wparse._related("nawai", "Nāwai"))
+
+    def test_whaka_stripped_identity_still_passes(self):
+        # Must NOT regress: whakawari/Wari become equal only AFTER
+        # whaka-stripping, and that must still count as kinship.
+        self.assertTrue(wparse._related("whakawari", "Wari"))
+
 
 class TestMidParagraphSplit(unittest.TestCase):
     def test_bucket_a_bold_after_sentence(self):     # Hinu / whakahinuhinu
@@ -112,6 +125,32 @@ class TestMidParagraphSplit(unittest.TestCase):
         self.assertIsNone(frags[0]["headword"])
         self.assertEqual(frags[0]["text"], wparse.clean_text(p.text_content()))
 
+    def test_pm_branch_pos_embedded_in_bold(self):     # Henumi / whakahenumi
+        # Bold carries the sub-headword AND its POS fused together
+        # ('<b>whakahenumi, v.t</b>.'), matched via SUBHEAD_POS_RE (the
+        # 'pm' branch), after a sentence-final prefix, with a
+        # kinship-passing parent.
+        p = _p('<p>Kua henumi nga uwhi ki raro ki te whenua. '
+               '<b>whakahenumi, v.t</b>. <i>Cause to disappear</i>, etc.</p>')
+        frags = wparse._split_midparagraph(p, "Henumi")
+        self.assertEqual(len(frags), 2)
+        self.assertEqual(frags[1]["headword"], "whakahenumi")
+        self.assertTrue(frags[1]["head_tail"].lstrip().startswith(", v.t")
+                        or frags[1]["head_tail"].lstrip().startswith("v.t"))
+
+    def test_nawai_citation_not_split(self):
+        # Reproduces sources/williams/raw/section_N.html around line 1145:
+        # a Taranaki dialect-cognate citation '‖ Ta. nawai, v., hold out,
+        # last.' inside the paragraph belonging to parent headword 'Nāwai'.
+        # normalise_search_key('nawai') == normalise_search_key('Nāwai'), so
+        # this must NOT be treated as a derivative sub-headword split.
+        p = _p('<p>Nawai i po, i po, a, ka marama (T. 16). '
+               '‖ Ta. <b>nawai</b>, v., <i>hold out, last</i>.</p>')
+        frags = wparse._split_midparagraph(p, "Nāwai")
+        self.assertEqual(len(frags), 1)
+        self.assertIsNone(frags[0]["headword"])
+        self.assertIn("nawai, v., hold out, last", frags[0]["text"])
+
     def test_citation_form_does_not_suppress_split(self):
         # '(W. v, 57)' is an ordinary citation, not a homonym restart: the
         # paren holds a comma+page-number, and it isn't preceded by a
@@ -152,6 +191,27 @@ class TestParseSectionDivSubx(unittest.TestCase):
         self.assertEqual([e["headword"] for e in es], ["Rai", "rainga"])
         self.assertEqual(es[1]["kind"], "subx")
         self.assertEqual(es[1]["part_of_speech"], "n.")
+
+    def test_mawhitiwhiti_pos_and_sense_number_not_leaked(self):  # bucket D
+        # Reproduces sources/williams/raw/section_M.html: 'Mawhiti' governs a
+        # bucket-D subx sub-headword whose bold run fuses the sub-headword,
+        # its POS, AND the first sense number together:
+        # '<b>māwhitiwhiti, n. 1</b>. <i>Grasshopper</i>.' Neither the POS
+        # nor the '1' may leak into the gloss; the multi-sense structure of
+        # the second paragraph ('2. A marine crustacean...') is preserved.
+        div_html = ('<div class="section"><p class="hang">'
+                    '<span class="foreign bold" lang="mi">Mawhiti</span>. '
+                    '<b>1</b>. v.i. <i>Leap, skip</i>.</p>'
+                    '<p><b>māwhitiwhiti, n. 1</b>. <i>Grasshopper</i>.</p>'
+                    '<p><b>2</b>. A marine crustacean. = '
+                    '<b>mawhiti, 4</b>.</p></div>')
+        es = self._entries(div_html)
+        sub = next(e for e in es if e["headword"] == "māwhitiwhiti")
+        self.assertEqual(sub["kind"], "subx")
+        self.assertEqual(sub["part_of_speech"], "n.")
+        self.assertEqual(sub["sense_number"], "1")
+        self.assertTrue(sub["definition"].startswith("Grasshopper"), sub["definition"])
+        self.assertIn("2. A marine crustacean", sub["definition"])
 
 
 class TestImportBandIds(unittest.TestCase):

@@ -104,8 +104,8 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 
 | Table | Rows | What it holds |
 |---|---|---|
-| `entry` | 111,206 | one row per source headword-entry; provenance kept (not merged across sources) |
-| `sense` | 132,418 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
+| `entry` | 111,205 | one row per source headword-entry; provenance kept (not merged across sources) |
+| `sense` | 132,416 | `gloss_en` **and** `gloss_mi` (language-tagged), `definition_raw`, `sense_number`, `part_of_speech` |
 | `example` | 92,690 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
 | `relation` | 107,870 | `synonym` / `see_also` / `cross_ref` / `citation` (Te Aka synonyms resolved to `target_entry_id`; Williams `‖` refs → `see_also` headword links + `citation` literature refs, e.g. `J. vii, 120`). Williams `see_also` rows are resolved to `target_entry_id` at build (3,490 / 4,230 = 83%): multi-target strings like `mataaho, tiaho` are split into one row each, `(i)`/`(ii)` sense pointers prefer the matching homograph, and cognate/citation/relative pointers (`Tah, ao`, `J. vii, 120`, `6, below`) stay NULL with the raw text kept in `note`. The app renders resolved rows as clickable links and unresolved rows as plain text |
@@ -130,8 +130,8 @@ Key columns on `entry`:
 
 Key columns on `sense`:
 - `sense_number` — 1-based integer ordering within the entry. **Williams and Te Aka are multi-sense**:
-  numbered senses are split into separate `sense` rows under a single `entry`. Williams: 14,943
-  entries → 24,558 senses (avg 1.64). Te Aka: 47,888 entries → 59,485 senses (avg 1.24); exact
+  numbered senses are split into separate `sense` rows under a single `entry`. Williams: 14,942
+  entries → 24,556 senses (avg 1.64). Te Aka: 47,888 entries → 59,485 senses (avg 1.24); exact
   duplicate senses in the source are collapsed and survivors renumbered 1..n.
 - `part_of_speech` — per-sense POS, drawn from the source. Williams: inline abbreviation expanded
   to a canonical English label (e.g. `n.` → `Noun`). Te Aka: the genuine per-sense POS recovered
@@ -160,7 +160,7 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 
 > Note: Papakupu examples are bilingual — `example.text_mi` (Māori) and `example.text_en`
 > (English) are both populated (10,071 of 10,211 have text_mi; the Māori half is recovered
-> by an orthography heuristic at extraction). Williams (24,558 senses / 14,943 entries) and
+> by an orthography heuristic at extraction). Williams (24,556 senses / 14,942 entries) and
 > Te Aka (59,485 senses / 47,888 entries)
 > are multi-sense with per-sense POS and per-sense examples; the remaining sources are
 > one-sense-per-entry.
@@ -171,7 +171,7 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 
 | Source ID | Display Name | Entries | Licence | Notes |
 |---|---|---|---|---|
-| `williams` | Williams Dictionary (1844/1971) | 14,943 | CC BY-SA 3.0 NZ | Open licence; primary source |
+| `williams` | Williams Dictionary (1844/1971) | 14,942 | CC BY-SA 3.0 NZ | Open licence; primary source |
 | `papakupu` | Papakupu o Tai Tokerau | 4,683 | **For Private Use Only** | Northland dialect; do NOT distribute |
 | `taikupu` | Papakupu o Tai Tokerau | 2,265 | Used with permission | Ngāpuhi vocab (Māori Minute); shown under the Papakupu banner (same `display_name`); Tai Tokerau dialect |
 | `pollex` | POLLEX-Online (Māori reflexes) | 3,424 | Permission pending | Etymological; Māori subset |
@@ -183,19 +183,19 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 | `lpo` | Lexicon of Proto Oceanic | 2,820 | CC-BY-4.0 | Etymology layer |
 | `acd` | Austronesian Comparative Dictionary | 10,857 | CC-BY-4.0 | Etymology layer |
 
-**Total searchable entries across dictionary sources: ~111,000** (unified `entry` = 111,206)
+**Total searchable entries across dictionary sources: ~111,000** (unified `entry` = 111,205)
 
 ---
 
 ## Dictionary Tables
 
-### `williams_entries` — 14,943 rows
+### `williams_entries` — 14,942 rows
 
 Williams 1957 dictionary, sourced from NZETC TEI HTML. English definitions, usage examples. Plain ASCII headwords (the source inconsistently uses macrons — many headwords lack them, e.g. `Aho` not `āho`). The `headword_search` normalisation handles this transparently.
 
 | Column | Type | Notes |
 |---|---|---|
-| `id` | INTEGER PK | Deterministic, assigned by `assign_ids()` in `01_williams_import.py`: main headwords 1–11,910 (positional, stable across re-imports); recovered sub-/hang-headwords (paragraph-initial, S65) `1_000_000 + parent_main_id*100 + k` for `k = 1..49` (e.g. `piriahi` = 1694401 under `Piri` 6944); `subx` mid-paragraph recoveries (glued behind the parent's prose, S66) take the same formula with `k = 50 + j` (`j` 1-based per parent, e.g. `whakahinuhinu` = 1000000 + `Hinu`'s main id \*100 + 51). Referenced by `cross_source_candidates` and the device id — never renumbered. |
+| `id` | INTEGER PK | Deterministic, assigned by `assign_ids()` in `01_williams_import.py`: main headwords 1–11,910 (positional, stable across re-imports); recovered sub-/hang-headwords (paragraph-initial, S65) `1_000_000 + parent_main_id*100 + k` for `k = 1..49` (e.g. `piriahi` = 1694401 under `Piri` 6944); `subx` mid-paragraph recoveries (glued behind the parent's prose, S66) take the same formula with `k = 50 + j` (`j` 1-based per parent, e.g. `whakahinuhinu` = 1000000 + `Hinu`'s main id \*100 + 51; 37 rows post-S66-fix — a same-session false-positive split (`nawai`, a Taranaki dialect-cognate citation misread as a derivative of `Nāwai` because `_related()` trivially passed on raw-key identity) was reclaimed back into its parent and never occupied a stable id). Referenced by `cross_source_candidates` and the device id — never renumbered. |
 | `headword` | TEXT | Display text; often lacks macrons |
 | `headword_sort` | TEXT | Indexed; macrons stripped |
 | `headword_search` | TEXT | Indexed; macrons stripped + double vowels collapsed |
