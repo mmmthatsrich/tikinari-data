@@ -80,8 +80,11 @@ SUBHEAD_POS_RE = re.compile(
 _POS_ALT = (r"(?:v\.t\.i|v\.t|v\.i|v|n|a|adv|ad|part|conj|prep|int|pron|num"
             r"|suf|pref|loc)")
 # Bucket C: sub-head set as plain paragraph text — '<p>rainga, n. Undulation.'
+# Lookahead (not a consumed literal) so the boundary still matches once the
+# paragraph's leading text node has been through clean_text() and its
+# trailing space (before a following <i> child) has been stripped away.
 PLAIN_SUBHEAD_RE = re.compile(
-    rf"^({_SUB_TOKEN}(?:, {_SUB_TOKEN})*), ({_POS_ALT}\.) ")
+    rf"^({_SUB_TOKEN}(?:, {_SUB_TOKEN})*), ({_POS_ALT}\.)(?=\s|$)")
 # Bucket D: POS and the first sense number both inside the bold —
 # '<b>māwhitiwhiti, n. 1</b>.'
 SUBHEAD_POS_NUM_RE = re.compile(
@@ -345,8 +348,18 @@ def parse_section_div(div, source_section, page_number):
             sub = _sub_headword(child)
             if sub is not None:
                 word, b = sub
-                current = {"kind": "sub", "headword": word, "elem": b,
+                bold_text = clean_text(b.text_content())
+                kind = "subx" if SUBHEAD_POS_NUM_RE.match(bold_text) else "sub"
+                current = {"kind": kind, "headword": word, "elem": b,
                            "paras": [child], "parent": last_hang_hw}
+                groups.append(current)
+                continue
+            ptext = clean_text(child.text or "")
+            pmm = PLAIN_SUBHEAD_RE.match(ptext)
+            if pmm and _related(pmm.group(1), last_hang_hw):
+                current = {"kind": "subx", "headword": pmm.group(1),
+                           "plain_p": child, "paras": [child],
+                           "parent": last_hang_hw}
                 groups.append(current)
                 continue
         if current is not None:
@@ -357,11 +370,30 @@ def parse_section_div(div, source_section, page_number):
 
     entries = []
     for g in groups:
-        hw, head_tail, para_texts, mi_examples = _group_payload(g)
-        e = _build_entry(hw, head_tail, para_texts, mi_examples, source_section,
-                         page_number, g["kind"], g["parent"])
+        if "plain_p" in g:                      # bucket C: strings direct
+            ptext = clean_text(g["plain_p"].text_content())
+            head_tail = ptext[len(g["headword"]):]
+            e = _build_entry(g["headword"], head_tail, [ptext], [],
+                             source_section, page_number, "subx", g["parent"])
+            if e:
+                entries.append(e)
+            continue
+        hw, head_tail, _texts_unused, mi_examples = _group_payload(g)
+        own_texts, extra = [], []
+        for p in g["paras"]:
+            frags = _split_midparagraph(p, hw)
+            if frags[0]["text"]:
+                own_texts.append(frags[0]["text"])
+            extra.extend(frags[1:])
+        e = _build_entry(hw, head_tail, own_texts, mi_examples,
+                         source_section, page_number, g["kind"], g["parent"])
         if e:
             entries.append(e)
+        for fr in extra:
+            se = _build_entry(fr["headword"], fr["head_tail"], [fr["text"]], [],
+                              source_section, page_number, "subx", hw)
+            if se:
+                entries.append(se)
 
     # Id parity: pre-split, a main whose own text was empty still produced an
     # entry (the glued group text made it non-empty). Keep its positional slot

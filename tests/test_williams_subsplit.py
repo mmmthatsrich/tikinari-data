@@ -99,5 +99,35 @@ class TestMidParagraphSplit(unittest.TestCase):
         self.assertEqual(frags[0]["text"], wparse.clean_text(p.text_content()))
 
 
+class TestParseSectionDivSubx(unittest.TestCase):
+    def _entries(self, div_html):
+        div = lhtml.fromstring(div_html)
+        return wparse.parse_section_div(div, "T", 1)
+
+    def test_hinu_shape_end_to_end(self):
+        div_html = ('<div class="section"><p class="hang">'
+                    '<span class="foreign bold" lang="mi">Hinu</span>, n. '
+                    '<b>1</b>. <i>Oil, fat</i>.</p>'
+                    '<p>Ka ki te taha i te hinu. <b>whakahinuhinu</b>, a. '
+                    '<i>Glossy</i>.</p></div>')
+        es = self._entries(div_html)
+        self.assertEqual([e["headword"] for e in es], ["Hinu", "whakahinuhinu"])
+        self.assertEqual(es[1]["kind"], "subx")
+        self.assertEqual(es[1]["parent_headword"], "Hinu")
+        self.assertEqual(es[1]["part_of_speech"], "a.")
+        self.assertNotIn("whakahinuhinu", es[0]["definition"])
+        self.assertIn("Glossy", es[1]["definition"])
+
+    def test_rai_plain_paragraph_end_to_end(self):   # bucket C
+        div_html = ('<div class="section"><p class="hang">'
+                    '<span class="foreign bold" lang="mi">Rai</span>, rarai, a. '
+                    '<i>Ribbed, furrowed</i>.</p>'
+                    '<p>rainga, n. <i>Undulation</i>.</p></div>')
+        es = self._entries(div_html)
+        self.assertEqual([e["headword"] for e in es], ["Rai", "rainga"])
+        self.assertEqual(es[1]["kind"], "subx")
+        self.assertEqual(es[1]["part_of_speech"], "n.")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
