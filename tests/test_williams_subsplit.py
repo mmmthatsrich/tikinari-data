@@ -98,6 +98,31 @@ class TestMidParagraphSplit(unittest.TestCase):
         self.assertEqual(len(frags), 1)
         self.assertEqual(frags[0]["text"], wparse.clean_text(p.text_content()))
 
+    def test_roman_homonym_restart_suppresses_whole_split(self):
+        # houhou/whakahouhou (source_entry_id 1146001): a legit kinship-guarded
+        # split candidate (whakahinuhinu) is followed, later in the SAME
+        # paragraph, by a capitalized roman-numeral homonym restart ('Hou
+        # (vi) = hoi, a. Distant.'). Attribution of text after such a restart
+        # is unknowable, so the whole paragraph must stay glued: 1 fragment.
+        p = _p('<p>Ka ki te taha i te hinu ka whaiwaewaetia. '
+               '<b>whakahinuhinu</b>, a. <i>Glossy</i>. '
+               'Hou (vi) = hoi, a. <i>Distant</i>. Kaore he wai.</p>')
+        frags = wparse._split_midparagraph(p, "Hinu")
+        self.assertEqual(len(frags), 1)
+        self.assertIsNone(frags[0]["headword"])
+        self.assertEqual(frags[0]["text"], wparse.clean_text(p.text_content()))
+
+    def test_citation_form_does_not_suppress_split(self):
+        # '(W. v, 57)' is an ordinary citation, not a homonym restart: the
+        # paren holds a comma+page-number, and it isn't preceded by a
+        # capitalized Māori word. Must not suppress a legitimate split.
+        p = _p('<p>Ka ki te taha i te hinu ka whaiwaewaetia, ka tataia ki te '
+               'huruhuru kereru. <b>whakahinuhinu</b>, a. <i>Glossy</i> '
+               '(W. v, 57).</p>')
+        frags = wparse._split_midparagraph(p, "Hinu")
+        self.assertEqual(len(frags), 2)
+        self.assertEqual(frags[1]["headword"], "whakahinuhinu")
+
 
 class TestParseSectionDivSubx(unittest.TestCase):
     def _entries(self, div_html):

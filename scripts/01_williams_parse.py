@@ -162,6 +162,30 @@ def _related(candidate, parent):
 _BOLD_TAIL_HEAD_RE = re.compile(
     rf"^(.*\.)\s+({_SUB_TOKEN}(?:, {_SUB_TOKEN})*)$", re.DOTALL)
 
+# A capitalized roman-numeral homonym restart mid-paragraph, e.g.
+# 'Hou (vi) = hoi, a.' or 'Hou (v), houhou, a.' — a fresh headword the
+# printed dictionary set without its own <p.hang>. Attribution of any text
+# after such a restart is unknowable, so a paragraph containing one must
+# never be split at all (accepted residue; see houhou/whakahouhou, S_ENTRY
+# 1146001). Anchored on a capitalized Māori word immediately before the
+# parens so ordinary citations like '(W. v, 57)' (preceded by 'W.', and
+# holding a comma+number rather than bare roman digits) never match.
+_ROMAN_HOMONYM_RESTART_RE = re.compile(
+    r"[A-ZĀĒĪŌŪ][a-zāēīōū]+ \([ivxlc]+\)\s*[,=]")
+
+
+def _has_roman_homonym_restart(full_text):
+    """True if a restart appears strictly INSIDE the paragraph.
+
+    A match at position 0 is not a restart: it is the paragraph's own
+    governing headword ('Māti (ii), a. Surfeited...' for the hang paragraph
+    that opens the 'Māti' homonym) and must not suppress splitting.
+    """
+    for m in _ROMAN_HOMONYM_RESTART_RE.finditer(full_text):
+        if m.start() > 0:
+            return True
+    return False
+
 
 def _split_midparagraph(p, parent_hw):
     """Split one <p> at mid-paragraph derivative sub-heads (buckets A/B).
@@ -178,7 +202,16 @@ def _split_midparagraph(p, parent_hw):
     "text" equals clean_text(p.text_content()) exactly. Text is accumulated
     as raw (uncleaned) fragments and clean_text() is applied once at the end,
     so no spurious whitespace is introduced at join points.
+
+    Exception: if the paragraph contains a capitalized roman-numeral homonym
+    restart anywhere (see _ROMAN_HOMONYM_RESTART_RE), the whole paragraph is
+    returned as a single unsplit fragment regardless of any split points
+    that would otherwise be found.
     """
+    full_text = clean_text(p.text_content())
+    if _has_roman_homonym_restart(full_text):
+        return [{"headword": None, "head_tail": "", "text": full_text}]
+
     frags = [{"headword": None, "head_tail": "", "raw": p.text or ""}]
 
     def _append(s):
