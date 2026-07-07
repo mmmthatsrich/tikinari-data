@@ -154,5 +154,20 @@ class TestParseSectionDivSubx(unittest.TestCase):
         self.assertEqual(es[1]["part_of_speech"], "n.")
 
 
+class TestImportBandIds(unittest.TestCase):
+    def test_subx_band(self):
+        imp = importlib.import_module("01_williams_import")
+        base = {"definition": "x", "part_of_speech": "", "usage_examples": [],
+                "cross_refs": [], "sense_number": "", "page_number": 1,
+                "source_section": "P"}
+        entries = [dict(base, headword="Piri",    kind="main"),
+                   dict(base, headword="piriahi", kind="sub"),
+                   dict(base, headword="pirix",   kind="subx"),
+                   dict(base, headword="Pirir",   kind="main"),
+                   dict(base, headword="pirisubx", kind="subx")]
+        self.assertEqual(imp.assign_ids(entries),
+                         [1, 1000101, 1000151, 2, 1000251])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

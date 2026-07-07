@@ -15,6 +15,33 @@ JSON_PATH = (
 )
 
 
+def assign_ids(entries):
+    """Deterministic williams_entries ids. mains: 1..N positional.
+    sub/hang: 1_000_000 + main*100 + k (k=1..49, S65 scheme — frozen).
+    subx (mid-paragraph recoveries, S66): same formula, k = 50 + j."""
+    ids, main_seq, sub_k, subx_j = [], 0, 0, 0
+    for e in entries:
+        kind = e.get("kind", "main")
+        if kind == "main":
+            main_seq += 1
+            sub_k = subx_j = 0
+            ids.append(main_seq)
+            continue
+        if main_seq == 0:
+            raise ValueError(f"sub-entry before any main: {e['headword']}")
+        if kind == "subx":
+            subx_j += 1
+            if subx_j > 49:
+                raise ValueError(f"over 49 subx under main id {main_seq}")
+            ids.append(1_000_000 + main_seq * 100 + 50 + subx_j)
+        else:
+            sub_k += 1
+            if sub_k > 49:
+                raise ValueError(f"over 49 sub-entries under main id {main_seq}")
+            ids.append(1_000_000 + main_seq * 100 + sub_k)
+    return ids
+
+
 def import_williams(conn: sqlite3.Connection, entries: list) -> int:
     conn.execute("DELETE FROM williams_entries")
 
@@ -26,22 +53,10 @@ def import_williams(conn: sqlite3.Connection, entries: list) -> int:
     # 1..N — identical to the pre-split rowids (the parser preserves the main
     # sequence). Recovered sub-/hang-entries get 1_000_000 + main_id*100 + k
     # (k = order within the parent's section), collision-free and stable across
-    # re-runs.
+    # re-runs. subx (mid-paragraph recoveries) take k = 50 + j — see assign_ids.
+    eids = assign_ids(entries)
     rows = []
-    main_seq = 0
-    sub_k = 0
-    for e in entries:
-        if e.get("kind", "main") == "main":
-            main_seq += 1
-            sub_k = 0
-            eid = main_seq
-        else:
-            if main_seq == 0:
-                raise ValueError(f"sub-entry before any main: {e['headword']}")
-            sub_k += 1
-            if sub_k > 99:
-                raise ValueError(f"over 99 sub-entries under main id {main_seq}")
-            eid = 1_000_000 + main_seq * 100 + sub_k
+    for eid, e in zip(eids, entries):
         rows.append((
             eid,
             e["headword"],
