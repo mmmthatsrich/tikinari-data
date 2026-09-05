@@ -746,8 +746,9 @@ Add to `scripts/00_init_db.py`, following the existing `CREATE TABLE IF NOT EXIS
 
 _WAKAREO_COMMON = """
             id              INTEGER PRIMARY KEY,
-            source_entry_id TEXT NOT NULL UNIQUE,   -- 'WR-HMN.297'
-            wakareo_id      INTEGER NOT NULL,       -- Browse.aspx?ID=n
+            source_entry_id TEXT NOT NULL,          -- 'WR-HMN.297' — a PRINT reference, NOT unique:
+                                                    --   several records legitimately share one
+            wakareo_id      INTEGER NOT NULL UNIQUE, -- Browse.aspx?ID=n — the true record identity
             ref_no          INTEGER NOT NULL,       -- the n in WR-XX.n
             headword        TEXT NOT NULL,
             headword_sort   TEXT NOT NULL,
@@ -932,7 +933,11 @@ Create `scripts/41_wakareo_import.py`:
 ```python
 """Import parsed Wakareo JSON into the ten landing tables.
 
-Idempotent: INSERT OR REPLACE keyed on source_entry_id ('WR-HMN.297').
+Idempotent: INSERT OR REPLACE keyed on wakareo_id (the Browse.aspx?ID).
+
+NOTE: source_entry_id ('WR-HMN.297') is a PRINT-dictionary reference and is NOT
+unique — e.g. three distinct Ngata entries for 'Alone' all carry WR-HMN.294.
+Keying on it destroys real records. wakareo_id is the unique record identity.
 
   py scripts/41_wakareo_import.py                 # every component found
   py scripts/41_wakareo_import.py --source ngata  # just one
@@ -1102,10 +1107,10 @@ Insert before the `BUILDERS` dict at `:402`:
 
 
 def _wakareo_en_mi(con, b, table):
-    sql = (f"SELECT source_entry_id, headword, part_of_speech, search_scope, "
+    sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
            f"equivalents, qualifier, example_en, example_mi, body_raw "
            f"FROM {table} ORDER BY id")
-    for (seid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
+    for (seid, wid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
         equivalents = [e for e in jload(equivs) if e]
         if not equivalents:
             continue                      # nothing to hang a Māori headword on
@@ -1115,8 +1120,9 @@ def _wakareo_en_mi(con, b, table):
         gloss = f"{lemma_en} ({qual})" if qual else lemma_en
         siblings = []
         for i, mi in enumerate(equivalents, start=1):
+            # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
             eid = b.add_entry(
-                f"{seid}#{i}", mi, normalise_sort_key(mi), normalise_search_key(mi),
+                f"{seid}#{wid}~{i}", mi, normalise_sort_key(mi), normalise_search_key(mi),
                 pos=pos, headword_en=lemma_en,
                 material={"hw": mi, "en": lemma_en, "ex": [ex_en, ex_mi]})
             sid = b.add_sense(eid, None, gloss, None, raw, part_of_speech=pos)
@@ -1132,17 +1138,18 @@ def _wakareo_en_mi(con, b, table):
 
 def _wakareo_mi_en(con, b, table, matatiki=False):
     extra = ", derivation, williams_refs" if matatiki else ""
-    sql = (f"SELECT source_entry_id, headword, part_of_speech, search_scope, "
+    sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
            f"gloss_en, body_raw{extra} FROM {table} ORDER BY id")
     for row in con.execute(sql):
-        seid, hw, pos, scope, gloss, raw = row[:6]
-        eid = b.add_entry(seid, hw, normalise_sort_key(hw), normalise_search_key(hw),
+        seid, wid, hw, pos, scope, gloss, raw = row[:7]
+        # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
+        eid = b.add_entry(f"{seid}#{wid}", hw, normalise_sort_key(hw), normalise_search_key(hw),
                           pos=pos, material={"hw": hw, "gloss": gloss})
         b.add_sense(eid, None, gloss, None, raw, part_of_speech=pos)
         for v in jload(scope):
             b.add_form(eid, v, "variant")
         if matatiki:
-            derivation, refs = row[6], jload(row[7])
+            derivation, refs = row[7], jload(row[8])
             for page in refs:
                 b.add_relation(eid, "cross_ref", f"W.{page}", None,
                                note=(derivation or "")[:500])
