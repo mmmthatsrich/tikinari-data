@@ -31,7 +31,10 @@ def strip_tags(html: str) -> str:
     if not html:
         return ""
     text = _TAG.sub(" ", html).replace("&nbsp;", " ")
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
+    # A tag immediately before punctuation (e.g. "<B>alarm</B>.") becomes a
+    # space once the tag is blanked out ("alarm ."); close that back up.
+    return re.sub(r"\s+([.,;:!?])", r"\1", text)
 
 
 def split_template(html: str) -> dict | None:
@@ -79,3 +82,109 @@ def parse_search_scope(text: str) -> list[str]:
     if not m:
         return []
     return [p.strip() for p in m.group(1).split(",") if p.strip()]
+
+
+TAG_TO_SOURCE = {
+    "TE":  "tregear_exceptions",
+    "HMN": "ngata",
+    "TM":  "te_matatiki",
+    "KKH": "kimikupu_hou",
+    "HKA": "he_kupu_arotake",
+    "HKR": "kupu_rorohiko",
+    "TK":  "tai_kupu_variants",
+    "NT":  "nga_tini_a_tangaroa",
+    "KM":  "kupu_mataora",
+    "CL":  "maori_law_lexicon",
+    # "WWC" (Wordstream Williams Corpus) is deliberately absent — duplicate of
+    # the NZETC-derived `williams` source, discarded at parse time.
+}
+
+EN_MI_SOURCE_IDS = frozenset(
+    {"ngata", "kimikupu_hou", "he_kupu_arotake", "kupu_rorohiko", "kupu_mataora"}
+)
+
+_BR = re.compile(r"(?i)<BR\s*/?>")
+_W_REF = re.compile(r"(?i)\bW\.(\d+)")
+
+
+def _segments(body: str) -> list[str]:
+    """Body split on <BR>, tags stripped, empties dropped."""
+    return [s for s in (strip_tags(p) for p in _BR.split(body)) if s]
+
+
+_BOLD = re.compile(r"(?is)<B>(.*?)</B>")
+
+
+def _parse_en_mi(rec: dict, body: str) -> dict:
+    """English headword -> Māori equivalents, optional qualifier and EN/MI pair.
+
+    The Māori equivalents are the FIRST <B>...</B> run — never simply the first
+    <BR> segment. Kimikupu Hou 52724 is the proof: its body is
+    `View, argument<BR><B>haurite</B>`, where "View, argument" qualifies the
+    English lemma and `haurite` is the actual equivalent. Taking segment 0 there
+    yields ['View', 'argument'] — silently wrong across ~22,500 entries.
+
+    Ngata bodies carry later <B> runs as emphasis inside the example sentences,
+    so "first bold run" is correct there too.
+    """
+    bold = _BOLD.search(body)
+    if not bold:
+        rec["equivalents"], rec["qualifier"] = [], None
+        rec["example_en"] = rec["example_mi"] = None
+        return rec
+
+    rec["equivalents"] = [
+        e.strip() for e in strip_tags(bold.group(1)).split(",") if e.strip()
+    ]
+    before = strip_tags(body[:bold.start()])
+    rec["qualifier"] = before or None
+    after = _segments(body[bold.end():])
+    rec["example_en"] = after[0] if len(after) > 0 else None
+    rec["example_mi"] = after[1] if len(after) > 1 else None
+    return rec
+
+
+def _parse_mi_en(rec: dict, segs: list[str]) -> dict:
+    """Māori headword -> English gloss (all remaining prose)."""
+    rec["gloss_en"] = " ".join(segs) if segs else ""
+    return rec
+
+
+def _parse_te_matatiki(rec: dict, segs: list[str]) -> dict:
+    """Like MI->EN, but a trailing [...] block is a derivation citing Williams pages."""
+    derivation = None
+    prose = list(segs)
+    if prose and prose[-1].startswith("["):
+        derivation = prose.pop()
+    rec["gloss_en"] = " ".join(prose) if prose else ""
+    rec["derivation"] = derivation
+    rec["williams_refs"] = (
+        [int(n) for n in _W_REF.findall(derivation)] if derivation else []
+    )
+    return rec
+
+
+def parse_record(html: str) -> dict | None:
+    """Full parse of one record page. None for Williams Corpus or a non-record."""
+    slots = split_template(html)
+    if slots is None:
+        return None
+    source_id = TAG_TO_SOURCE.get(slots["ref_tag"])
+    if source_id is None:
+        return None                      # WR-WWC and any future unknown tag
+
+    rec = {
+        "source_id": source_id,
+        "ref_no": slots["ref_no"],
+        "source_entry_id": f"WR-{slots['ref_tag']}.{slots['ref_no']}",
+        "headword": slots["headword"],
+        "pos": slots["pos"],
+        "search_scope": parse_search_scope(slots["search_scope"]),
+        "body_raw": slots["body"],
+    }
+    if source_id in EN_MI_SOURCE_IDS:
+        return _parse_en_mi(rec, slots["body"])     # needs raw body for the bold run
+    segs = _segments(slots["body"])
+    if source_id == "te_matatiki":
+        return _parse_te_matatiki(rec, segs)
+    return _parse_mi_en(rec, segs)
