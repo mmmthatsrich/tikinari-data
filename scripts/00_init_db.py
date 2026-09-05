@@ -981,6 +981,76 @@ def create_tables(conn: sqlite3.Connection) -> None:
     """)
 
 
+# --- Wakareo ā-ipurangi components (session 67) ---------------------------
+# Ten landing tables, one per component dictionary. Each preserves its
+# source's NATIVE lookup direction; 50_build_unified.py inverts the EN->MI
+# ones so entry.headword is always Māori. These are the curated landing
+# zone — cleanups edit them in place, never the JSON.
+
+_WAKAREO_COMMON = """
+            id              INTEGER PRIMARY KEY,
+            source_entry_id TEXT NOT NULL UNIQUE,   -- 'WR-HMN.297'
+            wakareo_id      INTEGER NOT NULL,       -- Browse.aspx?ID=n
+            ref_no          INTEGER NOT NULL,       -- the n in WR-XX.n
+            headword        TEXT NOT NULL,
+            headword_sort   TEXT NOT NULL,
+            headword_search TEXT NOT NULL,
+            part_of_speech  TEXT,
+            search_scope    TEXT,                   -- JSON array of authored variants
+            body_raw        TEXT,
+            content_hash    TEXT,
+            first_seen      TEXT,
+            created_at      TEXT DEFAULT (datetime('now')),
+            last_updated    TEXT DEFAULT (datetime('now'))
+"""
+
+WAKAREO_EN_MI_TABLES = (
+    "ngata_entries", "kimikupu_hou_entries", "he_kupu_arotake_entries",
+    "kupu_rorohiko_entries", "kupu_mataora_entries",
+)
+WAKAREO_MI_EN_TABLES = (
+    "tregear_exceptions_entries", "tai_kupu_variants_entries",
+    "nga_tini_a_tangaroa_entries", "maori_law_lexicon_entries",
+)
+
+
+def create_wakareo_tables(conn: sqlite3.Connection) -> None:
+    for table in WAKAREO_EN_MI_TABLES:
+        conn.executescript(f"""
+        CREATE TABLE IF NOT EXISTS {table} (
+            {_WAKAREO_COMMON},
+            equivalents     TEXT,                   -- JSON array of Māori terms
+            qualifier       TEXT,                   -- prose before the bold run, narrows the English lemma
+            example_en      TEXT,
+            example_mi      TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_{table}_search ON {table}(headword_search);
+        CREATE INDEX IF NOT EXISTS idx_{table}_sort   ON {table}(headword_sort);
+        """)
+    for table in WAKAREO_MI_EN_TABLES:
+        conn.executescript(f"""
+        CREATE TABLE IF NOT EXISTS {table} (
+            {_WAKAREO_COMMON},
+            gloss_en        TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_{table}_search ON {table}(headword_search);
+        CREATE INDEX IF NOT EXISTS idx_{table}_sort   ON {table}(headword_sort);
+        """)
+    # Te Matatiki additionally carries a bracketed derivation citing Williams pages.
+    conn.executescript(f"""
+    CREATE TABLE IF NOT EXISTS te_matatiki_entries (
+        {_WAKAREO_COMMON},
+        gloss_en        TEXT,
+        derivation      TEXT,
+        williams_refs   TEXT                        -- JSON array of Williams page ints
+    );
+    CREATE INDEX IF NOT EXISTS idx_te_matatiki_entries_search
+        ON te_matatiki_entries(headword_search);
+    CREATE INDEX IF NOT EXISTS idx_te_matatiki_entries_sort
+        ON te_matatiki_entries(headword_sort);
+    """)
+
+
 def _add_column(conn: sqlite3.Connection, table: str, col: str, decl: str) -> None:
     """Idempotent helper: add a column only if it does not exist."""
     cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
@@ -1045,6 +1115,18 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
         ("hepatakakupu",       "He Pataka Kupu",                            "Restricted",      "https://www.hepatakakapu.maori.nz",                       None, 0, "Monolingual Maori; stub — permissions handled externally"),
         ("paekupu",            "Paekupu (curriculum vocabulary)",           "Restricted",      "https://www.paekupu.co.nz",                               None, 0, "Curriculum subject areas; stub — permissions handled externally"),
         ("personal",           "Personal Lexicon",                          "User-owned",      None,                                                      None, 0, "User-added words and notes"),
+
+        # ── Wakareo ā-ipurangi components (session 67) ──────────────────────
+        ("tregear_exceptions",  "Wordstream Tregear Exceptions",   "Wordstream Corporation (c) 2002",        "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
+        ("ngata",               "H.M. Ngata English-Maori Dictionary", "Whai Ngata; Learning Media 1993",    "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
+        ("te_matatiki",         "Te Matatiki Contemporary Maori Words", "Te Taura Whiri (c) 1996; OUP written-permission clause", "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
+        ("kimikupu_hou",        "Kimikupu Hou modern words",       "NZCER; kaitiaki Te Taura Whiri",         "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
+        ("he_kupu_arotake",     "He Kupu Arotake",                 "Crown copyright (c) 1995; Education Review Office", "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
+        ("kupu_rorohiko",       "Kupu Rorohiko",                   "Te Taka Keegan; University of Waikato",  "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; Maori IT terms; English headword, inverted at unify; staging only — not exported"),
+        ("tai_kupu_variants",   "Tai Kupu (Maori word variances)", "Wordstream Corporation (c) 2003",        "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; NOT the Maori Minute `taikupu` source; staging only — not exported"),
+        ("nga_tini_a_tangaroa", "Nga tini a Tangaroa (fish names)","Ministry of Fisheries; Strickland",       "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
+        ("kupu_mataora",        "Kupu Mataora",                    "Not asserted in Wakareo Legal.aspx",     "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
+        ("maori_law_lexicon",   "Custom Maori Law Lexicon",        "Not asserted in Wakareo Legal.aspx",     "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
     ]
     conn.executemany(
         """INSERT OR IGNORE INTO source_metadata
@@ -1064,6 +1146,7 @@ def main() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         create_tables(conn)
+        create_wakareo_tables(conn)
         migrate_pos_columns(conn)
         migrate_tables(conn)
         seed_source_metadata(conn)
