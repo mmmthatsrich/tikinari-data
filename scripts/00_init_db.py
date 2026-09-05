@@ -1059,6 +1059,112 @@ def _add_column(conn: sqlite3.Connection, table: str, col: str, decl: str) -> No
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
 
 
+def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+    ).fetchone() is not None
+
+
+def _has_unique_constraint(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    """True if *column* is the sole member of some UNIQUE index on *table*.
+
+    Reads live index metadata (PRAGMA index_list/index_info) rather than
+    parsing the CREATE TABLE text, so it is unaffected by comment wording or
+    whitespace in the DDL -- it answers the actual constraint question.
+    """
+    for idx in conn.execute(f"PRAGMA index_list({table})").fetchall():
+        idx_name, is_unique = idx[1], idx[2]
+        if not is_unique:
+            continue
+        cols = [r[2] for r in conn.execute(f"PRAGMA index_info({idx_name})").fetchall()]
+        if cols == [column]:
+            return True
+    return False
+
+
+def _wakareo_create_sql(table: str, shape: str) -> str:
+    """CREATE TABLE text for *table* under the CURRENT (fixed) schema shape.
+
+    Mirrors create_wakareo_tables()'s three column layouts exactly, built
+    from the same _WAKAREO_COMMON block, so a rebuilt table is byte-for-byte
+    equivalent to one created fresh by create_wakareo_tables().
+    """
+    if shape == "en_mi":
+        extra = """
+            equivalents     TEXT,                   -- JSON array of Māori terms
+            qualifier       TEXT,                   -- prose before the bold run, narrows the English lemma
+            example_en      TEXT,
+            example_mi      TEXT"""
+    elif shape == "te_matatiki":
+        extra = """
+            gloss_en        TEXT,
+            derivation      TEXT,
+            williams_refs   TEXT                        -- JSON array of Williams page ints"""
+    else:
+        extra = """
+            gloss_en        TEXT"""
+    return f"CREATE TABLE {table} (\n{_WAKAREO_COMMON},{extra}\n)"
+
+
+# Ruling P8: source_entry_id ('WR-HMN.297') is a print-dictionary reference,
+# NOT a unique record identity -- several distinct entries legitimately share
+# one (e.g. three separate Ngata entries for 'Alone' all cite WR-HMN.294).
+# UNIQUE belongs on wakareo_id instead. This is the exhaustive, hardcoded set
+# of the ten Wakareo landing tables that constraint applies to -- nothing
+# else in this shared 417MB staging database is in scope for this migration.
+WAKAREO_TABLE_SHAPES = {
+    **{t: "en_mi" for t in WAKAREO_EN_MI_TABLES},
+    **{t: "mi_en" for t in WAKAREO_MI_EN_TABLES},
+    "te_matatiki_entries": "te_matatiki",
+}
+
+
+def migrate_wakareo_unique_key(conn: sqlite3.Connection) -> None:
+    """Idempotent repair for ruling P8: move UNIQUE off source_entry_id and
+    onto wakareo_id on any of the ten Wakareo tables still built under the
+    old (buggy) constraint.
+
+    Detects the old constraint via live index metadata (_has_unique_constraint),
+    not by assuming a database's age or provenance -- so this is a genuine
+    no-op on any database already migrated (including one freshly created by
+    create_wakareo_tables(), which always uses the current, fixed DDL).
+
+    Rebuilds via the standard SQLite pattern (temp table, copy, drop, rename)
+    so existing rows are preserved. This can only repair the CONSTRAINT going
+    forward -- any rows already silently overwritten by the old
+    UNIQUE(source_entry_id) + INSERT OR REPLACE bug were destroyed before
+    this migration ever ran and cannot be recovered from the database; the
+    row counts printed below are what survives to be preserved, not evidence
+    that nothing was lost.
+
+    Scoped to exactly the ten names in WAKAREO_TABLE_SHAPES -- structurally
+    incapable of touching any other table in this database.
+    """
+    for table, shape in WAKAREO_TABLE_SHAPES.items():
+        if not _table_exists(conn, table):
+            continue  # not created yet; create_wakareo_tables() will make it fresh (fixed schema)
+        if not _has_unique_constraint(conn, table, "source_entry_id"):
+            continue  # already on the fixed schema -- no-op
+
+        n_before = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+        col_list = ", ".join(cols)
+        tmp = f"_migrate_p8_{table}"
+
+        conn.execute(f"DROP TABLE IF EXISTS {tmp}")
+        conn.execute(_wakareo_create_sql(tmp, shape))
+        conn.execute(f"INSERT INTO {tmp} ({col_list}) SELECT {col_list} FROM {table}")
+        conn.execute(f"DROP TABLE {table}")
+        conn.execute(f"ALTER TABLE {tmp} RENAME TO {table}")
+        conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_search ON {table}(headword_search)")
+        conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{table}_sort   ON {table}(headword_sort)")
+        n_after = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        print(f"  migrated (P8): {table} -- UNIQUE moved source_entry_id -> wakareo_id; "
+              f"{n_before} row(s) carried over unchanged ({n_after} now present). "
+              f"Any rows already overwritten by the old constraint before this "
+              f"migration ran are not recoverable -- this only fixes the constraint.")
+
+
 def migrate_pos_columns(conn: sqlite3.Connection) -> None:
     """Add part-of-speech columns to sense and entry tables (idempotent)."""
     _add_column(conn, "sense", "part_of_speech", "TEXT")
@@ -1148,6 +1254,7 @@ def main() -> None:
     with sqlite3.connect(DB_PATH) as conn:
         create_tables(conn)
         create_wakareo_tables(conn)
+        migrate_wakareo_unique_key(conn)
         migrate_pos_columns(conn)
         migrate_tables(conn)
         seed_source_metadata(conn)
