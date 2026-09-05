@@ -51,8 +51,14 @@ def split_template(html: str) -> dict | None:
     pos = _POS.search(record)
     scope = _SCOPE.search(record)
 
-    tail = _RULE.split(record, maxsplit=1)
-    body = tail[1] if len(tail) > 1 else ""
+    # `entry_DICT*` full-page captures carry a nav-breadcrumb <HR> BEFORE
+    # the record <TABLE>, in addition to the real separator <HR> after it
+    # (`shape_*` fixtures only ever have the one, real, separator). Both
+    # formats agree that the body follows the LAST <HR> before the
+    # doctype cut, so split on every rule and take the final part rather
+    # than splitting once and taking the first tail.
+    parts = _RULE.split(record)
+    body = parts[-1] if len(parts) > 1 else ""
     body = _REF.sub("", body)
 
     return {

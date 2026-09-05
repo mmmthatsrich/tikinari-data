@@ -43,6 +43,15 @@ class TemplateSplit(unittest.TestCase):
         r = wr.split_template(fx("entry_DICT1_1.html"))
         self.assertEqual(r["ref_tag"], "WWC")
 
+    def test_entry_dict_body_excludes_breadcrumb_and_table(self):
+        # entry_DICT* fixtures are full-page captures with a nav-breadcrumb
+        # <HR> before the record <TABLE>, plus the real separator <HR>
+        # after it. body must start at the real separator, not the
+        # breadcrumb one — regression guard for that two-<HR> case.
+        r = wr.split_template(fx("entry_DICT10_81048.html"))
+        self.assertTrue(r["body"].startswith("<B>ahumoana</B>"))
+        self.assertNotIn("<TABLE", r["body"].upper())
+
     def test_every_fixture_parses_and_tags(self):
         known = {"WWC", "TE", "HMN", "TM", "KKH", "HKA", "HKR", "TK", "NT", "KM", "CL"}
         for p in sorted(FIXTURES.glob("*.html")):
