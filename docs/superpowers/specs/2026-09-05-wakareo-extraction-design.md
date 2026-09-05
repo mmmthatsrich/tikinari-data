@@ -48,20 +48,6 @@ implementation — see *Extraction*.
 - **EN→MI sources invert at unify, not at landing** (see *The direction problem*).
 - **No core schema change.** No new columns on `entry` / `sense` / `form` / `relation`.
 
-## Licence position
-
-Wordstream's permission covers *our* access to Wakareo. It cannot convey rights Wordstream
-does not hold, and `Legal.aspx` asserts third-party copyright on components 3–7 and 9.
-Te Matatiki carries an explicit clause requiring prior written permission from Oxford
-University Press for any reproduction or storage in a retrieval system.
-
-Consequence: extraction into a private working DB proceeds; **redistribution does not.**
-Each source gets an honest `source_metadata.licence` string and is held out of the export.
-Clearing components for shipping is follow-up work requiring direct contact with each rights
-holder (Whai Ngata / Learning Media, Te Taura Whiri + OUP, NZCER, ERO, MFish, Te Taka
-Keegan). Components 2, 8, 10 and 11 are Wordstream-owned or unattributed, and are the
-plausible first candidates.
-
 ## Record model
 
 Every record in every component uses one template, emitted **before** the page's `<!DOCTYPE>`:
@@ -164,8 +150,8 @@ Per the project rule, these tables are the **curated landing zone** — later cl
 them in place, never the JSON.
 
 Ten `source_metadata` rows are inserted with `display_name`, `url`
-(`https://reotupu.co.nz/WSLiveWakareo/`), and the honest `licence` string from *Licence
-position*. No `default_dialect` is set — Wakareo's dialect data is a per-record topic facet,
+(`https://reotupu.co.nz/WSLiveWakareo/`), and a `licence` string naming that component's
+asserted copyright holder as given in the table above. No `default_dialect` is set — Wakareo's dialect data is a per-record topic facet,
 not a source-wide default.
 
 ## The direction problem
