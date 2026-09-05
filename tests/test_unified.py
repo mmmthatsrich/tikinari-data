@@ -246,6 +246,46 @@ class ResolvePos(unittest.TestCase):
         self.assertEqual(_bu.resolve_pos("thu", std), [(None, "Tūhau")])
 
 
+class WakareoQualifierFold(unittest.TestCase):
+    """_fold_qualifier composes 'lemma (qualifier)' without double-parenthesising.
+
+    qualifier is the fidelity layer and is stored exactly as the source gave it
+    (Kimikupu qualifiers already carry their own parens); the BUG this pins was
+    _wakareo_en_mi always wrapping in a fresh pair of parens regardless, so an
+    already-parenthesised qualifier came out doubled: 'Absorbed ((become
+    absorbed))'. This test must fail against that old `f"{lemma_en} ({qual})"`
+    composition — verified by hand before the fix landed.
+    """
+
+    def test_already_parenthesised_qualifier_is_not_doubled(self):
+        self.assertEqual(
+            _bu._fold_qualifier("Absorbed", "(become absorbed)"),
+            "Absorbed (become absorbed)")
+
+    def test_bare_qualifier_still_gets_wrapped(self):
+        self.assertEqual(
+            _bu._fold_qualifier("View, argument", "balanced"),
+            "View, argument (balanced)")
+
+    def test_no_qualifier_leaves_lemma_untouched(self):
+        self.assertEqual(_bu._fold_qualifier("Almost", None), "Almost")
+        self.assertEqual(_bu._fold_qualifier("Almost", ""), "Almost")
+
+    def test_kimikupu_glosses_have_single_parens(self):
+        # end-to-end: the real landing rows that exposed the bug must read
+        # correctly post-unify, not just at the unit level.
+        conn = sqlite3.connect(DB_PATH)
+        rows = conn.execute(
+            "SELECT DISTINCT s.gloss_en FROM entry e JOIN sense s ON s.entry_id=e.id "
+            "WHERE e.source_id='kimikupu_hou' AND s.gloss_en LIKE '%(%'"
+        ).fetchall()
+        conn.close()
+        self.assertGreater(len(rows), 0, "expected at least one qualified kimikupu_hou gloss")
+        for (gloss,) in rows:
+            self.assertNotIn("((", gloss, f"double-parenthesised gloss: {gloss!r}")
+            self.assertNotIn("))", gloss, f"double-parenthesised gloss: {gloss!r}")
+
+
 if __name__ == "__main__":
     assert DB_PATH.exists(), f"Database not found: {DB_PATH}\nRun: py scripts/00_init_db.py && py scripts/50_build_unified.py"
     unittest.main(verbosity=2)

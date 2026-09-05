@@ -417,6 +417,22 @@ def build_taikupu(con, b):
 # taikupu; homonym_no stays NULL.
 
 
+def _fold_qualifier(lemma_en, qual):
+    """Compose 'lemma (qualifier)' without double-parenthesising.
+
+    qualifier is the fidelity layer and may already arrive parenthesised
+    (Kimikupu: '(become absorbed)') or bare (never seen yet, but other
+    EN->MI sources are unpopulated and may supply either shape once the
+    full sweep runs) — handle both without touching the stored value.
+    """
+    if not qual:
+        return lemma_en
+    q = qual.strip()
+    if q.startswith("(") and q.endswith(")"):
+        return f"{lemma_en} {q}"
+    return f"{lemma_en} ({q})"
+
+
 def _wakareo_en_mi(con, b, table):
     sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
            f"equivalents, qualifier, example_en, example_mi, body_raw "
@@ -428,7 +444,7 @@ def _wakareo_en_mi(con, b, table):
         variants = jload(scope)
         # The qualifier narrows the English lemma ('(balanced)' + 'View, argument');
         # fold it into the gloss so it is not lost at the unified layer.
-        gloss = f"{lemma_en} ({qual})" if qual else lemma_en
+        gloss = _fold_qualifier(lemma_en, qual)
         siblings = []
         for i, mi in enumerate(equivalents, start=1):
             # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
