@@ -522,6 +522,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import load_env
+from wakareo_records import split_template
 
 BASE = "https://reotupu.co.nz/WSLiveWakareo/"
 LOGIN_URL = BASE + "login.aspx?ReturnUrl=%2fWSLiveWakareo%2f"
@@ -537,7 +538,6 @@ MAX_RETRIES = 3
 RETRY_DELAY = 15
 
 _HIDDEN = re.compile(r'(?is)<input[^>]*type="hidden"[^>]*>')
-_REF = re.compile(r"(?is)\[Reference:\s*WR-([A-Z]+)\.(\d+)\]")
 
 
 def _hidden_fields(html: str) -> dict:
@@ -659,12 +659,16 @@ def main():
                 entry_id += 1
                 continue
 
-            ref = _REF.search(html)
-            if not ref:
+            # Route on the record's own WR- tag, via the SAME parser the pipeline
+            # uses downstream. Sharing split_template (rather than re-deriving the
+            # regex here) is what keeps the Williams discard below exactly aligned
+            # with what the parser will later recognise.
+            slots = split_template(html)
+            if slots is None:
                 empty.add(entry_id)
                 consecutive_empty += 1
             else:
-                tag = ref.group(1)
+                tag = slots["ref_tag"]
                 tag_counts[tag] = tag_counts.get(tag, 0) + 1
                 consecutive_empty = 0
                 if tag == "WWC":
