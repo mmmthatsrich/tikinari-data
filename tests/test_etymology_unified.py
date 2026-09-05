@@ -277,6 +277,17 @@ RAW_ETY_DROPPED = ("pollex_cognatesets", "pollex_reflexes", "pollex_languages",
                    "protoform_ancestry", "reconstruction_levels",
                    "pollex_entry_links")
 
+# Sources extracted from Wakareo ā-ipurangi (session 66+ / task 7): held in
+# staging only, never shipped in the app DB — see scripts/60_export_app_db.py.
+# Duplicated here deliberately (not imported): a test that reads the
+# exclusion list from the module it is checking cannot catch that module's
+# constant being edited out from under it.
+WAKAREO_SOURCES = (
+    "tregear_exceptions", "ngata", "te_matatiki", "kimikupu_hou",
+    "he_kupu_arotake", "kupu_rorohiko", "tai_kupu_variants",
+    "nga_tini_a_tangaroa", "kupu_mataora", "maori_law_lexicon",
+)
+
 
 @unittest.skipUnless(
     APP_DB.exists(),
@@ -313,9 +324,25 @@ class TestAppDBEtymologyCutover(unittest.TestCase):
         self.assertEqual(raw, [], f"raw source tables leaked into app DB: {raw}")
 
     def test_ety_counts_match_staging(self):
+        # ETY_entry_link is keyed to `entry`, and entries from Wakareo sources
+        # (task 7) are deliberately excluded from the app DB — see
+        # scripts/60_export_app_db.py EXCLUDED_SOURCES. So for that one table,
+        # "matches staging" means "matches staging once you drop the rows tied
+        # to entries that were never shipped", not a literal row-count equality.
+        # The other ETY_* tables are not entry-keyed and are unaffected: the
+        # hard cutover guarantee for them stays a strict equality.
+        placeholders = ",".join("?" * len(WAKAREO_SOURCES))
         for t in ETY_TABLES:
             app_n = self.app.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
-            stg_n = self.stg.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
+            if t == "ETY_entry_link":
+                stg_n = self.stg.execute(
+                    "SELECT COUNT(*) FROM ETY_entry_link el "
+                    "JOIN entry e ON el.entry_id = e.id "
+                    f"WHERE e.source_id NOT IN ({placeholders})",
+                    WAKAREO_SOURCES,
+                ).fetchone()[0]
+            else:
+                stg_n = self.stg.execute(f'SELECT COUNT(*) FROM "{t}"').fetchone()[0]
             self.assertEqual(app_n, stg_n, f"{t}: app {app_n} != staging {stg_n}")
 
     def test_integrity_and_fk_clean(self):
