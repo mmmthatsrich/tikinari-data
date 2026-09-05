@@ -262,7 +262,7 @@ git -c user.name="Richard Kaio" -c user.email="Richard.Kaio+GITFNDC@fndc.govt.nz
 
 **Interfaces:**
 - Consumes: `split_template`, `parse_search_scope`, `strip_tags` from Task 1.
-- Produces: `TAG_TO_SOURCE: dict[str, str]` mapping `WR-` tag → `source_id`; `EN_MI_SOURCE_IDS: frozenset[str]`; `parse_record(html) -> dict | None` returning `{source_id, ref_no, headword, pos, search_scope: list, body_raw, ...}` plus direction-specific keys — `equivalents: list[str]`, `example_en`, `example_mi` for EN→MI; `gloss_en` for MI→EN; `derivation`, `williams_refs: list[int]` additionally for `te_matatiki`. Returns `None` for `WR-WWC` and unparseable pages.
+- Produces: `TAG_TO_SOURCE: dict[str, str]` mapping `WR-` tag → `source_id`; `EN_MI_SOURCE_IDS: frozenset[str]`; `parse_record(html) -> dict | None` returning `{source_id, ref_no, headword, pos, search_scope: list, body_raw, ...}` plus direction-specific keys — `equivalents: list[str]`, `qualifier: str | None`, `example_en`, `example_mi` for EN→MI; `gloss_en` for MI→EN; `derivation`, `williams_refs: list[int]` additionally for `te_matatiki`. Returns `None` for `WR-WWC` and unparseable pages.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -292,8 +292,21 @@ class BodyParsers(unittest.TestCase):
         r = wr.parse_record(fx("shape_KIMIKUPU_52800.html"))
         self.assertEqual(r["source_id"], "kimikupu_hou")
         self.assertEqual(r["equivalents"], ["pukahu"])
+        self.assertIsNone(r["qualifier"])
         self.assertIsNone(r["example_en"])
         self.assertIsNone(r["example_mi"])
+
+    def test_kimikupu_qualifier_is_not_mistaken_for_equivalents(self):
+        # Body is `View, argument<BR><B>haurite</B>`. Taking the first <BR>
+        # segment would yield ['View', 'argument'] — the equivalent is haurite.
+        r = wr.parse_record(fx("entry_DICT5_52724.html"))
+        self.assertEqual(r["source_id"], "kimikupu_hou")
+        self.assertEqual(r["equivalents"], ["haurite"])
+        self.assertEqual(r["qualifier"], "View, argument")
+
+    def test_ngata_has_no_qualifier(self):
+        r = wr.parse_record(fx("shape_NGATA_26300.html"))
+        self.assertIsNone(r["qualifier"])
 
     def test_matatiki_gloss_derivation_and_williams_refs(self):
         r = wr.parse_record(fx("shape_MATATIKI_47800.html"))
@@ -364,14 +377,35 @@ def _segments(body: str) -> list[str]:
     return [s for s in (strip_tags(p) for p in _BR.split(body)) if s]
 
 
-def _parse_en_mi(rec: dict, segs: list[str]) -> dict:
-    """English headword -> comma-separated Māori equivalents, optional EN/MI pair."""
-    equivalents = []
-    if segs:
-        equivalents = [e.strip() for e in segs[0].split(",") if e.strip()]
-    rec["equivalents"] = equivalents
-    rec["example_en"] = segs[1] if len(segs) > 1 else None
-    rec["example_mi"] = segs[2] if len(segs) > 2 else None
+_BOLD = re.compile(r"(?is)<B>(.*?)</B>")
+
+
+def _parse_en_mi(rec: dict, body: str) -> dict:
+    """English headword -> Māori equivalents, optional qualifier and EN/MI pair.
+
+    The Māori equivalents are the FIRST <B>...</B> run — never simply the first
+    <BR> segment. Kimikupu Hou 52724 is the proof: its body is
+    `View, argument<BR><B>haurite</B>`, where "View, argument" qualifies the
+    English lemma and `haurite` is the actual equivalent. Taking segment 0 there
+    yields ['View', 'argument'] — silently wrong across ~22,500 entries.
+
+    Ngata bodies carry later <B> runs as emphasis inside the example sentences,
+    so "first bold run" is correct there too.
+    """
+    bold = _BOLD.search(body)
+    if not bold:
+        rec["equivalents"], rec["qualifier"] = [], None
+        rec["example_en"] = rec["example_mi"] = None
+        return rec
+
+    rec["equivalents"] = [
+        e.strip() for e in strip_tags(bold.group(1)).split(",") if e.strip()
+    ]
+    before = strip_tags(body[:bold.start()])
+    rec["qualifier"] = before or None
+    after = _segments(body[bold.end():])
+    rec["example_en"] = after[0] if len(after) > 0 else None
+    rec["example_mi"] = after[1] if len(after) > 1 else None
     return rec
 
 
@@ -413,9 +447,9 @@ def parse_record(html: str) -> dict | None:
         "search_scope": parse_search_scope(slots["search_scope"]),
         "body_raw": slots["body"],
     }
-    segs = _segments(slots["body"])
     if source_id in EN_MI_SOURCE_IDS:
-        return _parse_en_mi(rec, segs)
+        return _parse_en_mi(rec, slots["body"])     # needs raw body for the bold run
+    segs = _segments(slots["body"])
     if source_id == "te_matatiki":
         return _parse_te_matatiki(rec, segs)
     return _parse_mi_en(rec, segs)
@@ -739,6 +773,7 @@ def create_wakareo_tables(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS {table} (
             {_WAKAREO_COMMON},
             equivalents     TEXT,                   -- JSON array of Māori terms
+            qualifier       TEXT,                   -- prose before the bold run, narrows the English lemma
             example_en      TEXT,
             example_mi      TEXT
         );
@@ -929,9 +964,9 @@ def row_for(rec: dict) -> tuple[tuple, tuple]:
         compute_content_hash({"hw": hw, "body": rec["body_raw"]}),
     )
     if rec["source_id"] in EN_MI_SOURCE_IDS:
-        return (BASE_COLS + ("equivalents", "example_en", "example_mi"),
+        return (BASE_COLS + ("equivalents", "qualifier", "example_en", "example_mi"),
                 base + (json.dumps(rec["equivalents"], ensure_ascii=False),
-                        rec["example_en"], rec["example_mi"]))
+                        rec["qualifier"], rec["example_en"], rec["example_mi"]))
     if rec["source_id"] == "te_matatiki":
         return (BASE_COLS + ("gloss_en", "derivation", "williams_refs"),
                 base + (rec["gloss_en"], rec["derivation"],
@@ -1064,20 +1099,23 @@ Insert before the `BUILDERS` dict at `:402`:
 
 def _wakareo_en_mi(con, b, table):
     sql = (f"SELECT source_entry_id, headword, part_of_speech, search_scope, "
-           f"equivalents, example_en, example_mi, body_raw "
+           f"equivalents, qualifier, example_en, example_mi, body_raw "
            f"FROM {table} ORDER BY id")
-    for (seid, lemma_en, pos, scope, equivs, ex_en, ex_mi, raw) in con.execute(sql):
+    for (seid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
         equivalents = [e for e in jload(equivs) if e]
         if not equivalents:
             continue                      # nothing to hang a Māori headword on
         variants = jload(scope)
+        # The qualifier narrows the English lemma ('(balanced)' + 'View, argument');
+        # fold it into the gloss so it is not lost at the unified layer.
+        gloss = f"{lemma_en} ({qual})" if qual else lemma_en
         siblings = []
         for i, mi in enumerate(equivalents, start=1):
             eid = b.add_entry(
                 f"{seid}#{i}", mi, normalise_sort_key(mi), normalise_search_key(mi),
                 pos=pos, headword_en=lemma_en,
                 material={"hw": mi, "en": lemma_en, "ex": [ex_en, ex_mi]})
-            sid = b.add_sense(eid, None, lemma_en, None, raw, part_of_speech=pos)
+            sid = b.add_sense(eid, None, gloss, None, raw, part_of_speech=pos)
             b.add_example(sid, eid, ex_mi, ex_en, None, None, 0)
             for v in variants:
                 b.add_form(eid, v, "variant")
