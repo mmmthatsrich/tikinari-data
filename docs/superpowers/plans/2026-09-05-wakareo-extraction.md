@@ -1474,7 +1474,7 @@ git -c user.name="Richard Kaio" -c user.email="Richard.Kaio+GITFNDC@fndc.govt.nz
 
 - [ ] **Step 1: Back up, then start the full sweep**
 
-The sweep takes roughly 23 hours and is fully resumable — interrupt and rerun the same command at any time.
+The sweep takes roughly 31 hours (measured) and is fully resumable — interrupt and rerun the same command at any time.
 
 ```bash
 cp data/staging_dictionary.db data/staging_dictionary.db.bak-$(date +%Y%m%d-%H%M%S)-wakareo-full
