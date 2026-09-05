@@ -1531,8 +1531,18 @@ is empty, skip the edits and the dump — Wakareo introduced no new POS codes.
 
 - [ ] **Step 5: Run the whole test suite**
 
-Run: `PYTHONUTF8=1 py -m unittest discover -s tests -p "test_*.py"`
-Expected: all green. Investigate any failure before continuing — do not proceed to export on a red suite.
+Two commands, because one is not enough. `tests/test_schema.py` is pytest-style (module-level
+`def test_*(conn)` with fixtures), so `unittest discover` silently collects **0 tests** from it
+— it is the only such file, and it holds 8 tests including `test_tables_exist` and
+`test_source_metadata`, which cover exactly what Task 4 added.
+
+```bash
+PYTHONUTF8=1 py -m unittest discover -s tests -p "test_*.py"   # 374+ tests
+PYTHONUTF8=1 py tests/test_schema.py                            # the 8 unittest cannot see
+```
+
+Expected: both green. Investigate any failure before continuing — do not proceed to export on
+a red suite.
 
 - [ ] **Step 6: Export and confirm the app DB is untouched by this work**
 
