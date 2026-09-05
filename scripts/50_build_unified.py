@@ -41,14 +41,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import DB_PATH, normalise_search_key, compute_content_hash
+from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
+                   compute_content_hash)
 from williams_senses import split_senses
 from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
 
 NOW = datetime.now(timezone.utc).isoformat()
 
-SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu", "taikupu")
+WAKAREO_SOURCES = (
+    "tregear_exceptions", "ngata", "te_matatiki", "kimikupu_hou",
+    "he_kupu_arotake", "kupu_rorohiko", "tai_kupu_variants",
+    "nga_tini_a_tangaroa", "kupu_mataora", "maori_law_lexicon",
+)
+SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu",
+           "taikupu") + WAKAREO_SOURCES
 CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
 
 # trailing citation / source markers in example strings (same patterns as the prototype)
@@ -399,6 +406,79 @@ def build_taikupu(con, b):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"), None, None, i)
 
 
+# --- Wakareo components (session 67) --------------------------------------
+# Five components are English-headword. They are INVERTED here so
+# entry.headword is always Māori: one entry per Māori equivalent, carrying the
+# English lemma in headword_en, with siblings cross-linked as synonyms. The
+# landing table keeps the true one-lemma-many-equivalents shape.
+#
+# Siblings share a WR- reference, so source_entry_id is suffixed '#1', '#2', …
+# to stay distinct. Duplicate Māori headwords are NOT deduped — same rule as
+# taikupu; homonym_no stays NULL.
+
+
+def _wakareo_en_mi(con, b, table):
+    sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
+           f"equivalents, qualifier, example_en, example_mi, body_raw "
+           f"FROM {table} ORDER BY id")
+    for (seid, wid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
+        equivalents = [e for e in jload(equivs) if e]
+        if not equivalents:
+            continue                      # nothing to hang a Māori headword on
+        variants = jload(scope)
+        # The qualifier narrows the English lemma ('(balanced)' + 'View, argument');
+        # fold it into the gloss so it is not lost at the unified layer.
+        gloss = f"{lemma_en} ({qual})" if qual else lemma_en
+        siblings = []
+        for i, mi in enumerate(equivalents, start=1):
+            # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
+            eid = b.add_entry(
+                f"{seid}#{wid}~{i}", mi, normalise_sort_key(mi), normalise_search_key(mi),
+                pos=pos, headword_en=lemma_en,
+                material={"hw": mi, "en": lemma_en, "ex": [ex_en, ex_mi]})
+            sid = b.add_sense(eid, None, gloss, None, raw, part_of_speech=pos)
+            b.add_example(sid, eid, ex_mi, ex_en, None, None, 0)
+            for v in variants:
+                b.add_form(eid, v, "variant")
+            siblings.append((eid, mi))
+        for eid, _ in siblings:
+            for other_eid, other_mi in siblings:
+                if other_eid != eid:
+                    b.add_relation(eid, "synonym", other_mi, other_eid)
+
+
+def _wakareo_mi_en(con, b, table, matatiki=False):
+    extra = ", derivation, williams_refs" if matatiki else ""
+    sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
+           f"gloss_en, body_raw{extra} FROM {table} ORDER BY id")
+    for row in con.execute(sql):
+        seid, wid, hw, pos, scope, gloss, raw = row[:7]
+        # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
+        eid = b.add_entry(f"{seid}#{wid}", hw, normalise_sort_key(hw), normalise_search_key(hw),
+                          pos=pos, material={"hw": hw, "gloss": gloss})
+        b.add_sense(eid, None, gloss, None, raw, part_of_speech=pos)
+        for v in jload(scope):
+            b.add_form(eid, v, "variant")
+        if matatiki:
+            derivation, refs = row[7], jload(row[8])
+            for page in refs:
+                b.add_relation(eid, "cross_ref", f"W.{page}", None,
+                               note=(derivation or "")[:500])
+
+
+def build_tregear_exceptions(con, b):  _wakareo_mi_en(con, b, "tregear_exceptions_entries")
+def build_tai_kupu_variants(con, b):   _wakareo_mi_en(con, b, "tai_kupu_variants_entries")
+def build_nga_tini_a_tangaroa(con, b): _wakareo_mi_en(con, b, "nga_tini_a_tangaroa_entries")
+def build_maori_law_lexicon(con, b):   _wakareo_mi_en(con, b, "maori_law_lexicon_entries")
+def build_te_matatiki(con, b):         _wakareo_mi_en(con, b, "te_matatiki_entries", matatiki=True)
+
+def build_ngata(con, b):           _wakareo_en_mi(con, b, "ngata_entries")
+def build_kimikupu_hou(con, b):    _wakareo_en_mi(con, b, "kimikupu_hou_entries")
+def build_he_kupu_arotake(con, b): _wakareo_en_mi(con, b, "he_kupu_arotake_entries")
+def build_kupu_rorohiko(con, b):   _wakareo_en_mi(con, b, "kupu_rorohiko_entries")
+def build_kupu_mataora(con, b):    _wakareo_en_mi(con, b, "kupu_mataora_entries")
+
+
 BUILDERS = {
     "williams": build_williams,
     "te_aka": build_te_aka,
@@ -406,6 +486,16 @@ BUILDERS = {
     "paekupu": build_paekupu,
     "papakupu": build_papakupu,
     "taikupu": build_taikupu,
+    "tregear_exceptions": build_tregear_exceptions,
+    "ngata": build_ngata,
+    "te_matatiki": build_te_matatiki,
+    "kimikupu_hou": build_kimikupu_hou,
+    "he_kupu_arotake": build_he_kupu_arotake,
+    "kupu_rorohiko": build_kupu_rorohiko,
+    "tai_kupu_variants": build_tai_kupu_variants,
+    "nga_tini_a_tangaroa": build_nga_tini_a_tangaroa,
+    "kupu_mataora": build_kupu_mataora,
+    "maori_law_lexicon": build_maori_law_lexicon,
 }
 
 

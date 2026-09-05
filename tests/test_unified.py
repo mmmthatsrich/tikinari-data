@@ -15,7 +15,14 @@ sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 
 CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
-SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu", "taikupu")
+# Sources expected to have at least one projected entry. Task 6 (session 67)
+# added ten Wakareo builders, but seven of their landing tables are still
+# empty pending the full scrape sweep — their builders run (0 in -> 0 out) but
+# have no rows to assert here yet. Add each as its landing table is populated:
+# he_kupu_arotake, kupu_rorohiko, tai_kupu_variants, nga_tini_a_tangaroa,
+# kupu_mataora, maori_law_lexicon, tregear_exceptions.
+SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu", "taikupu",
+           "ngata", "te_matatiki", "kimikupu_hou")
 
 
 def _open() -> sqlite3.Connection:
