@@ -20,6 +20,7 @@ Usage:
 """
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -50,6 +51,9 @@ MAX_RETRIES = 3
 RETRY_DELAY = 15
 
 _HIDDEN = re.compile(r'(?is)<input[^>]*type="hidden"[^>]*>')
+_LOGIN_USERNAME_FIELD = re.compile(r'(?i)Login1\$UserName')
+_EVENTVALIDATION_FIELD = re.compile(r'(?i)__EVENTVALIDATION')
+_PASSWORD_INPUT = re.compile(r'(?is)<input[^>]*type="password"')
 
 
 def _hidden_fields(html: str) -> dict:
@@ -60,6 +64,31 @@ def _hidden_fields(html: str) -> dict:
         if name:
             out[name.group(1)] = value.group(1) if value else ""
     return out
+
+
+def looks_like_login_page(html: str) -> bool:
+    """True if *html* is (or contains) the Wakareo login form.
+
+    The URL-only check in fetch() ("login.aspx" in r.url) catches the normal
+    case: a session-expired request 302s to login.aspx. But split_template's
+    own docstring notes it returns None for "an empty ID, OR a login redirect
+    body" — meaning the site can apparently also serve a login/session-expired
+    interstitial AT THE SAME URL, with no redirect. Without this check, that
+    response parses as slots is None, which the sweep loop would otherwise
+    record as a genuinely empty ID — and unlike `errors`, `empty` IDs are
+    skipped forever on every future resume, so a transient session hiccup
+    could silently and permanently misclassify real records as non-existent.
+
+    Detection: the login form's own username field name is the strongest
+    signal. As a fallback (in case of markup drift), __EVENTVALIDATION plus a
+    password input together are also diagnostic of an ASP.NET login page —
+    record pages carry neither.
+    """
+    if not html:
+        return False
+    if _LOGIN_USERNAME_FIELD.search(html):
+        return True
+    return bool(_EVENTVALIDATION_FIELD.search(html) and _PASSWORD_INPUT.search(html))
 
 
 def login() -> requests.Session:
@@ -97,19 +126,38 @@ def save_manifest(m: dict, fetched: set, empty: set, errors: dict) -> None:
     m["empty"] = sorted(empty)
     m["errors"] = errors
     m["last_saved"] = datetime.now(timezone.utc).isoformat()
-    MANIFEST.write_text(json.dumps(m, indent=2), encoding="utf-8")
+    # Write-then-replace: a kill mid-write (this script has already been
+    # watchdog-killed once) leaves the .tmp file truncated, never the real
+    # manifest.json, so a resumed run always loads valid JSON. os.replace is
+    # atomic on both Windows and POSIX.
+    tmp = MANIFEST.with_suffix(MANIFEST.suffix + ".tmp")
+    tmp.write_text(json.dumps(m, indent=2), encoding="utf-8")
+    os.replace(tmp, MANIFEST)
+
+
+def _is_login_response(r: requests.Response) -> bool:
+    """Session-expiry check: a 302 to login.aspx OR an inline login body."""
+    return "login.aspx" in r.url.lower() or looks_like_login_page(r.text)
 
 
 def fetch(session: requests.Session, entry_id: int):
-    """Return (html, session). Re-authenticates once on session expiry."""
+    """Return (html, session). Re-authenticates once on session expiry.
+
+    Checks BOTH the redirected URL and the response body for a login page
+    (see looks_like_login_page) so an inline session-expired interstitial
+    served at the same URL is caught too, not just a 302. Either signal
+    triggers one re-login and one retry; if the retry still looks like a
+    login page, the run aborts rather than looping — same "give up after two
+    consecutive failed logins" behaviour as the original URL-only check.
+    """
     for attempt in range(MAX_RETRIES):
         try:
             r = session.get(BASE + f"Browse.aspx?ID={entry_id}", timeout=45)
-            if "login.aspx" in r.url.lower():
+            if _is_login_response(r):
                 print("  session expired — re-authenticating")
                 session = login()
                 r = session.get(BASE + f"Browse.aspx?ID={entry_id}", timeout=45)
-                if "login.aspx" in r.url.lower():
+                if _is_login_response(r):
                     raise SystemExit("ERROR: re-login failed; aborting run.")
             r.raise_for_status()
             return r.text, session
