@@ -68,6 +68,16 @@ it needs — was implemented and verified in commit `148fd3a`; restore it from t
 rewriting it. Components 2, 8, 10 and 11 are Wordstream-owned or unattributed and are the
 least constrained.
 
+Two caveats for whoever restores it. First, `148fd3a` contains the exclusion **only**. A
+fail-closed hardening pass — asserting that every table in `APP_TABLES` is either filtered or
+on an explicitly-reviewed safe list, so a table added later cannot ship unfiltered by default
+— was written and verified during that work but never committed, and is therefore lost. It
+would need rewriting, and it is worth rewriting: without it the export defaults to copying any
+unrecognised table whole, and no foreign-key check would catch the leak. Second, the guard
+test and `EXCLUDED_SOURCES` were two hand-maintained lists with no shared source of truth, so
+an eleventh Wakareo source could be added without appearing in either; derive the expectation
+from `source_metadata` instead.
+
 ## Record model
 
 Every record in every component uses one template, emitted **before** the page's `<!DOCTYPE>`:
