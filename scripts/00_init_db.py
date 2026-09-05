@@ -989,8 +989,9 @@ def create_tables(conn: sqlite3.Connection) -> None:
 
 _WAKAREO_COMMON = """
             id              INTEGER PRIMARY KEY,
-            source_entry_id TEXT NOT NULL UNIQUE,   -- 'WR-HMN.297'
-            wakareo_id      INTEGER NOT NULL,       -- Browse.aspx?ID=n
+            source_entry_id TEXT NOT NULL,          -- 'WR-HMN.297' — a PRINT reference, NOT unique:
+                                                     --   several records legitimately share one
+            wakareo_id      INTEGER NOT NULL UNIQUE, -- Browse.aspx?ID=n — the true record identity
             ref_no          INTEGER NOT NULL,       -- the n in WR-XX.n
             headword        TEXT NOT NULL,
             headword_sort   TEXT NOT NULL,

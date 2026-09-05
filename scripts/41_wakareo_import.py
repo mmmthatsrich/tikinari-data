@@ -1,6 +1,10 @@
 """Import parsed Wakareo JSON into the ten landing tables.
 
-Idempotent: INSERT OR REPLACE keyed on source_entry_id ('WR-HMN.297').
+Idempotent: INSERT OR REPLACE keyed on wakareo_id (the Browse.aspx?ID).
+
+NOTE: source_entry_id ('WR-HMN.297') is a PRINT-dictionary reference and is NOT
+unique — e.g. three distinct Ngata entries for 'Alone' all carry WR-HMN.294.
+Keying on it destroys real records. wakareo_id is the unique record identity.
 
   py scripts/41_wakareo_import.py                 # every component found
   py scripts/41_wakareo_import.py --source ngata  # just one
@@ -79,13 +83,23 @@ def main():
     con = sqlite3.connect(DB_PATH)
     con.execute("PRAGMA foreign_keys = ON")
     total = 0
+    failed = []
     for source_id in targets:
-        n = import_source(con, source_id)
+        try:
+            n = import_source(con, source_id)
+        except Exception as exc:
+            con.rollback()
+            failed.append(source_id)
+            print(f"  {source_id:22s} FAILED: {exc}", file=sys.stderr)
+            continue
         total += n
         if n:
             print(f"  {source_id:22s} {n:6,d} rows")
     print(f"\nImported {total:,} rows.")
     con.close()
+    if failed:
+        print(f"\n{len(failed)} source(s) failed: {', '.join(failed)}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
