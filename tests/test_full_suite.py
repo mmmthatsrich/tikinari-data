@@ -573,6 +573,10 @@ class TestSourceMetadata(unittest.TestCase):
         "williams", "papakupu", "pollex", "te_aka",
         "hepatakakupu", "paekupu", "personal", "taikupu",
         "pollex_cognatesets", "lpo", "acd", "abvd", "walworth", "tregear",
+        # Wakareo ā-ipurangi components (session 67, Task 4 landing tables):
+        "tregear_exceptions", "ngata", "te_matatiki", "kimikupu_hou",
+        "he_kupu_arotake", "kupu_rorohiko", "tai_kupu_variants",
+        "nga_tini_a_tangaroa", "kupu_mataora", "maori_law_lexicon",
     }
     COUNT_SOURCES = {
         "williams":          "williams_entries",
@@ -585,6 +589,20 @@ class TestSourceMetadata(unittest.TestCase):
         "pollex_cognatesets": "pollex_cognatesets",
         "lpo":               "lpo_cognatesets",
         "acd":               "acd_cognatesets",
+        # Wakareo landing tables: entry_count is written in the same
+        # transaction as the rows by 41_wakareo_import.py's import_source(),
+        # so it stays in lockstep with the table whether the table is fully
+        # populated, empty, or partially extracted.
+        "tregear_exceptions": "tregear_exceptions_entries",
+        "ngata":              "ngata_entries",
+        "te_matatiki":        "te_matatiki_entries",
+        "kimikupu_hou":       "kimikupu_hou_entries",
+        "he_kupu_arotake":    "he_kupu_arotake_entries",
+        "kupu_rorohiko":      "kupu_rorohiko_entries",
+        "tai_kupu_variants":  "tai_kupu_variants_entries",
+        "nga_tini_a_tangaroa": "nga_tini_a_tangaroa_entries",
+        "kupu_mataora":       "kupu_mataora_entries",
+        "maori_law_lexicon":  "maori_law_lexicon_entries",
     }
 
     @classmethod
