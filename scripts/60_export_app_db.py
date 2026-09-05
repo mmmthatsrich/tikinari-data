@@ -76,32 +76,6 @@ APP_TABLES = [
 # FTS5 virtual tables rebuilt from their content tables after the copy.
 APP_FTS = ["entry_fts", "sense_fts", "example_fts"]
 
-# Sources extracted from Wakareo ā-ipurangi. Wordstream licenses most components
-# from third parties (see docs/superpowers/specs/2026-09-05-wakareo-extraction-design.md),
-# so they are held in staging and never shipped. Removing a source_id from this
-# tuple is a licensing decision, not a technical one.
-EXCLUDED_SOURCES = (
-    "tregear_exceptions", "ngata", "te_matatiki", "kimikupu_hou",
-    "he_kupu_arotake", "kupu_rorohiko", "tai_kupu_variants",
-    "nga_tini_a_tangaroa", "kupu_mataora", "maori_law_lexicon",
-)
-
-_EXCL = ",".join(f"'{s}'" for s in EXCLUDED_SOURCES)
-_KEPT_ENTRIES = f"(SELECT id FROM stg.entry WHERE source_id NOT IN ({_EXCL}))"
-
-# WHERE clause applied when copying each table out of staging. Tables absent
-# from this map are copied whole.
-TABLE_FILTER = {
-    "source_metadata": f"WHERE source_id NOT IN ({_EXCL})",
-    "entry":           f"WHERE source_id NOT IN ({_EXCL})",
-    "form":            f"WHERE entry_id IN {_KEPT_ENTRIES}",
-    "sense":           f"WHERE entry_id IN {_KEPT_ENTRIES}",
-    "example":         f"WHERE entry_id IN {_KEPT_ENTRIES}",
-    "relation":        f"WHERE entry_id IN {_KEPT_ENTRIES}",
-    "entry_domain":    f"WHERE entry_id IN {_KEPT_ENTRIES}",
-    "ETY_entry_link":  f"WHERE entry_id IN {_KEPT_ENTRIES}",
-}
-
 
 def _ddl(stg, name):
     row = stg.execute(
@@ -146,19 +120,9 @@ def export():
     # 1. real tables — create from staging DDL, then copy rows
     for t in APP_TABLES:
         out.execute(_ddl(stg, t))
-        where = TABLE_FILTER.get(t, "")
-        out.execute(f'INSERT INTO main."{t}" SELECT * FROM stg."{t}" {where}')
+        out.execute(f'INSERT INTO main."{t}" SELECT * FROM stg."{t}"')
         cnt = out.execute(f'SELECT COUNT(*) FROM main."{t}"').fetchone()[0]
         print(f"  table  {t:<22} {cnt:>8,} rows")
-
-    # A kept entry may cross-reference an excluded one; drop the pointer, keep
-    # the row (target_headword still carries the human-readable target).
-    orphaned = out.execute(
-        "UPDATE relation SET target_entry_id = NULL WHERE target_entry_id IS NOT NULL "
-        "AND target_entry_id NOT IN (SELECT id FROM entry)"
-    ).rowcount
-    if orphaned:
-        print(f"  nulled {orphaned:,} relation targets pointing at excluded sources")
 
     # 2. FTS virtual tables — create then rebuild from content
     for f in APP_FTS:

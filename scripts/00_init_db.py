@@ -1223,17 +1223,19 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
         ("paekupu",            "Paekupu (curriculum vocabulary)",           "Restricted",      "https://www.paekupu.co.nz",                               None, 0, "Curriculum subject areas; stub — permissions handled externally"),
         ("personal",           "Personal Lexicon",                          "User-owned",      None,                                                      None, 0, "User-added words and notes"),
 
-        # ── Wakareo ā-ipurangi components (session 67) ──────────────────────
-        ("tregear_exceptions",  "Wordstream Tregear Exceptions",   "Wordstream Corporation (c) 2002",        "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
-        ("ngata",               "H.M. Ngata English-Maori Dictionary", "Whai Ngata; Learning Media 1993",    "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
-        ("te_matatiki",         "Te Matatiki Contemporary Maori Words", "Te Taura Whiri (c) 1996; OUP written-permission clause", "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
-        ("kimikupu_hou",        "Kimikupu Hou modern words",       "NZCER; kaitiaki Te Taura Whiri",         "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
-        ("he_kupu_arotake",     "He Kupu Arotake",                 "Crown copyright (c) 1995; Education Review Office", "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
-        ("kupu_rorohiko",       "Kupu Rorohiko",                   "Te Taka Keegan; University of Waikato",  "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; Maori IT terms; English headword, inverted at unify; staging only — not exported"),
-        ("tai_kupu_variants",   "Tai Kupu (Maori word variances)", "Wordstream Corporation (c) 2003",        "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; NOT the Maori Minute `taikupu` source; staging only — not exported"),
-        ("nga_tini_a_tangaroa", "Nga tini a Tangaroa (fish names)","Ministry of Fisheries; Strickland",       "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
-        ("kupu_mataora",        "Kupu Mataora",                    "Not asserted in Wakareo Legal.aspx",     "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; staging only — not exported"),
-        ("maori_law_lexicon",   "Custom Maori Law Lexicon",        "Not asserted in Wakareo Legal.aspx",     "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; staging only — not exported to the app DB"),
+        # ── Wakareo ā-ipurangi components (session 67; permitted-use revision
+        #    2026-09-06 — see docs/superpowers/specs/2026-09-05-wakareo-
+        #    extraction-design.md, "Permitted use") ───────────────────────────
+        ("tregear_exceptions",  "Wordstream Tregear Exceptions",   "Wordstream Corporation (c) 2002",        "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; used with permission for a private, non-commercial app; not for public distribution"),
+        ("ngata",               "H.M. Ngata English-Maori Dictionary", "Whai Ngata; Learning Media 1993",    "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; used with permission for a private, non-commercial app; not for public distribution"),
+        ("te_matatiki",         "Te Matatiki Contemporary Maori Words", "Te Taura Whiri (c) 1996; OUP written-permission clause", "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; used with permission for a private, non-commercial app; not for public distribution"),
+        ("kimikupu_hou",        "Kimikupu Hou modern words",       "NZCER; kaitiaki Te Taura Whiri",         "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; used with permission for a private, non-commercial app; not for public distribution"),
+        ("he_kupu_arotake",     "He Kupu Arotake",                 "Crown copyright (c) 1995; Education Review Office", "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; used with permission for a private, non-commercial app; not for public distribution"),
+        ("kupu_rorohiko",       "Kupu Rorohiko",                   "Te Taka Keegan; University of Waikato",  "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; Maori IT terms; English headword, inverted at unify; used with permission for a private, non-commercial app; not for public distribution"),
+        ("tai_kupu_variants",   "Tai Kupu (Maori word variances)", "Wordstream Corporation (c) 2003",        "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; NOT the Maori Minute `taikupu` source; used with permission for a private, non-commercial app; not for public distribution"),
+        ("nga_tini_a_tangaroa", "Nga tini a Tangaroa (fish names)","Ministry of Fisheries; Strickland",       "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; used with permission for a private, non-commercial app; not for public distribution"),
+        ("kupu_mataora",        "Kupu Mataora",                    "Not asserted in Wakareo Legal.aspx",     "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; English headword, inverted at unify; used with permission for a private, non-commercial app; not for public distribution"),
+        ("maori_law_lexicon",   "Custom Maori Law Lexicon",        "Not asserted in Wakareo Legal.aspx",     "https://reotupu.co.nz/WSLiveWakareo/", None, 0, "Wakareo component; used with permission for a private, non-commercial app; not for public distribution"),
     ]
     conn.executemany(
         """INSERT OR IGNORE INTO source_metadata
@@ -1246,6 +1248,19 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
     conn.execute(
         "UPDATE source_metadata SET default_dialect = 'Tai Tokerau' "
         "WHERE source_id IN ('papakupu', 'taikupu') AND default_dialect IS NULL"
+    )
+    # INSERT OR IGNORE above will not touch the ten Wakareo rows already seeded
+    # (session 67) with the old "staging only — not exported" wording, now
+    # false under the 2026-09-06 permitted-use revision. Update them explicitly;
+    # idempotent, and scoped to exactly these ten source_ids.
+    conn.executemany(
+        "UPDATE source_metadata SET notes = ? WHERE source_id = ?",
+        [(notes, source_id) for source_id, _, _, _, _, _, notes in sources
+         if source_id in (
+             "tregear_exceptions", "ngata", "te_matatiki", "kimikupu_hou",
+             "he_kupu_arotake", "kupu_rorohiko", "tai_kupu_variants",
+             "nga_tini_a_tangaroa", "kupu_mataora", "maori_law_lexicon",
+         )],
     )
 
 

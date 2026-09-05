@@ -1,4 +1,15 @@
-"""Wakareo sources: provenance integrity in staging, absence from the app DB.
+"""Wakareo sources: provenance integrity in staging, presence and
+completeness in the app DB.
+
+Revised 2026-09-06: the repo owner holds confirmation that all ten Wakareo
+components may be used in a private, non-public, non-commercial app (see
+docs/superpowers/specs/2026-09-05-wakareo-extraction-design.md — Permitted
+use). They now ship in maori_dict.db like any other source, carrying a
+source_metadata.licence naming the asserted copyright holder and notes
+recording the private-use condition (see scripts/00_init_db.py). This
+replaces the original task-7 export exclusion (implemented and verified in
+commit 148fd3a; restore from there if the app's status ever changes and the
+sources must be withheld again).
 
 Assumes the pipeline has run:
     py scripts/41_wakareo_import.py
@@ -69,23 +80,48 @@ class Provenance(unittest.TestCase):
                 self.assertEqual(missing, 0)
 
 
-class AppDbExclusion(unittest.TestCase):
-    def test_no_wakareo_source_reaches_the_app_db(self):
+class AppDbCompleteness(unittest.TestCase):
+    """Inverted 2026-09-06 (was AppDbExclusion, asserting absence): the ten
+    Wakareo sources are now permitted to ship, so this checks they ship
+    PRESENT and COMPLETE — every source with staging rows carries the same
+    entry count in the app DB, and every source_metadata row rides along."""
+
+    def test_wakareo_sources_ship_complete(self):
+        if not APP_DB.exists():
+            self.skipTest("app DB not built")
+        stg = sqlite3.connect(DB_PATH)
+        app = sqlite3.connect(APP_DB)
+        for source_id in WAKAREO_SOURCES:
+            with self.subTest(source=source_id):
+                stg_n = stg.execute(
+                    "SELECT COUNT(*) FROM entry WHERE source_id=?", (source_id,)
+                ).fetchone()[0]
+                if not stg_n:
+                    continue  # not imported into staging yet; nothing to check
+                app_n = app.execute(
+                    "SELECT COUNT(*) FROM entry WHERE source_id=?", (source_id,)
+                ).fetchone()[0]
+                self.assertEqual(
+                    app_n, stg_n,
+                    f"{source_id}: staging has {stg_n} entries, app DB has {app_n}",
+                )
+        stg.close()
+        app.close()
+
+    def test_wakareo_source_metadata_present(self):
         if not APP_DB.exists():
             self.skipTest("app DB not built")
         con = sqlite3.connect(APP_DB)
         placeholders = ",".join("?" * len(WAKAREO_SOURCES))
-        entries = con.execute(
-            f"SELECT COUNT(*) FROM entry WHERE source_id IN ({placeholders})",
-            WAKAREO_SOURCES,
-        ).fetchone()[0]
         meta = con.execute(
             f"SELECT COUNT(*) FROM source_metadata WHERE source_id IN ({placeholders})",
             WAKAREO_SOURCES,
         ).fetchone()[0]
         con.close()
-        self.assertEqual(entries, 0, "Wakareo entries leaked into the app DB")
-        self.assertEqual(meta, 0, "Wakareo source_metadata leaked into the app DB")
+        self.assertEqual(
+            meta, len(WAKAREO_SOURCES),
+            "one or more Wakareo source_metadata rows missing from the app DB",
+        )
 
     def test_app_db_has_no_dangling_relation_targets(self):
         if not APP_DB.exists():
