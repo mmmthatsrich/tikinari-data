@@ -16,7 +16,7 @@
 - **`PYTHONUTF8=1` prefix on every `py` command** — macrons in headwords and output.
 - **TLS:** every script that makes an HTTPS request MUST call `truststore.inject_into_ssl()` **before** `import requests`. Norton Antivirus intercepts TLS on this machine (`CN=Norton Web/Mail Shield Root`), so `certifi` cannot validate the chain. **`verify=False` is forbidden** — credentials are POSTed over this connection.
 - **Credentials** come only from `utils.load_env("WAKAREO_USER", "WAKAREO_PASS")`, which reads the gitignored `.env`. Never hardcode, never log, never write them to `sources/` or any committed file.
-- **Nothing ships.** No Wakareo source may appear in `data/maori_dict.db`. Task 7 enforces this with a test.
+- **All ten ship** (revised 2026-09-06). The owner holds confirmation that the sources may be used in a **private, non-public, non-commercial** app, so they export to `data/maori_dict.db` like any other source. Task 7 verifies they arrive intact. The permission is conditional on that private, non-commercial status — see *Permitted use* in the spec; if it ever lapses, restore the export exclusion from commit `148fd3a`.
 - **Williams is skipped.** Any record carrying the `WR-WWC` tag is discarded and counted, never landed.
 - **`sources/` is gitignored.** Test fixtures must live in `tests/fixtures/wakareo/`, which is committed.
 - **Politeness:** 1.5s minimum delay between requests, `User-Agent: MaoriDictResearch/1.0 (rich@kaio.co.nz)`.
@@ -51,7 +51,7 @@ Plus `WR-WWC` (Williams Corpus) — **discarded**.
 | `scripts/41_wakareo_import.py` | **Create.** JSON → the ten landing tables. |
 | `scripts/00_init_db.py` | **Modify.** Ten `CREATE TABLE`s + ten `source_metadata` rows. |
 | `scripts/50_build_unified.py` | **Modify.** Ten builders, EN→MI inversion, `SOURCES` tuple. |
-| `scripts/60_export_app_db.py` | **Modify.** Source exclusion filter on the copy step. |
+| `scripts/60_export_app_db.py` | **Revised 2026-09-06:** no source filtering — all ten export normally. |
 | `tests/fixtures/wakareo/*.html` | **Create.** Committed copies of the recon fixtures. |
 | `tests/test_wakareo_records.py` | **Create.** Unit tests for the pure module. |
 | `tests/test_wakareo_provenance.py` | **Create.** DB-level integrity + export exclusion guard. |
@@ -1231,7 +1231,22 @@ git -c user.name="Richard Kaio" -c user.email="Richard.Kaio+GITFNDC@fndc.govt.nz
 
 ---
 
-### Task 7: Export exclusion + guard test
+### Task 7: Ship the ten sources + guard test
+
+> **Revised 2026-09-06.** This task originally EXCLUDED the ten sources from the app DB,
+> because Wordstream licenses most components from third parties and cannot sub-license them
+> onward. The owner has since confirmed the sources may be used in a private, non-public,
+> non-commercial app, so the exclusion is withdrawn and all ten now ship. The steps below
+> describe the revised intent; the withdrawn exclusion is preserved in commit `148fd3a` and
+> should be restored from there if the app's status ever changes.
+>
+> Revised requirements: `60_export_app_db.py` carries no source filter; the
+> `test_ety_counts_match_staging` carve-out reverts to strict equality across all `ETY_*`
+> tables; the guard test asserts the ten sources are PRESENT with matching entry counts; and
+> the ten `source_metadata` rows record that use is permitted for a private, non-commercial
+> app only, so the condition travels with the data.
+
+#### Original (withdrawn) task text
 
 **Files:**
 - Modify: `scripts/60_export_app_db.py:56-75` (add exclusion constants), `:118-122` (the copy loop)
@@ -1551,19 +1566,19 @@ PYTHONUTF8=1 py tests/test_schema.py                            # the 8 unittest
 Expected: both green. Investigate any failure before continuing — do not proceed to export on
 a red suite.
 
-- [ ] **Step 6: Export and confirm the app DB is untouched by this work**
+- [ ] **Step 6: Export and confirm the ten sources shipped**
 
 ```bash
 PYTHONUTF8=1 py scripts/60_export_app_db.py
 PYTHONUTF8=1 py -m unittest tests.test_wakareo_provenance -v
 ```
 
-Expected: PASS, and the per-source counts printed by the export match the six pre-existing sources only.
+Expected: PASS, and the export prints the six pre-existing sources at unchanged counts **plus** the ten Wakareo sources at their landing-table counts.
 
 - [ ] **Step 7: Update the trackers**
 
-- **`SESSIONS.md`** — add a row: session 67, date 2026-09-05, sources added (all ten with their real row counts from Step 2), what changed, and the note that nothing ships pending licence clearance.
-- **`DATABASE_REFERENCE.md`** — document the ten landing tables and their columns, and the ten new `source_metadata` rows. Note in the export section that `EXCLUDED_SOURCES` filters them out.
+- **`SESSIONS.md`** — add a row: session 67, date 2026-09-06, sources added (all ten with their real row counts from Step 2), what changed, and the note that all ten ship under a private, non-commercial use permission.
+- **`DATABASE_REFERENCE.md`** — document the ten landing tables and their columns, and the ten new `source_metadata` rows. Record that all ten ship, and that the permission is conditional on the app remaining private and non-commercial.
 - **`docs/UPDATE_WORKFLOW.md`** — add a Wakareo per-source recipe (scrape → parse → import → unify) and add the ten rows to the *Quick reference* table.
 - **`.claude/skills/update-dictionary/SKILL.md`** — add the ten sources to the source/unify mapping table, with a note that they are staging-only.
 

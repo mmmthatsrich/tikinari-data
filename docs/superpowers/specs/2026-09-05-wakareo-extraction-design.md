@@ -1,13 +1,12 @@
 # Design — Wakareo ā-ipurangi extraction (10 new component dictionaries)
 
-*Date: 2026-09-05 · Status: awaiting spec review · Scope: dictionary collection DB (`staging_dictionary.db`; **no** `maori_dict.db` export this round)*
+*Date: 2026-09-05 (revised 2026-09-06) · Status: in implementation · Scope: dictionary collection DB (`staging_dictionary.db`) and the app DB (`maori_dict.db`)*
 
 ## Goal
 
 Extract the component dictionaries of **Wakareo ā-ipurangi** (reotupu.co.nz, Wordstream
 Corporation Ltd) into the staging DB as ten new word-list sources, unify them into the
-canonical core, and **exclude them from the app DB export** pending per-component licence
-clearance.
+canonical core, and ship them in the app DB.
 
 Access is by paid subscription plus written permission from Wordstream for full exploration
 and use. Recon was performed 2026-09-05; fixtures live in `sources/wakareo/recon/`.
@@ -39,14 +38,35 @@ implementation — see *Extraction*.
 
 - **Williams is skipped entirely.** `williams_entries` (14,942 rows, NZETC TEI of the same
   1971 7th edition) already covers it. Not scraped, not diffed, not landed.
-- **Nothing ships this round.** All ten land in `staging_dictionary.db` and unify into the
-  core, but `60_export_app_db.py` excludes every one. `maori_dict.db` is unchanged by this
-  work.
+- **All ten ship** (revised 2026-09-06, see *Permitted use* below). They land in
+  `staging_dictionary.db`, unify into the core, and export to `maori_dict.db` like any other
+  source.
 - **Name clash resolved:** Wakareo's "Tai Kupu" becomes `tai_kupu_variants`. The existing
   `taikupu` source (Ngāpuhi vocab, Māori Minute app) is untouched. Other components take
   plain names.
 - **EN→MI sources invert at unify, not at landing** (see *The direction problem*).
 - **No core schema change.** No new columns on `entry` / `sense` / `form` / `relation`.
+
+## Permitted use — READ BEFORE CHANGING THE EXPORT
+
+*Revised 2026-09-06.* The repo owner holds confirmation that all ten components may be used
+**in a private, non-public, non-commercial app**. On that basis they ship in `maori_dict.db`.
+This follows existing practice for `papakupu`, which ships carrying
+`licence='For Private Use Only'`.
+
+**This permission is conditional, and the condition is the whole basis for it.** Wakareo is a
+*compilation*: Wordstream licenses components 3–7 and 9 in the inventory above from third
+parties — Whai Ngata / Learning Media, Te Taura Whiri with an explicit Oxford University Press
+written-permission clause, NZCER, the Crown (ERO), the Ministry of Fisheries, and Te Taka
+Keegan / University of Waikato. Wordstream cannot sub-license those onward for public or
+commercial distribution.
+
+**If the app ever becomes public or commercial, this arrangement lapses and those components
+must be withheld from the export again.** A working per-source export exclusion —
+`EXCLUDED_SOURCES` / `TABLE_FILTER` in `60_export_app_db.py`, plus the relation-target cleanup
+it needs — was implemented and verified in commit `148fd3a`; restore it from there rather than
+rewriting it. Components 2, 8, 10 and 11 are Wordstream-owned or unattributed and are the
+least constrained.
 
 ## Record model
 
@@ -208,9 +228,10 @@ on the record, so capturing them needs a separate faceted crawl. See *Out of sco
 
 ## Export
 
-`60_export_app_db.py` gains an explicit exclusion list covering the ten new `source_id`s, so
-they are absent from `entry` / `sense` / `example` / `form` / `relation` in `maori_dict.db`.
-The export is verified to produce the same set of shipped sources before and after this work.
+`60_export_app_db.py` needs no source filtering: all ten export like any other source. Each
+carries a `source_metadata.licence` naming the component's asserted copyright holder and
+`notes` recording that use is permitted for a private, non-commercial app only — so the
+condition travels with the data into the app DB rather than living only in this document.
 
 ## Testing
 
@@ -221,12 +242,14 @@ The export is verified to produce the same set of shipped sources before and aft
 - `tests/test_wakareo_provenance.py` — DB-level: every unified `entry` for a Wakareo source
   has a `source_entry_id` whose `WR-` tag maps to that `source_id`; no `WR-WWC` row landed;
   landing-table row counts reconcile with unified `entry` counts allowing for EN→MI fan-out.
-- Export guard: the ten `source_id`s return zero rows from `maori_dict.db`.
+- Export guard: each of the ten sources that has staging rows appears in `maori_dict.db` with
+  a matching entry count.
 - Full suite green: `py -m unittest discover -s tests -p "test_*.py"`.
 
 ## Out of scope
 
-- Any change to `maori_dict.db` contents, and any licence clearance correspondence.
+- Licence clearance correspondence with the individual rights holders (not needed under the
+  private-use basis; required only if the app's status changes).
 - Wordstream Williams Corpus (skipped), and any diff of it against `williams_entries`.
 - Topic/dialect facet harvesting, including routing the 12 non-Māori Polynesian facet values
   (Hawaii, Samoa, Tonga, Tahiti, Marquesas, Niue, Futuna, Tikopia, Nukuoro, Paumotu,
