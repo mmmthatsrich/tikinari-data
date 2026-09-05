@@ -123,3 +123,33 @@ def normalise_proto_key(form: str) -> str:
     form = re.sub(r'<.*?>', '', form)     # strip <infix> notation
     form = re.sub(r'[-\s]+', '', form)    # collapse hyphens and spaces
     return form.strip()
+
+
+ENV_PATH = Path(__file__).parent.parent / ".env"
+
+
+def load_env(*keys: str) -> dict:
+    """Read KEY=VALUE pairs from the gitignored repo-root .env file.
+
+    Process environment wins, so a value exported in the shell overrides .env.
+    Raises RuntimeError naming any requested key that resolves empty, so a
+    scraper fails at startup rather than mid-crawl with a bad session.
+    """
+    import os
+
+    values = {}
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            values[k.strip()] = v.strip().strip('"').strip("'")
+
+    resolved = {k: os.environ.get(k) or values.get(k, "") for k in keys}
+    missing = [k for k, v in resolved.items() if not v]
+    if missing:
+        raise RuntimeError(
+            f"Missing credential(s) {', '.join(missing)} — set them in {ENV_PATH}"
+        )
+    return resolved
