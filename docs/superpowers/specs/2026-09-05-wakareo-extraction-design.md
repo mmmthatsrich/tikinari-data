@@ -137,7 +137,7 @@ is **verified at runtime**: any record carrying `WR-WWC` is discarded and counte
 - Raw HTML to `sources/wakareo/raw/{ID}.html`; `manifest.json` tracking
   `fetched` / `empty` / `errors` / `last_id` / per-tag counts. Fully resumable.
 - Upper bound discovered by probing forward until 50 consecutive empty records.
-- Estimated ~55,000 requests. Measured rate 1,686 ids/hour (~2.1s per record: the 1.5s politeness delay plus server round-trip), so **~31 hours**, not the ~23h a delay-only calculation suggests.
+- Estimated ~55,000 requests. Measured over 2.6h of live sweeping: **1,850-2,100 ids/hour** (the 1.5s politeness delay plus server round-trip, ~1.7-1.9s per record), so **~27-30 hours** end to end. A delay-only calculation gives ~23h and is too optimistic; a figure measured across a window containing network stalls gives ~31h and is too pessimistic.
 
 Flags: `--limit N` for test runs; `--from ID` / `--to ID` for targeted refetch.
 
