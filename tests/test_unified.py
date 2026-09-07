@@ -21,8 +21,13 @@ CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
 # have no rows to assert here yet. Add each as its landing table is populated:
 # he_kupu_arotake, kupu_rorohiko, tai_kupu_variants, nga_tini_a_tangaroa,
 # kupu_mataora, maori_law_lexicon, tregear_exceptions.
+# Sources with at least one row in `entry`. The Wakareo components whose landing
+# tables are still empty (he_kupu_arotake, kupu_rorohiko, tai_kupu_variants,
+# nga_tini_a_tangaroa, kupu_mataora, maori_law_lexicon) project nothing and so do
+# not appear here.
 SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu", "taikupu",
-           "ngata", "te_matatiki", "kimikupu_hou")
+           "temarareo", "ngata", "te_matatiki", "kimikupu_hou",
+           "tregear_exceptions")
 
 
 def _open() -> sqlite3.Connection:

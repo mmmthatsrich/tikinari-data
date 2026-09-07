@@ -115,6 +115,29 @@ py scripts/50_build_unified.py --source taikupu
 
 ---
 
+### Te Māra Reo  (online; plant names + Proto-Polynesian etymologies)
+
+Richard Benton's plant-name garden, temarareo.org. **CC BY-NC 3.0 NZ** — redistributable
+with attribution, non-commercial use only. Feeds BOTH layers: the Māori plant names unify
+into the core, the protoform pages go to `ETY_*`.
+
+```bash
+py scripts/42_temarareo_scrape.py     # index + ~191 PPN-*/TMR-* pages (2s delay, resumable)
+py scripts/42_temarareo_parse.py      # -> sources/temarareo/temarareo_parsed.json
+py scripts/42_temarareo_import.py     # -> temarareo_entries/_cognatesets/_reflexes/_chain
+py scripts/50_build_unified.py --source temarareo
+```
+
+Page discovery is driven off the index, so an upstream addition is picked up without
+editing the scraper. The site is static and changes rarely — a re-scrape is a full run;
+`--force` re-downloads pages already on disk.
+
+Then rebuild the etymology layer as below (`52_build_etymology_unified.py` projects
+`temarareo` alongside POLLEX/LPO/ACD/Tregear, and turns `temarareo_chain` into `ETY_link`
+ancestry edges tagged `origin = 'temarareo_chain'`).
+
+---
+
 ## Etymology / comparative layer (NOT part of the unified core)
 
 POLLEX, LPO, and ACD are an etymology layer (cognate sets + reflexes), not word-list

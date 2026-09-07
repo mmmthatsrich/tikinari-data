@@ -182,8 +182,33 @@ ORDER BY e.source_id, s.sense_number, x.sort_no;
 | `pollex_cognatesets` | POLLEX protoform records | 3,291 | Permission pending | Research/etymology layer |
 | `lpo` | Lexicon of Proto Oceanic | 2,820 | CC-BY-4.0 | Etymology layer |
 | `acd` | Austronesian Comparative Dictionary | 10,857 | CC-BY-4.0 | Etymology layer |
+| `temarareo` | Te Māra Reo (The Language Garden) | 203 | CC BY-NC 3.0 NZ | Māori plant names + Proto-Polynesian etymologies (Benton); unifies AND feeds `ETY_*` |
 
 **Total searchable entries across dictionary sources: ~111,000** (unified `entry` = 111,205)
+
+### Te Māra Reo tables (staging)
+
+`temarareo_entries` (203) is the only slice that unifies. The other three are the
+comparative layer, projected into `ETY_*` by `52_build_etymology_unified.py`:
+
+| Table | Rows | What it holds |
+|---|---|---|
+| `temarareo_entries` | 203 | Māori plant names. 101 have their own page (definition, species, related names); 102 come only from the index and carry that row's species as their gloss — `has_page` tells them apart. |
+| `temarareo_cognatesets` | 122 | Protoform records: 111 from `PPN-*.html` pages, 11 derived from name pages whose protoform has no page of its own. |
+| `temarareo_reflexes` | 1,363 | Per-language comparative witnesses across 130 languages (1,167 Polynesian, 196 wider Austronesian). One row per (page, language), Tregear-style. |
+| `temarareo_chain` | 431 | Ordered reconstruction steps (PAn → PMP → POc → PPn). Becomes `ETY_link` ancestry edges with `origin = 'temarareo_chain'`. |
+
+Two source-side caveats are recorded rather than papered over:
+
+- **The index's name↔species pairing is not recoverable.** Columns 2 and 3 of
+  `TMR-Ingoa.html` are aligned only visually with `<br/>` runs that do not
+  correspond one-to-one (the `*fara` row has 7 names against 9 species lines), so
+  species are stored as an unordered list per row. Authoritative pairings come from
+  the individual pages.
+- **16 level names have no `ETY_level` code.** They are Benton's own finer
+  subdivisions — Proto South/East/Central Eastern Pacific, Proto Pre-Polynesian,
+  Proto Rarotongan-Māori — which the ladder does not carry. `level_code` is NULL
+  and the name is preserved in `level_name` / `ETY_cognateset.notes`.
 
 ---
 
@@ -933,6 +958,7 @@ WHERE headword_search = ?
 | Te Aka | Restricted | Only with permission confirmed |
 | He Pātaka Kupu | Restricted | Only with permission confirmed |
 | Paekupu | Restricted | Only with permission confirmed |
+| Te Māra Reo | CC BY-NC 3.0 NZ | Yes — attribution required, **non-commercial only** |
 | Personal Lexicon | User-owned | Yes |
 
 ---

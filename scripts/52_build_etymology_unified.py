@@ -34,15 +34,16 @@ import argparse
 import re
 import sqlite3
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import (DB_PATH, normalise_proto_key, normalise_search_key,
-                   normalise_sort_key)
+from utils import (DB_PATH, canonical_level, normalise_proto_key,
+                   normalise_search_key, normalise_sort_key)
 
 # Walworth is gap-fill only (S58) and MUST build LAST — its novelty test reads the
 # already-projected coverage of the other five sources from ETY_*.
-SOURCES = ("pollex", "lpo", "acd", "tregear", "abvd", "walworth")
+SOURCES = ("pollex", "lpo", "acd", "tregear", "temarareo", "abvd", "walworth")
 # Delete order matters (FK: ETY_reflex -> ETY_cognateset). Children first.
 ETY_TABLES = (
     "ETY_entry_link", "ETY_link", "ETY_reflex", "ETY_cognateset",
@@ -273,6 +274,134 @@ def build_tregear(con, resolver) -> dict:
     return {"cognateset": len(entries), "reflex": n_reflex, "orphan_reflex": orphans}
 
 
+def _tmr_chain_ref(level: str | None, proto_key: str) -> str:
+    """Stable source_ref for an ancestral node lifted out of a Te Māra Reo chain.
+
+    build_links re-derives the same key to wire the ancestry edges, so this must
+    stay in step with the node keying in build_temarareo.
+    """
+    return f"chain:{level or '?'}:{proto_key}"
+
+
+def build_temarareo(con, resolver) -> dict:
+    """temarareo_cognatesets -> ETY_cognateset; temarareo_reflexes -> ETY_reflex.
+
+    Each page is a cognate set keyed on its protoform. The reconstruction chain
+    printed on the page (PAn *WakaR -> PMP *akar -> POc *akar -> PPn *aka) also
+    names ancestral protoforms that have no page of their own; those become their
+    own ETY_cognateset nodes, deduplicated across pages on (level, proto_key), so
+    one reconstruction is one node however many pages cite it. The edges between
+    them are wired in build_links, which owns ETY_link.
+
+    A synthetic Māori reflex is added for every plant name the index lists against
+    a protoform — that is what ETY_entry_link matches on, so without it the source
+    would build a tree nothing could reach.
+    """
+    by_iso, by_name = resolver
+    added_langs: dict[str, tuple] = {}
+    id_map: dict[int, int] = {}          # temarareo_cognatesets.id -> ETY id
+    node_by_key: dict[tuple, int] = {}   # (level, proto_key) -> ETY id
+
+    sets = con.execute(
+        "SELECT id, page, protoform, proto_key, level_code, level_name, gloss, "
+        "related_words, further_info, url, under_construction "
+        "FROM temarareo_cognatesets ORDER BY id"
+    ).fetchall()
+    for (sid, page, protoform, pkey, lvl_code, lvl_name, gloss, related, further,
+         url, stub) in sets:
+        # ETY_cognateset.level holds a ladder code; Benton's finer subdivisions
+        # (Proto South Central Pacific, Proto Rarotongan-Māori) have no node there,
+        # so the level goes to notes rather than inventing a code for it.
+        notes = "; ".join(filter(None, [
+            None if lvl_code else (f"level: {lvl_name}" if lvl_name else None),
+            f"further information: {further}" if further else None,
+            "page under construction" if stub else None,
+        ])) or None
+        cur = con.execute(
+            "INSERT INTO ETY_cognateset "
+            "(source, source_ref, protoform, proto_key, level, gloss, set_group, "
+            " notes, url, gap_fill) VALUES ('temarareo', ?, ?, ?, ?, ?, NULL, ?, ?, 0)",
+            (page, protoform, pkey, canonical_level(lvl_code), gloss, notes, url))
+        id_map[sid] = cur.lastrowid
+        node_by_key.setdefault((canonical_level(lvl_code) or lvl_name or "", pkey),
+                               cur.lastrowid)
+
+    # Ancestral reconstructions named only inside a chain.
+    n_anc = 0
+    for lvl_code, lvl_name, form, pkey, gloss in con.execute(
+            "SELECT level_code, level_name, form, proto_key, gloss FROM temarareo_chain "
+            "WHERE cognateset_id IS NOT NULL ORDER BY cognateset_id, seq"):
+        code = canonical_level(lvl_code)
+        key = (code or lvl_name or "", pkey)
+        if key in node_by_key:
+            continue
+        cur = con.execute(
+            "INSERT INTO ETY_cognateset "
+            "(source, source_ref, protoform, proto_key, level, gloss, set_group, "
+            " notes, url, gap_fill) VALUES ('temarareo', ?, ?, ?, ?, ?, NULL, ?, NULL, 0)",
+            (_tmr_chain_ref(code or lvl_name, pkey), form, pkey, code, gloss,
+             None if code else (f"level: {lvl_name}" if lvl_name else None)))
+        node_by_key[key] = cur.lastrowid
+        n_anc += 1
+
+    # Comparative witnesses.
+    n_reflex = orphans = 0
+    for rid, cog_id, language, qualifier, form, gloss, kind in con.execute(
+            "SELECT id, cognateset_id, language, qualifier, form, gloss, kind "
+            "FROM temarareo_reflexes ORDER BY cognateset_id, seq"):
+        ety_set = id_map.get(cog_id)
+        if ety_set is None:
+            orphans += 1
+            continue
+        lang_key = resolve_lang(by_iso, by_name, name=language)
+        if lang_key is None:
+            lang_key = "temarareo:" + normalise_sort_key(language or "")
+            added_langs.setdefault(lang_key, (language, "temarareo"))
+        con.execute(
+            "INSERT INTO ETY_reflex "
+            "(cognateset_id, source, source_ref, lang_key, language, form, gloss, "
+            " source_code, source_author, flags, gap_fill) "
+            "VALUES (?, 'temarareo', ?, ?, ?, ?, ?, NULL, NULL, ?, 0)",
+            (ety_set, f"r{rid}", lang_key, language, form, gloss,
+             "ext_poly" if kind == "austronesian" else None))
+        n_reflex += 1
+
+    # Synthetic Māori reflexes: the plant names the index lists under each protoform.
+    # The two sides spell macrons differently — the index has *pōfutukava, the page
+    # has *Pofutukava — and normalise_proto_key keeps macrons, so the key is folded
+    # through normalise_search_key as well or the bridge silently misses.
+    def proto_match_key(form: str) -> str:
+        return normalise_search_key(normalise_proto_key(form))
+
+    set_by_key = {}
+    for sid, protoform in con.execute(
+            "SELECT id, protoform FROM temarareo_cognatesets WHERE protoform IS NOT NULL"):
+        set_by_key.setdefault(proto_match_key(protoform), id_map.get(sid))
+    n_synth = 0
+    for eid, headword, gloss, ppn in con.execute(
+            "SELECT id, headword, definition, ppn_form FROM temarareo_entries "
+            "WHERE ppn_form IS NOT NULL"):
+        ety_set = set_by_key.get(proto_match_key(ppn))
+        if ety_set is None:
+            continue
+        con.execute(
+            "INSERT INTO ETY_reflex "
+            "(cognateset_id, source, source_ref, lang_key, language, form, gloss, "
+            " source_code, source_author, flags, gap_fill) "
+            "VALUES (?, 'temarareo', ?, ?, 'Māori', ?, ?, NULL, NULL, 'headword', 0)",
+            (ety_set, f"e{eid}", MAORI_KEY, headword, gloss))
+        n_reflex += 1
+        n_synth += 1
+
+    for lang_key, (name, src) in added_langs.items():
+        con.execute(
+            "INSERT OR IGNORE INTO ETY_language (lang_key, name, source) VALUES (?, ?, ?)",
+            (lang_key, name, src))
+    return {"cognateset": len(sets) + n_anc, "reflex": n_reflex,
+            "orphan_reflex": orphans, "ancestor_nodes": n_anc,
+            "synthetic_maori": n_synth}
+
+
 def build_abvd(con, resolver) -> dict:
     """abvd_cognatesets -> ETY_cognateset (per-concept attested class, no protoform);
     each cognacy judgment (abvd_cognates -> abvd_forms) becomes an ETY_reflex.
@@ -449,7 +578,8 @@ def build_walworth(con, resolver) -> dict:
 
 
 BUILDERS = {"pollex": build_pollex, "lpo": build_lpo, "acd": build_acd,
-            "tregear": build_tregear, "abvd": build_abvd,
+            "tregear": build_tregear, "temarareo": build_temarareo,
+            "abvd": build_abvd,
             "walworth": build_walworth}
 
 # raw-table row that each ETY source projects from, for the parity proof
@@ -458,6 +588,7 @@ RAW_SET_TABLE = {
     "lpo": "lpo_cognatesets",
     "acd": "acd_cognatesets",
     "tregear": "tregear_entries",
+    "temarareo": "temarareo_cognatesets",
     "abvd": "abvd_cognatesets",
     "walworth": "walworth_cognatesets",
 }
@@ -531,6 +662,45 @@ def build_links(con) -> dict:
             (src, tgt, rel_map.get(relation, relation), conf, raw_ref))
         linked_pairs.add(_pair(src, tgt))
         n_anc += 1
+
+    # Te Māra Reo chains are printed oldest-first (PAn -> PMP -> POc -> PPn), so each
+    # step descends from the one before it, and the page's own set descends from the
+    # last step unless it IS that step.
+    tmr_nodes = {r: i for i, r in con.execute(
+        "SELECT id, source_ref FROM ETY_cognateset WHERE source='temarareo'")}
+    tmr_level = {i: lv for i, lv in con.execute(
+        "SELECT id, level FROM ETY_cognateset WHERE source='temarareo'")}
+    chains = defaultdict(list)
+    for cog_id, seq, lvl_code, lvl_name, pkey in con.execute(
+            "SELECT c.cognateset_id, c.seq, c.level_code, c.level_name, c.proto_key "
+            "FROM temarareo_chain c WHERE c.cognateset_id IS NOT NULL "
+            "ORDER BY c.cognateset_id, c.seq"):
+        chains[cog_id].append((canonical_level(lvl_code), lvl_name, pkey))
+
+    page_ref = {sid: page for sid, page in con.execute(
+        "SELECT id, page FROM temarareo_cognatesets")}
+    for cog_id, steps in chains.items():
+        ordered = []
+        for code, name, pkey in steps:
+            node = tmr_nodes.get(_tmr_chain_ref(code or name, pkey))
+            if node is None:
+                # The step is the page's own protoform, stored under the page ref.
+                node = tmr_nodes.get(page_ref.get(cog_id))
+            if node is not None and (not ordered or ordered[-1] != node):
+                ordered.append(node)
+        own = tmr_nodes.get(page_ref.get(cog_id))
+        if own is not None and (not ordered or ordered[-1] != own):
+            ordered.append(own)
+        for ancestor, child in zip(ordered, ordered[1:]):
+            if _pair(child, ancestor) in linked_pairs:
+                continue
+            con.execute(
+                "INSERT INTO ETY_link (source_set_id, target_set_id, link_type, "
+                "relation, match_confidence, match_method, origin, notes) "
+                "VALUES (?, ?, 'ancestry', 'descends_from', 0.95, 'source_stated', "
+                "'temarareo_chain', NULL)", (child, ancestor))
+            linked_pairs.add(_pair(child, ancestor))
+            n_anc += 1
     con.commit()
 
     # cross-source dedup: sets sharing a proto_key across DIFFERENT sources, with
@@ -628,10 +798,21 @@ def parity_check(con, targets) -> bool:
                   f"{'OK' if set_ok else 'MISMATCH'}  (gap-fill: promoted subset)")
             print(f"  [walworth] reflex      gap-fill  ETY={ety_ref:>6}  (novel only)")
             continue
-        set_ok = raw_sets == ety_sets
-        ok &= set_ok
-        print(f"  [{src}] cognateset  raw={raw_sets:>6}  ETY={ety_sets:>6}  "
-              f"{'OK' if set_ok else 'MISMATCH'}")
+        if src == "temarareo":
+            # ETY also holds the ancestral reconstructions lifted out of the chains,
+            # which have no row of their own in temarareo_cognatesets.
+            anc = con.execute(
+                "SELECT COUNT(*) FROM ETY_cognateset WHERE source='temarareo' "
+                "AND source_ref LIKE 'chain:%'").fetchone()[0]
+            set_ok = ety_sets == raw_sets + anc
+            ok &= set_ok
+            print(f"  [temarareo] cognateset  raw={raw_sets:>6}  ETY={ety_sets:>6}  "
+                  f"{'OK' if set_ok else 'MISMATCH'}  (+{anc} chain ancestors)")
+        else:
+            set_ok = raw_sets == ety_sets
+            ok &= set_ok
+            print(f"  [{src}] cognateset  raw={raw_sets:>6}  ETY={ety_sets:>6}  "
+                  f"{'OK' if set_ok else 'MISMATCH'}")
 
         ety_ref = con.execute(
             "SELECT COUNT(*) FROM ETY_reflex WHERE source=?", (src,)).fetchone()[0]
@@ -642,6 +823,17 @@ def parity_check(con, targets) -> bool:
             ok &= ref_ok
             print(f"  [tregear] reflex   raw={expect:>6}  ETY={ety_ref:>6}  "
                   f"{'OK' if ref_ok else 'MISMATCH'}  (entries+cognates)")
+        elif src == "temarareo":
+            # temarareo reflexes = every parsed witness + 1 synthetic Māori reflex
+            # per index name, which is what ETY_entry_link matches on.
+            synth = con.execute(
+                "SELECT COUNT(*) FROM ETY_reflex WHERE source='temarareo' "
+                "AND flags='headword'").fetchone()[0]
+            raw_ref = _count(con, "temarareo_reflexes")
+            ref_ok = ety_ref - synth == raw_ref
+            ok &= ref_ok
+            print(f"  [temarareo] reflex  raw={raw_ref:>6}  ETY={ety_ref:>6}  "
+                  f"{'OK' if ref_ok else 'MISMATCH'}  (+{synth} synthetic Māori)")
         elif src in RAW_REFLEX_TABLE:
             raw_ref = _count(con, RAW_REFLEX_TABLE[src])
             ref_ok = raw_ref == ety_ref

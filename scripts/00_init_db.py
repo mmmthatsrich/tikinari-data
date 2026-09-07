@@ -421,6 +421,81 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_tregear_cog_entry ON tregear_cognates(tregear_entry_id);
         CREATE INDEX IF NOT EXISTS idx_tregear_cog_lang  ON tregear_cognates(language);
 
+        -- ── Te Mara Reo (temarareo.org) ───────────────────────────────────────
+        -- Richard Benton's Maori plant-name garden. Two page families feed two
+        -- layers: TMR-*.html Maori names -> temarareo_entries (unified core, the
+        -- only slice that unifies), and PPN-*.html protoforms ->
+        -- temarareo_cognatesets + _reflexes + _chain (ETY_* comparative layer).
+        -- CC BY-NC 3.0 NZ: redistributable with attribution, non-commercial only.
+        CREATE TABLE IF NOT EXISTS temarareo_entries (
+            id               INTEGER PRIMARY KEY,
+            source_entry_id  TEXT NOT NULL UNIQUE,  -- page stem, or 'idx:<ppn>:<name>' for index-only names
+            headword         TEXT NOT NULL,         -- Maori plant name, annotations stripped
+            headword_sort    TEXT,                  -- normalise_sort_key
+            headword_search  TEXT,                  -- normalise_search_key (macron/vowel-fold)
+            homonym_no       INTEGER,               -- index homonym marker, e.g. 'parapara [2]'
+            variant          TEXT,                  -- alternative spelling, e.g. 'ti (tii)'
+            definition       TEXT,                  -- gloss from the name page, else the index note
+            note             TEXT,                  -- secondary prose line from the page
+            species          TEXT,                  -- JSON array of scientific binomials
+            related_names    TEXT,                  -- JSON array of {names, literal_meaning, species, note}
+            ppn_form         TEXT,                  -- protoform this name is listed under
+            stage_no         INTEGER,               -- index stage 1..14 (etymological layer)
+            stage_name       TEXT,
+            page             TEXT,                  -- TMR-*.html, NULL when index-only
+            url              TEXT,
+            has_page         INTEGER NOT NULL DEFAULT 0  -- 1 = has its own TMR page (fuller record)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tmr_entry_search ON temarareo_entries(headword_search);
+        CREATE INDEX IF NOT EXISTS idx_tmr_entry_sort   ON temarareo_entries(headword_sort);
+
+        CREATE TABLE IF NOT EXISTS temarareo_cognatesets (
+            id            INTEGER PRIMARY KEY,
+            page          TEXT NOT NULL UNIQUE,   -- PPN-*.html
+            protoform     TEXT NOT NULL,          -- as printed, without the leading *
+            proto_key     TEXT,                   -- normalise_proto_key, for cross-source matching
+            level_code    TEXT,                   -- ETY_level.code, NULL if unmapped
+            level_name    TEXT,                   -- as written, e.g. 'Proto Polynesian'
+            gloss         TEXT,
+            species       TEXT,                   -- JSON array
+            related_words TEXT,                   -- discussion prose
+            further_info  TEXT,                   -- bibliography pointer, e.g. 'lpo3 pp.98-100'
+            url           TEXT,
+            variant_protoforms TEXT,              -- JSON array; pages covering several related protoforms
+            under_construction INTEGER NOT NULL DEFAULT 0  -- source marks the page as a stub
+        );
+        CREATE INDEX IF NOT EXISTS idx_tmr_cog_key ON temarareo_cognatesets(proto_key);
+
+        CREATE TABLE IF NOT EXISTS temarareo_reflexes (
+            id            INTEGER PRIMARY KEY,
+            cognateset_id INTEGER NOT NULL,       -- FK temarareo_cognatesets.id
+            language      TEXT NOT NULL,          -- 'Tongan', 'Wayan Fijian', ...
+            qualifier     TEXT,                   -- parenthetical, e.g. 'Duke of York Islands, PNG'
+            form          TEXT,                   -- lead comparative form
+            gloss         TEXT,                   -- full comparative text (Tregear precedent)
+            kind          TEXT,                   -- polynesian | austronesian
+            seq           INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_tmr_refl_set  ON temarareo_reflexes(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_tmr_refl_lang ON temarareo_reflexes(language);
+
+        -- One row per step of a page's reconstruction chain (PAn -> PMP -> POc -> PPn),
+        -- in printed order. Drives the ETY_link ancestry edges built by script 52.
+        CREATE TABLE IF NOT EXISTS temarareo_chain (
+            id            INTEGER PRIMARY KEY,
+            cognateset_id INTEGER,                -- FK temarareo_cognatesets.id (PPN page)
+            entry_id      INTEGER,                -- FK temarareo_entries.id (TMR page); one of the two
+            seq           INTEGER NOT NULL,       -- 0-based order down the chain
+            level_code    TEXT,
+            level_name    TEXT,
+            form          TEXT NOT NULL,
+            proto_key     TEXT,
+            gloss         TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_tmr_chain_set   ON temarareo_chain(cognateset_id);
+        CREATE INDEX IF NOT EXISTS idx_tmr_chain_entry ON temarareo_chain(entry_id);
+        CREATE INDEX IF NOT EXISTS idx_tmr_chain_key   ON temarareo_chain(proto_key);
+
         -- ── Etymology linking table ───────────────────────────────────────────
         CREATE TABLE IF NOT EXISTS etymology_links (
             id                   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1222,6 +1297,7 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
         ("hepatakakupu",       "He Pataka Kupu",                            "Restricted",      "https://www.hepatakakapu.maori.nz",                       None, 0, "Monolingual Maori; stub — permissions handled externally"),
         ("paekupu",            "Paekupu (curriculum vocabulary)",           "Restricted",      "https://www.paekupu.co.nz",                               None, 0, "Curriculum subject areas; stub — permissions handled externally"),
         ("personal",           "Personal Lexicon",                          "User-owned",      None,                                                      None, 0, "User-added words and notes"),
+        ("temarareo",          "Te Mara Reo (The Language Garden)",         "CC BY-NC 3.0 NZ", "https://www.temarareo.org/TMR-Ingoa.html",                None, 0, "Richard Benton's Maori plant-name etymologies; scraped from temarareo.org. Maori plant names unify into the core; Proto-Polynesian protoform pages feed the ETY_* layer. Open licence — attribution required, non-commercial use only"),
 
         # ── Wakareo ā-ipurangi components (session 67; permitted-use revision
         #    2026-09-06 — see docs/superpowers/specs/2026-09-05-wakareo-

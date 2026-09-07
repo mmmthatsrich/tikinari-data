@@ -1,6 +1,6 @@
 ---
 name: update-dictionary
-description: Use when refreshing the Māori dictionary DB from a source (Te Aka, Paekupu, He Pātaka Kupu, Williams, Papakupu, TaiKupu, or POLLEX/LPO/ACD) after that source publishes new data — runs the scrape→parse→import→unify pipeline for ONE source at a time, then verifies. Triggers: "update <source>", "refresh the dictionary", "re-import te aka", "annual update".
+description: Use when refreshing the Māori dictionary DB from a source (Te Aka, Paekupu, He Pātaka Kupu, Williams, Papakupu, TaiKupu, Te Māra Reo, or POLLEX/LPO/ACD) after that source publishes new data — runs the scrape→parse→import→unify pipeline for ONE source at a time, then verifies. Triggers: "update <source>", "refresh the dictionary", "re-import te aka", "annual update".
 ---
 
 # Update a dictionary source
@@ -40,6 +40,7 @@ scrape → parse(JSON) → import → <source>_entries → unify → entry/sense
    | Williams | `williams` | Wayback source |
    | Papakupu | `papakupu` | run cleanups 09/10/11 `--apply`; dialect=Tai Tokerau auto |
    | TaiKupu | `taikupu` | `40_taikupu_import --version-check` then `--download`; single-request JSON API; dialect=Tai Tokerau auto |
+   | Te Māra Reo | `temarareo` | 42_* scrape/parse/import; ALSO an etymology source — `52` projects it into `ETY_*` |
    | POLLEX/LPO/ACD/Tregear/ABVD/Walworth | _(none)_ | etymology layer — import only, **no unify** |
    - Web scrapes are long and resumable; OCR/PDF and `--refresh` modes per the doc.
 4. **Unify** the source: `py scripts/50_build_unified.py --source <name>` (skip for the

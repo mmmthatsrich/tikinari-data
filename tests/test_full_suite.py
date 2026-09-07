@@ -573,6 +573,7 @@ class TestSourceMetadata(unittest.TestCase):
         "williams", "papakupu", "pollex", "te_aka",
         "hepatakakupu", "paekupu", "personal", "taikupu",
         "pollex_cognatesets", "lpo", "acd", "abvd", "walworth", "tregear",
+        "temarareo",
         # Wakareo ā-ipurangi components (session 67, Task 4 landing tables):
         "tregear_exceptions", "ngata", "te_matatiki", "kimikupu_hou",
         "he_kupu_arotake", "kupu_rorohiko", "tai_kupu_variants",
@@ -580,6 +581,7 @@ class TestSourceMetadata(unittest.TestCase):
     }
     COUNT_SOURCES = {
         "williams":          "williams_entries",
+        "temarareo":         "temarareo_entries",
         "papakupu":          "papakupu_entries",
         "pollex":            "pollex_entries",
         "te_aka":            "te_aka_entries",

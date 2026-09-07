@@ -55,7 +55,7 @@ WAKAREO_SOURCES = (
     "nga_tini_a_tangaroa", "kupu_mataora", "maori_law_lexicon",
 )
 SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu",
-           "taikupu") + WAKAREO_SOURCES
+           "taikupu", "temarareo") + WAKAREO_SOURCES
 CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
 
 # trailing citation / source markers in example strings (same patterns as the prototype)
@@ -406,6 +406,48 @@ def build_taikupu(con, b):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"), None, None, i)
 
 
+def build_temarareo(con, b):
+    """Te Māra Reo Māori plant names -> unified core.
+
+    Only the Māori-name slice unifies; the protoform pages are an etymology source
+    and are projected into ETY_* by 52_build_etymology_unified.py instead.
+
+    Two grades of record share the table. A name with a page of its own carries a
+    real definition; a name that only appears in the index does not, and for those
+    the species list IS the definition the source gives, so it becomes the gloss
+    rather than leaving the sense empty. `has_page` keeps the two distinguishable.
+    """
+    sql = ("SELECT source_entry_id, headword, headword_sort, headword_search, "
+           "definition, note, species, related_names, ppn_form, stage_no, "
+           "stage_name, page, url, has_page FROM temarareo_entries ORDER BY id")
+    for (seid, hw, hs, hse, definition, note, species, related, ppn, stage_no,
+         stage_name, page, url, has_page) in con.execute(sql):
+        sp = [s for s in jload(species) if isinstance(s, str)]
+        rel = [r for r in jload(related) if isinstance(r, dict)]
+
+        locator = "; ".join(filter(None, [
+            page or "index",
+            f"stage {stage_no}" if stage_no else None,
+            f"*{ppn}" if ppn else None,
+        ]))
+        eid = b.add_entry(seid, hw, hs, hse, pos="noun", locator=locator,
+                          material={"hw": hw, "def": definition, "note": note,
+                                    "sp": sp, "ppn": ppn, "stage": stage_no})
+        # gloss_en is the definition where the source gives one, else the species it
+        # names; definition_raw keeps the whole record (definition + note + species).
+        gloss = definition or ("; ".join(sp) if sp else None)
+        raw = " ".join(filter(None, [definition, note,
+                                     f"[{'; '.join(sp)}]" if sp else None])) or None
+        sid = b.add_sense(eid, None, gloss, None, raw, part_of_speech="noun")
+        # Plant names discussed on the page — attested in its prose, not headwords of
+        # their own, so they are cross-references rather than entries.
+        for r in rel:
+            for name in r.get("names", []):
+                b.add_relation(eid, "see_also", name, note=r.get("literal_meaning"))
+        if stage_name:
+            b.add_domain(eid, sid, stage_name, "en")
+
+
 # --- Wakareo components (session 67) --------------------------------------
 # Five components are English-headword. They are INVERTED here so
 # entry.headword is always Māori: one entry per Māori equivalent, carrying the
@@ -502,6 +544,7 @@ BUILDERS = {
     "paekupu": build_paekupu,
     "papakupu": build_papakupu,
     "taikupu": build_taikupu,
+    "temarareo": build_temarareo,
     "tregear_exceptions": build_tregear_exceptions,
     "ngata": build_ngata,
     "te_matatiki": build_te_matatiki,

@@ -32,7 +32,8 @@ SOURCE_ORDER = {
     "personal":     3,
     "taikupu":      4,
     "te_aka":       5,
-    "williams":     6,
+    "temarareo":    6,
+    "williams":     7,
 }
 
 _QUERIES = [
@@ -43,6 +44,7 @@ _QUERIES = [
     ("paekupu",      "SELECT headword_search, id FROM paekupu_entries"),
     ("personal",     "SELECT headword_search, id FROM personal_lexicon WHERE is_private = 0"),
     ("taikupu",      "SELECT headword_search, id FROM taikupu_entries"),
+    ("temarareo",    "SELECT headword_search, id FROM temarareo_entries"),
 ]
 
 
