@@ -25,7 +25,7 @@ SOURCE_TO_TABLE = {sid: f"{sid}_entries" for sid in TAG_TO_SOURCE.values()}
 
 BASE_COLS = ("source_entry_id", "wakareo_id", "ref_no", "headword", "headword_sort",
              "headword_search", "part_of_speech", "search_scope", "body_raw",
-             "content_hash")
+             "body_text", "content_hash")
 
 
 def row_for(rec: dict) -> tuple[tuple, tuple]:
@@ -37,6 +37,7 @@ def row_for(rec: dict) -> tuple[tuple, tuple]:
         rec["pos"] or None,
         json.dumps(rec["search_scope"], ensure_ascii=False),
         rec["body_raw"],
+        rec["body_text"],
         compute_content_hash({"hw": hw, "body": rec["body_raw"]}),
     )
     if rec["source_id"] in EN_MI_SOURCE_IDS:

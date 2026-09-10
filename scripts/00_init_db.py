@@ -1073,7 +1073,10 @@ _WAKAREO_COMMON = """
             headword_search TEXT NOT NULL,
             part_of_speech  TEXT,
             search_scope    TEXT,                   -- JSON array of authored variants
-            body_raw        TEXT,
+            body_raw        TEXT,                   -- source HTML, kept as the archive: Tregear's
+                                                     --   <B> runs still delimit its sense blocks
+            body_text       TEXT,                   -- body_raw with markup stripped; NULL when only
+                                                     --   the lemma survives. Consumers read THIS.
             content_hash    TEXT,
             first_seen      TEXT,
             created_at      TEXT DEFAULT (datetime('now')),
@@ -1249,6 +1252,12 @@ def migrate_pos_columns(conn: sqlite3.Connection) -> None:
     _add_column(conn, "entry", "part_of_speech_mi", "TEXT")
 
 
+def migrate_wakareo_body_text(conn: sqlite3.Connection) -> None:
+    """Add body_text to every Wakareo landing table (idempotent)."""
+    for table in WAKAREO_EN_MI_TABLES + WAKAREO_MI_EN_TABLES + ("te_matatiki_entries",):
+        _add_column(conn, table, "body_text", "TEXT")
+
+
 def migrate_tables(conn: sqlite3.Connection) -> None:
     """Add columns that were missing from initial schema versions."""
     pollex_cols = {row[1] for row in conn.execute("PRAGMA table_info(pollex_entries)")}
@@ -1346,6 +1355,7 @@ def main() -> None:
         create_tables(conn)
         create_wakareo_tables(conn)
         migrate_wakareo_unique_key(conn)
+        migrate_wakareo_body_text(conn)
         migrate_pos_columns(conn)
         migrate_tables(conn)
         seed_source_metadata(conn)

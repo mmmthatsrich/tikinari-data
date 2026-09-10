@@ -117,6 +117,27 @@ class UnifiedCore(unittest.TestCase):
             "AND s.gloss_mi IS NOT NULL")
         self.assertGreater(both, 3000)
 
+    # ── Wakareo definitions carry no markup ───────────────────────────────────
+    WAKAREO_SOURCES = ("ngata", "te_matatiki", "kimikupu_hou", "tregear_exceptions")
+
+    def test_wakareo_definitions_are_markup_free(self):
+        # definition_raw is projected from the cleaned body_text, not the
+        # body_raw archive, so no source HTML reaches the app surface.
+        for src in self.WAKAREO_SOURCES:
+            with self.subTest(source=src):
+                self.assertEqual(self._one(
+                    "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+                    "WHERE e.source_id=? AND s.definition_raw LIKE '%<%'", src), 0)
+
+    def test_wakareo_definition_is_never_just_the_headword(self):
+        # Kimikupu Hou bodies are often `<BR><B>{headword}</B><BR><BR>`; stripped
+        # they read as a definition that merely repeats the word. Those are NULL.
+        for src in self.WAKAREO_SOURCES:
+            with self.subTest(source=src):
+                self.assertEqual(self._one(
+                    "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+                    "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
+
     # ── structured examples ───────────────────────────────────────────────────
     def test_te_aka_examples_have_maori_text(self):
         self.assertGreater(self._one(

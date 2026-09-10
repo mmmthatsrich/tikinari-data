@@ -137,5 +137,47 @@ class BodyParsers(unittest.TestCase):
                     self.assertIsInstance(r["gloss_en"], str)
 
 
+class BodyText(unittest.TestCase):
+    """`body_text` — the markup-free body, for consumers that render prose.
+
+    `body_raw` stays as the archive: Tregear's <B> runs delimit the definition
+    block from the `Maori Example:` / `Compare With:` sections, so the markup is
+    still needed to split those senses later.
+    """
+
+    def test_ngata_body_text_is_markup_free_prose(self):
+        r = wr.parse_record(fx("shape_NGATA_26300.html"))
+        self.assertEqual(
+            r["body_text"],
+            "tū whakamatara, tūrangahapa Her aloofness separated her from the "
+            "others. Na tōna tū whakamatara kē a ia i wehe atu i ētahi.",
+        )
+
+    def test_body_raw_still_holds_the_markup(self):
+        r = wr.parse_record(fx("shape_NGATA_26300.html"))
+        self.assertIn("<B>", r["body_raw"])
+
+    def test_body_text_is_none_when_only_the_equivalent_remains(self):
+        # Body is `<BR><B>pukahu</B><BR><BR><BR><BR>` — stripping leaves
+        # 'pukahu', the equivalent itself. That is not a definition.
+        r = wr.parse_record(fx("shape_KIMIKUPU_52800.html"))
+        self.assertEqual(r["equivalents"], ["pukahu"])
+        self.assertIsNone(r["body_text"])
+
+    def test_body_text_is_none_when_only_the_headword_remains(self):
+        # Same rule from the MI->EN side: nothing but the headword is no content.
+        r = wr.parse_record(fx("shape_MATATIKI_47800.html"))
+        self.assertIsNotNone(r["body_text"])  # this one has real content
+
+    def test_no_fixture_leaks_markup_into_body_text(self):
+        for p in sorted(FIXTURES.glob("*.html")):
+            r = wr.parse_record(p.read_text(encoding="utf-8"))
+            if r is None or r["body_text"] is None:
+                continue
+            with self.subTest(fixture=p.name):
+                self.assertNotIn("<", r["body_text"])
+                self.assertNotIn("&nbsp;", r["body_text"])
+
+
 if __name__ == "__main__":
     unittest.main()

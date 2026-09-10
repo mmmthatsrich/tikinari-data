@@ -476,8 +476,10 @@ def _fold_qualifier(lemma_en, qual):
 
 
 def _wakareo_en_mi(con, b, table):
+    # body_text, not body_raw: the archive keeps the source HTML, the app surface
+    # must not. NULL there means the body held nothing but the lemma.
     sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
-           f"equivalents, qualifier, example_en, example_mi, body_raw "
+           f"equivalents, qualifier, example_en, example_mi, body_text "
            f"FROM {table} ORDER BY id")
     for (seid, wid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
         equivalents = [e for e in jload(equivs) if e]
@@ -508,7 +510,7 @@ def _wakareo_en_mi(con, b, table):
 def _wakareo_mi_en(con, b, table, matatiki=False):
     extra = ", derivation, williams_refs" if matatiki else ""
     sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
-           f"gloss_en, body_raw{extra} FROM {table} ORDER BY id")
+           f"gloss_en, body_text{extra} FROM {table} ORDER BY id")
     for row in con.execute(sql):
         seid, wid, hw, pos, scope, gloss, raw = row[:7]
         # seid alone is NOT unique (shared print reference); wakareo_id makes it so.

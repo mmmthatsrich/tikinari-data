@@ -164,6 +164,25 @@ def _parse_te_matatiki(rec: dict, segs: list[str]) -> dict:
     return rec
 
 
+def _body_text(rec: dict, body: str) -> str | None:
+    """Markup-free body for consumers, or None when only the lemma survives.
+
+    `body_raw` is kept alongside as the archive: Tregear's <B> runs delimit the
+    definition block from its `Maori Example:` / `Compare With:` sections, so the
+    markup is still needed to split those senses later.
+
+    Kimikupu Hou bodies are often `<BR><B>{equivalent}</B><BR><BR>` — stripping
+    leaves the equivalent itself, which is not a definition and must not read as
+    one.
+    """
+    text = strip_tags(body)
+    if not text:
+        return None
+    lemmas = {rec["headword"].casefold()}
+    lemmas.update(e.casefold() for e in rec.get("equivalents") or [])
+    return None if text.casefold() in lemmas else text
+
+
 def parse_record(html: str) -> dict | None:
     """Full parse of one record page. None for Williams Corpus or a non-record."""
     slots = split_template(html)
@@ -183,8 +202,10 @@ def parse_record(html: str) -> dict | None:
         "body_raw": slots["body"],
     }
     if source_id in EN_MI_SOURCE_IDS:
-        return _parse_en_mi(rec, slots["body"])     # needs raw body for the bold run
-    segs = _segments(slots["body"])
-    if source_id == "te_matatiki":
-        return _parse_te_matatiki(rec, segs)
-    return _parse_mi_en(rec, segs)
+        rec = _parse_en_mi(rec, slots["body"])     # needs raw body for the bold run
+    else:
+        segs = _segments(slots["body"])
+        rec = (_parse_te_matatiki(rec, segs) if source_id == "te_matatiki"
+               else _parse_mi_en(rec, segs))
+    rec["body_text"] = _body_text(rec, slots["body"])
+    return rec
