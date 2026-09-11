@@ -18,19 +18,41 @@ _POS_RE = re.compile(
 # The separator before a sense number is matched but NOT consumed: a ')' there
 # closes the previous sense's citation, and eating it truncated 148 senses
 # ('...(Ngā Mōteatea 124'). Lookbehind keeps the character with the text it
-# belongs to.
-_MARKER_RE = re.compile(r"(?:^|(?<=[.)])\s)(\d+)\.\s")
+# belongs to. '?' and '!' are in the class because Māori example sentences end
+# in them constantly ('Te hia ? which in order? 2. An indefinite number'), and
+# excluding them hid the marker that follows.
+_MARKER_RE = re.compile(r"(?:^|(?<=[.?!)])\s)(\d+)\.\s")
 _LEAD_MARKER_RE = re.compile(r"^\s*\d+\.\s")
 
 
-def _sense_spans(text):
-    """(content_start, marker_start) list for the longest strict 1,2,3,… run; [] if <2."""
-    spans, expected = [], 1
+def _sense_spans(text, start=1):
+    """(content_start, marker_start) list for the strict start,start+1,… run."""
+    spans, expected = [], start
     for m in _MARKER_RE.finditer(text):
         if int(m.group(1)) == expected:
             spans.append((m.end(), m.start()))
             expected += 1
-    return spans if len(spans) >= 2 else []
+    return spans
+
+
+def _numbered_spans(text):
+    """(spans, implicit_first) for the entry's sense run.
+
+    Williams numbers the first sense only when it needs to; 136 entries leave
+    it bare and open explicit numbering at 2 ('Caterpillar, grub. 2. A
+    fresh-water fish.'). Insisting the run begin at 1 meant it never began and
+    the entry collapsed to a single sense holding all of them. Falling back to
+    a run from 2 recovers those, with the bare head becoming sense 1.
+    """
+    spans = _sense_spans(text, 1)
+    if len(spans) >= 2:
+        return spans, False
+    spans = _sense_spans(text, 2)
+    # marker_start > 0 keeps a leading '2.' — with nothing before it to be
+    # sense 1 — from inventing an empty sense.
+    if spans and spans[0][1] > 0:
+        return spans, True
+    return [], False
 
 
 def _split_pos(chunk):
@@ -45,7 +67,9 @@ def split_senses(definition):
     if not definition:
         return []
     text = definition.strip()
-    spans = _sense_spans(text)
+    spans, implicit_first = _numbered_spans(text)
+    if implicit_first:
+        spans = [(0, 0)] + spans
 
     if not spans:
         chunk = _LEAD_MARKER_RE.sub("", text, count=1).strip()

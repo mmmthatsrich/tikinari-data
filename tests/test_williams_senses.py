@@ -58,6 +58,42 @@ class TestWilliamsSenses(unittest.TestCase):
         assert s[0]["definition_raw"].endswith("(Ngā Mōteatea 124)")
         assert s[1]["definition_raw"] == "fig. Valiant warrior."
 
+    def test_unnumbered_first_sense_still_splits(self):
+        # `Toroku` (10508): Williams leaves the FIRST sense unnumbered and
+        # starts explicit numbering at 2. Requiring a run from 1 meant the run
+        # never started and the whole entry collapsed into one sense.
+        s = split_senses("Caterpillar, grub. 2. A fresh-water fish.")
+        assert len(s) == 2
+        assert s[0]["gloss_en"] == "Caterpillar, grub."
+        assert s[0]["sense_number"] == 1
+        assert s[1]["gloss_en"] == "A fresh-water fish."
+        assert s[1]["sense_number"] == 2
+
+    def test_unnumbered_first_sense_keeps_its_leading_pos(self):
+        # `Tohunga-rua` (10295): the implicit sense 1 carries the entry POS,
+        # and sense 2 restates its own.
+        s = split_senses("v.t. Dole out. Tohungaruatia etahi kapana ma tatou. "
+                         "2. n. One who deals.")
+        assert len(s) == 2
+        assert s[0]["part_of_speech"] == "v.t."
+        assert s[0]["gloss_en"].startswith("Dole out.")
+        assert s[1]["part_of_speech"] == "n."
+
+    def test_sense_marker_follows_a_question_or_exclamation(self):
+        # `Hia` (1090): Maori example sentences end in ? and !, which the
+        # separator class [.)] excluded, so the marker after them was invisible.
+        s = split_senses("Interrogative numeral. How many? Tokohia ou hoa ? "
+                         "Te hia ? which in order? 2. An indefinite number.")
+        assert len(s) == 2
+        assert s[0]["gloss_en"].endswith("which in order?")
+        assert s[1]["gloss_en"] == "An indefinite number."
+
+    def test_lone_stray_number_after_comma_is_not_a_sense_marker(self):
+        # `Toro` (10534): 'Variant of toro (i), 1. (Colenso.)' — the '1.' is a
+        # sense reference inside a cross-reference, not a sense boundary.
+        s = split_senses("Variant of toro (i), 1. (Colenso.).")
+        assert len(s) == 1
+
 
 if __name__ == "__main__":
     unittest.main()
