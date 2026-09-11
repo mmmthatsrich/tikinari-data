@@ -15,7 +15,11 @@ POS_ABBREVS = [
 _POS_RE = re.compile(
     r"^(" + "|".join(re.escape(p) for p in sorted(POS_ABBREVS, key=len, reverse=True)) + r")\s"
 )
-_MARKER_RE = re.compile(r"(?:^|[.)]\s)(\d+)\.\s")
+# The separator before a sense number is matched but NOT consumed: a ')' there
+# closes the previous sense's citation, and eating it truncated 148 senses
+# ('...(Ngā Mōteatea 124'). Lookbehind keeps the character with the text it
+# belongs to.
+_MARKER_RE = re.compile(r"(?:^|(?<=[.)])\s)(\d+)\.\s")
 _LEAD_MARKER_RE = re.compile(r"^\s*\d+\.\s")
 
 

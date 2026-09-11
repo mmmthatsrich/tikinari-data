@@ -165,6 +165,44 @@ class UnifiedCore(unittest.TestCase):
                     "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
                     "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
 
+    def test_williams_examples_extracted_from_the_definitions(self):
+        # Williams prints examples inline after the gloss; before extraction
+        # only 61 of 14,942 entries had an example row.
+        self.assertGreater(self._one(
+            "SELECT COUNT(DISTINCT x.entry_id) FROM example x "
+            "JOIN entry e ON e.id=x.entry_id WHERE e.source_id='williams'"), 7000)
+
+    def test_williams_gloss_is_no_longer_the_whole_definition(self):
+        # 18,792 senses had gloss_en byte-identical to definition_raw, which is
+        # the definition, its examples and its citations in one field.
+        same = self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='williams' AND s.gloss_en = s.definition_raw")
+        self.assertLess(same, 13000)
+
+    def test_williams_citations_land_in_the_citation_column(self):
+        self.assertGreater(self._one(
+            "SELECT COUNT(*) FROM example x JOIN entry e ON e.id=x.entry_id "
+            "WHERE e.source_id='williams' AND x.citation IS NOT NULL"), 5000)
+
+    def test_williams_senses_are_not_truncated_mid_citation(self):
+        # The sense-marker separator used to eat the ')' closing the previous
+        # sense's citation ('...(Ngā Mōteatea 124'), truncating 148 senses.
+        # That signature is an UNCLOSED '(' — strictly more opens than closes.
+        #
+        # The mirror signature (more closes than opens) is a different, still
+        # open defect: `Tūāahu (less correctly tūāhu), n.` loses 'Tūāahu (' to
+        # the headword-prefix strip in 01_williams_parse.py, orphaning the rest.
+        # 44 senses; tracked separately so this test stays about the splitter.
+        # 7 survive and are NOT ours: the 1957 source itself omits the paren.
+        # Verified in the Wayback HTML — `Atiti ke ana (<i>It glances off</i>.`
+        # has no closing bracket in the original typesetting.
+        self.assertLessEqual(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='williams' AND "
+            "(LENGTH(s.definition_raw)-LENGTH(REPLACE(s.definition_raw,'(',''))) > "
+            "(LENGTH(s.definition_raw)-LENGTH(REPLACE(s.definition_raw,')','')))"), 7)
+
     def test_te_matatiki_relations_target_words_not_page_codes(self):
         # `W.61` is a Williams page number, not a Māori headword, so it could
         # never resolve. The derivation's source word is the real target.

@@ -47,6 +47,17 @@ class TestWilliamsSenses(unittest.TestCase):
         s = split_senses(PAE)
         assert "Tregear" in s[0]["definition_raw"]  # citations kept in raw
 
+    def test_sense_marker_does_not_eat_the_previous_citation_paren(self):
+        # `Mumu`: the separator before '2.' is ') ', and consuming the ')' left
+        # sense 1 ending '...(Ngā Mōteatea 124' — 148 senses lost a character
+        # this way. The paren closes the citation; it belongs to sense 1.
+        s = split_senses(
+            "1. Baffling, boisterous wind. Ka riro te mumu, ka riro te awha "
+            "(Ngā Mōteatea 124) 2. fig. Valiant warrior.")
+        assert len(s) == 2
+        assert s[0]["definition_raw"].endswith("(Ngā Mōteatea 124)")
+        assert s[1]["definition_raw"] == "fig. Valiant warrior."
+
 
 if __name__ == "__main__":
     unittest.main()

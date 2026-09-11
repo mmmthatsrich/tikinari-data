@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
                    compute_content_hash)
 from williams_senses import split_senses
+from williams_examples import split_gloss_examples
 from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
 from wakareo_records import example_owners, parse_derivation, parse_tregear
@@ -277,12 +278,22 @@ def build_williams(con, b):
                                       "gloss_en": d, "definition_raw": d}]
         first_sid = None
         for s in senses:
-            sid = b.add_sense(eid, s["sense_number"], s["gloss_en"], None,
+            # Williams prints its examples inline, in Māori, after the English
+            # gloss — so gloss_en held the whole definition (18,792 senses were
+            # byte-identical to definition_raw) and `example` held 61 rows in
+            # 14,942 entries. The split is per SENSE, so each example lands on
+            # the sense it illustrates rather than all of them on sense 1.
+            gloss, inline = split_gloss_examples(s["gloss_en"])
+            sid = b.add_sense(eid, s["sense_number"], gloss, None,
                               s["definition_raw"], part_of_speech=s["part_of_speech"])
+            for i, ex in enumerate(inline):
+                b.add_example(sid, eid, ex["text"], None, None, ex["citation"], i)
             if first_sid is None:
                 first_sid = sid
+        # The parser's own <span lang="mi"> examples (61 entries) have no sense
+        # of their own to sit on.
         for i, ex in enumerate(examples):
-            b.add_example(first_sid, eid, ex, None, None, None, i)   # examples -> sense 1
+            b.add_example(first_sid, eid, ex, None, None, None, i)
         for t in jload(xr):
             if isinstance(t, dict):                       # typed ‖ cross-ref
                 b.add_relation(eid, t.get("type") or "cross_ref", t.get("target"))
@@ -699,6 +710,25 @@ def delete_source_slice(con, source_id):
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
     con.execute("DELETE FROM sense WHERE entry_id IN "
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
+    # Relations from OTHER sources may point into this one — Te Matatiki
+    # derivations resolve to Williams entries — and those foreign keys would
+    # block the delete. Release them, then say which sources must be re-unified
+    # to earn their targets back; the rows survive, only the resolution is lost.
+    has_target = any(r[1] == "target_entry_id"
+                     for r in con.execute("PRAGMA table_info(relation)"))
+    dangling = con.execute(
+        "SELECT e.source_id, COUNT(*) FROM relation r "
+        "JOIN entry e ON e.id = r.entry_id "
+        "WHERE r.target_entry_id IN (SELECT id FROM entry WHERE source_id=?) "
+        "  AND e.source_id <> ? GROUP BY e.source_id",
+        (source_id, source_id)).fetchall() if has_target else []
+    if dangling:
+        con.execute(
+            "UPDATE relation SET target_entry_id = NULL WHERE target_entry_id IN "
+            "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
+        detail = ", ".join(f"{src} ({n})" for src, n in dangling)
+        print(f"unresolved {detail} -> {source_id}; re-run "
+              f"50_build_unified.py --source " + " --source ".join(s for s, _ in dangling))
     con.execute("DELETE FROM entry WHERE source_id=?", (source_id,))
     return len(ids)
 
