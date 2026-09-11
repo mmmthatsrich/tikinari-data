@@ -22,7 +22,7 @@ targeted counts. Counts are evidence for a defect already seen, never the means 
 
 ## Tier 1 — Content missing that already exists elsewhere
 
-### D1. Paekupu: 13,050 senses are empty shells, and the content is recoverable
+### D1. Paekupu: 13,050 senses are empty shells, and the content is recoverable — **RESOLVED 2026-09-11**
 
 **79% of Paekupu's senses** (13,050 of 16,486) have no `gloss_en`, no `gloss_mi`, and no
 `definition_raw`. The sense row exists, carries POS and canonical POS, and holds nothing else.
@@ -31,10 +31,33 @@ This is not lost data. **All 13,050 have `entry.headword_en` populated** — `'z
 `'auto-filter (computing)'`, `'birth control pill, oral contraceptive'`. The English gloss is
 sitting in the entry table and was never projected into the sense.
 
-- **Cause:** `50_build_unified.py`, Paekupu branch — projects `headword_en` into `gloss_en`
-  only when a definition is also present.
-- **Fix:** project `entry.headword_en` → `sense.gloss_en` when the sense is otherwise empty.
-- **Verify:** empty-sense count for paekupu drops to 0; spot-check 30 against paekupu.co.nz.
+- **Cause:** `50_build_unified.py`, Paekupu branch — `gloss_en` was the definition and
+  nothing else, so an entry without one produced a sense holding only its POS. `headword_en`
+  was written to `entry` and never projected down.
+
+**Fix applied.** `build_paekupu` now projects `d or hen`: the definition where there is one,
+the entry's English headword where there is not. The headword *is* the gloss for these rows —
+Paekupu is a term bank, and each record exists to give a Māori term for a named English
+concept.
+
+A second, central change: `Builder.add_sense` now coerces blank text to NULL
+(`_blank_to_null`). Paekupu's `definition_raw` was being written as `''` — the concatenation
+of two absent fields — which reads as present-but-blank to the app, to FTS and to this
+report's own emptiness counts. The guard sits in the builder, so every source gets it; it also
+cleared 9 papakupu senses whose landing rows hold `''` where 15 identical neighbours hold NULL.
+
+| | Before | After |
+|---|---|---|
+| paekupu senses with no gloss, no definition | 13,050 | 0 |
+| gloss projected from `entry.headword_en` | 0 | 13,050 |
+| senses storing `''` for absent text (all sources) | 13,059 | 0 |
+| paekupu entries / senses | 16,486 | 16,486 — unchanged |
+
+**Verified.** 30 recovered glosses were checked against the cached source pages in
+`sources/paekupu/raw/` — all 30 match the page's `h2.english_word` verbatim, and all 30 pages
+genuinely carry no `short_description` block, so nothing is being papered over. Etymology
+rebuilt (`08b` + `52`, parity PASS) and the app DB re-exported. Full suite: 434 passed,
+3 skipped.
 
 ### D2. Williams: examples were never extracted — 61 entries out of 14,942
 
@@ -257,7 +280,7 @@ never captured.
 
 | # | Defect | Scale | Script |
 |---|---|---|---|
-| D1 | Paekupu senses empty, recoverable from `headword_en` | 13,050 | `50_build_unified.py` |
+| D1 | Paekupu senses empty, recoverable from `headword_en` | 13,050 | ✅ **fixed** — `build_paekupu` projects `headword_en`; blank→NULL in `add_sense` |
 | D2 | Williams examples never extracted | 14,881 entries | `01_williams_parse.py` |
 | D3 | Williams truncated senses | 148 | `01_williams_parse.py` |
 | D4 | Williams gloss = whole definition | 18,792 | resolved by D2 |
@@ -278,7 +301,7 @@ never captured.
 
 1. ~~**D9 + D10 + D11**~~ — ✅ **done 2026-09-10.** 42,135 of 42,189 senses cleared across four
    sources; only papakupu's 54 remain, from a separate pipeline.
-2. **D1** — 13,050 Paekupu senses recovered by one projection change. Cheapest win by far.
+2. ~~**D1**~~ — ✅ **done 2026-09-11.** 13,050 Paekupu senses recovered by one projection change, plus a central blank→NULL rule in `add_sense`.
 3. **D13 + D14** — tagging and vocabulary; small, mechanical, and unblocks canonical POS
    coverage.
 4. **D2 + D3 + D4** — the Williams parser. The largest single body of misplaced content; needs

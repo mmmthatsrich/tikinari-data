@@ -144,6 +144,11 @@ Language tagging (the core fix): He Pātaka Kupu glosses are **Māori** → `sen
 only; Te Aka/Williams/Papakupu/TaiKupu → `gloss_en`; Paekupu is bilingual (both). Never infer the
 gloss language from the source again.
 
+Paekupu has a short description on only 3,436 of its 16,486 entries. For the other 13,050 the
+sense's `gloss_en` is the entry's own `headword_en` — the English term the Māori word was
+coined for, which is the gloss for a term bank. No app-side fallback to `entry.headword_en` is
+needed; every Paekupu sense carries a gloss. Absent text is always NULL, never `''`.
+
 FTS over the core: `entry_fts(headword, headword_search)`, `sense_fts(gloss_en, gloss_mi,
 definition_raw)`, `example_fts(text_mi, text_en)` — external-content, trigger-synced.
 

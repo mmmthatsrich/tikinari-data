@@ -64,6 +64,11 @@ CITE_PAREN = re.compile(r"\s*\(([^()]*\d[^()]*)\)\s*$")        # Te Aka: (Te Toa
 SRC_BRACKET = re.compile(r"\s*\[([A-Z0-9][A-Z0-9/]*)\]\s*$")   # [TTU] [NGH3] [041126]
 
 
+def _blank_to_null(text):
+    """'' / whitespace -> None; anything else through unchanged."""
+    return text if text is None or str(text).strip() else None
+
+
 def jload(s):
     if not s:
         return []
@@ -122,6 +127,11 @@ class Builder:
 
     def add_sense(self, entry_id, sense_number, gloss_en, gloss_mi, definition_raw,
                   register=None, parent_sense_id=None, part_of_speech=None, note=None):
+        # Absent text is NULL, never ''. An empty string reads as
+        # present-but-blank to every downstream consumer (the app's "has a
+        # definition" test, the audit sweep's emptiness counts, FTS).
+        gloss_en, gloss_mi, definition_raw, note = (
+            _blank_to_null(v) for v in (gloss_en, gloss_mi, definition_raw, note))
         cur = self.con.execute(
             "INSERT INTO sense (entry_id, sense_number, parent_sense_id, gloss_en, "
             "gloss_mi, definition_raw, register, part_of_speech, note) "
@@ -367,7 +377,10 @@ def build_paekupu(con, b):
                           material={"hw": hw, "hen": hen, "pos": pos, "def": d,
                                     "def_mi": dmi, "ex": examples, "alt": jload(alt),
                                     "subj": jload(subj)})
-        sid = b.add_sense(eid, None, d, dmi, raw, part_of_speech=pos)
+        # 79% of Paekupu entries carry no definition, only the English headword
+        # the Māori term was coined for. That headword IS the gloss; without this
+        # projection 13,050 senses hold POS and nothing else (D1).
+        sid = b.add_sense(eid, None, d or hen, dmi, raw, part_of_speech=pos)
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         for w in jload(alt):

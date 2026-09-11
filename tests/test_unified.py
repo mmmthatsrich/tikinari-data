@@ -117,6 +117,33 @@ class UnifiedCore(unittest.TestCase):
             "AND s.gloss_mi IS NOT NULL")
         self.assertGreater(both, 3000)
 
+    def test_paekupu_has_no_empty_senses(self):
+        # 79% of Paekupu entries carry no definition at all — the English gloss
+        # is the entry's own headword_en, which the sense must project (D1).
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='paekupu' AND COALESCE(s.gloss_en,'')='' "
+            "AND COALESCE(s.gloss_mi,'')='' "
+            "AND COALESCE(s.definition_raw,'')=''"), 0)
+
+    def test_paekupu_definitionless_gloss_is_the_english_headword(self):
+        # Projected, not invented: where there is no definition the gloss must be
+        # headword_en verbatim, never a paraphrase.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='paekupu' AND s.definition_raw IS NULL "
+            "AND s.gloss_en IS NOT e.headword_en"), 0)
+        self.assertGreater(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='paekupu' AND s.definition_raw IS NULL "
+            "AND s.gloss_en = e.headword_en"), 13000)
+
+    def test_no_source_stores_an_empty_string_for_absent_text(self):
+        # '' reads as present-but-blank everywhere downstream; absence is NULL.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM sense WHERE gloss_en = '' OR gloss_mi = '' "
+            "OR definition_raw = ''"), 0)
+
     # ── Wakareo definitions carry no markup ───────────────────────────────────
     WAKAREO_SOURCES = ("ngata", "te_matatiki", "kimikupu_hou", "tregear_exceptions")
 
