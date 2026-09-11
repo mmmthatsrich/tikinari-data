@@ -50,6 +50,7 @@ from williams_headword import parse_headword_note
 from williams_xref import parse_see_also_targets, parse_equals_variants
 from papakupu_gloss import clean_gloss
 from paekupu_alternatives import parse_alternative
+from hepatakakupu_synonyms import parse_synonym
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
 from wakareo_records import example_owners, parse_derivation, parse_tregear
 from sweep_patch import apply_patches
@@ -458,9 +459,17 @@ def build_hepatakakupu(con, b):
         for i, ex in enumerate(examples):
             text, src = split_src(ex)
             b.add_example(sid, eid, text, None, src, None, i)
+        # A synonym wrapped in parens is one He Pātaka Kupu does not define:
+        # '(whārona awatea )'. The parens are a marker about the reference, not
+        # part of the term, and passing them through made 734 targets that could
+        # never resolve. Strip them and say so in the note instead (D30).
         for sy in jload(syn):
-            b.add_relation(eid, "synonym",
-                           sy.get("text") if isinstance(sy, dict) else sy)
+            parsed = parse_synonym(sy.get("text") if isinstance(sy, dict) else sy)
+            if not parsed:
+                continue
+            b.add_relation(eid, "synonym", parsed["headword"],
+                           note=None if parsed["has_entry"]
+                           else "no entry under this word in He Pātaka Kupu")
         if dom:
             b.add_domain(eid, sid, dom, "mi")
 
