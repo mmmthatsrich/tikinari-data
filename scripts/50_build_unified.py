@@ -47,7 +47,8 @@ from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
-from williams_xref import parse_see_also_targets, parse_equals_variants
+from williams_xref import (parse_equals_variants, pick_target,
+                           see_also_spellings)
 from papakupu_gloss import clean_gloss
 from paekupu_alternatives import parse_alternative
 from hepatakakupu_synonyms import parse_synonym
@@ -940,9 +941,11 @@ def resolve_williams_xrefs(con):
 
     Each see_also row holds the raw '‖' target Williams printed (e.g. "apa (i), 2",
     "mataaho, tiaho"). parse_see_also_targets() strips the decoration into linkable
-    (search_key, roman_sense) tuples; each is matched against a Williams entry by
-    headword_search, preferring the homograph with the same roman sense, else any
-    entry with that headword (same-source — only williams entries are indexed here).
+    (search_key, roman_sense, spelling) triples; each is matched against a Williams
+    entry by headword_search, preferring the homograph with the same roman sense,
+    then the one whose spelling matches exactly — Williams lower-cases a target but
+    keeps its macrons, so 'ho' is `Ho` and not `Hō`. Where neither decides, no link
+    is made; pick_target refuses to guess (D32).
 
     Multi-target strings are SPLIT: the first match updates the existing row, each
     further match inserts a new see_also row (raw kept in note for provenance).
@@ -959,16 +962,8 @@ def resolve_williams_xrefs(con):
             "WHERE e.source_id = 'williams'"):
         by_key.setdefault(hwk, []).append((eid, rsense, disp))
 
-    def match(key, sense):
-        cands = by_key.get(key)
-        if not cands:
-            return None
-        if sense:
-            for eid, rs, disp in cands:
-                if rs and rs.lower() == sense:
-                    return eid, disp
-        eid, _rs, disp = cands[0]   # fall back to any entry with that headword
-        return eid, disp
+    def match(key, sense, word):
+        return pick_target(by_key.get(key) or [], sense, word)
 
     rows = con.execute(
         "SELECT r.id, r.entry_id, r.target_headword FROM relation r "
@@ -978,7 +973,8 @@ def resolve_williams_xrefs(con):
 
     resolved = 0
     for rid, entry_id, raw in rows:
-        hits = [m for m in (match(k, s) for k, s in parse_see_also_targets(raw)) if m]
+        hits = [m for m in (match(k, sn, w)
+                            for k, sn, w in see_also_spellings(raw)) if m]
         if not hits:
             continue
         first_eid, first_disp = hits[0]

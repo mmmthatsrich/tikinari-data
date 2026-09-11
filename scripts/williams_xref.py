@@ -126,8 +126,11 @@ def _read_ref(text, i):
     return "see_also", target, dot + 1
 
 
-def parse_see_also_targets(raw):
-    """Parse a raw see_also target string into [(search_key, roman_sense), ...].
+def see_also_spellings(raw):
+    """Parse a raw see_also target into [(search_key, roman_sense, word), ...].
+
+    `word` is the target exactly as Williams wrote it, macrons included, so a
+    caller can tell two homographs apart on spelling.
 
     The raw text is the decorated cross-ref Williams prints after '‖' (e.g.
     "apa (i), 2", "mataaho, tiaho", "Tah, ao"). Returns one tuple per linkable
@@ -168,8 +171,47 @@ def parse_see_also_targets(raw):
             continue
         if _NON_WORD.match(word) or _ROMAN_ONLY.match(word):
             continue
-        out.append((normalise_search_key(word), sense))
+        out.append((normalise_search_key(word), sense, word))
     return out
+
+
+def parse_see_also_targets(raw):
+    """[(search_key, roman_sense), ...] — see_also_spellings without the spelling."""
+    return [(key, sense) for key, sense, _word in see_also_spellings(raw)]
+
+
+def pick_target(candidates, roman_sense, word):
+    """Choose the entry a see_also target names, or None rather than guess.
+
+    `candidates` is [(entry_id, roman_sense, display_headword), ...] — every
+    Williams entry sharing the target's search key, which folds macrons away.
+
+    Williams lower-cases a cross-reference target but keeps its macrons, so the
+    spelling is evidence: 'Hoatu ‖ ho' means `Ho` ('a verb used only in the
+    compound forms, hoake, hoatu, homai') and not `Hō` ('pout, droop, shout').
+    Taking the first candidate linked 1,176 targets by position alone, and that
+    one to the wrong word.
+
+    Where neither the roman sense nor the spelling decides, no link is made.
+    Choosing one would be a guess dressed as a fact, which is the reason
+    resolve_within_source_relations leaves its ambiguous targets NULL too, and
+    these are the sweep's to judge.
+    """
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        eid, _rs, disp = candidates[0]
+        return eid, disp
+    if roman_sense:
+        for eid, rs, disp in candidates:
+            if rs and rs.lower() == roman_sense:
+                return eid, disp
+    target = (word or "").strip().casefold()
+    exact = [c for c in candidates if (c[2] or "").strip().casefold() == target]
+    if len(exact) == 1:
+        eid, _rs, disp = exact[0]
+        return eid, disp
+    return None
 
 # Williams marks a variant with '=' at the head of an entry — 'Ahine. = wahine.'
 # — as distinct from the '‖' compare marker handled above. 680 senses open with
