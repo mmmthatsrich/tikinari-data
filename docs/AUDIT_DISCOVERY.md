@@ -296,7 +296,7 @@ never captured.
 | D13 | Māori domains tagged English, and slugs not display text | 16,486 | ✅ **fixed** — both languages from `subject_area` / `subject_area_en` |
 | D14 | `std_pos` gaps + comma-split damage | 5,371 | ✅ **fixed** — `utils.pos_atoms`; unmapped atoms → 0, coverage 99.6% |
 | D15 | Ngata synonym-group example misattachment | 9,936 | ✅ **fixed** — `example_owners`; down to 252 |
-| D16 | Te Aka example translations absent | 45,939 | `04_te_aka_parse.py` |
+| D16 | Te Aka example translations absent | 45,939 | ✅ **fixed** — `te_aka_examples.py`; 45,398 recovered. paekupu/HPK confirmed correct as-is |
 
 ## Recommended fix order
 
@@ -312,7 +312,7 @@ never captured.
    `5b43f78`) and **D8** (commit pending).
 6. **D16** — verify against the upstream sources before changing anything.
 
-**Open:** D16, D17.
+**Open:** D17 only.
 
 ## What this changes about the sweep
 

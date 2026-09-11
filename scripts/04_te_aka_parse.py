@@ -19,6 +19,9 @@ from pathlib import Path
 
 from lxml import html as lhtml
 
+sys.path.insert(0, str(Path(__file__).parent))
+from te_aka_examples import split_example
+
 RAW_DIR    = Path(__file__).parent.parent / "sources" / "te_aka" / "raw"
 PARSED_DIR = Path(__file__).parent.parent / "sources" / "te_aka" / "parsed"
 OUTPUT_PATH   = PARSED_DIR / "te_aka_entries.json"
@@ -142,13 +145,17 @@ def parse_page(html_bytes: bytes, word_id: int) -> dict | None:
                 sense_citations.append(ct)
 
         # Per-sense usage examples (in DOM regardless of show/hide state)
-        sense_examples: list[str] = []
+        # Te Aka gives both halves: <em>Māori (citation)</em> / English. Only the
+        # <em> was read, so all 45,939 example rows had no translation while the
+        # English sat in the same paragraph. Emitted as {mi, en} dicts; the
+        # unify step still accepts bare strings from data parsed before this.
+        sense_examples: list[dict] = []
         for ep in div.xpath('.//p[@x-show="showExample"]'):
             em_tags = ep.xpath('.//em')
             if em_tags:
-                ex_text = _ws(em_tags[0].text_content())
-                if ex_text:
-                    sense_examples.append(ex_text)
+                pair = split_example(ep.text_content(), em_tags[0].text_content())
+                if pair:
+                    sense_examples.append(pair)
 
         # Per-sense synonyms (dictionary-link anchors)
         sense_synonyms: list[dict] = []

@@ -62,7 +62,10 @@ SOURCES = ("williams", "te_aka", "hepatakakupu", "paekupu", "papakupu",
 CORE_TABLES = ("entry", "form", "sense", "example", "relation", "entry_domain")
 
 # trailing citation / source markers in example strings (same patterns as the prototype)
-CITE_PAREN = re.compile(r"\s*\(([^()]*\d[^()]*)\)\s*$")        # Te Aka: (Te Toa Takitini 1/3/1930:1992)
+# Te Aka: (Te Toa Takitini 1/3/1930:1992). The sentence's own stop may follow the
+# bracket — '... ki te ahuone (Te Ara 2015).' — and anchoring strictly to the end
+# of the string left 23,183 citations inside text_mi.
+CITE_PAREN = re.compile(r"\s*\(([^()]*\d[^()]*)\)\s*([.!?])?\s*$")
 SRC_BRACKET = re.compile(r"\s*\[([A-Z0-9][A-Z0-9/]*)\]\s*$")   # [TTU] [NGH3] [041126]
 
 
@@ -92,9 +95,15 @@ def split_src(s):
 
 
 def split_cite(s):
-    """Strip a trailing (citation); return (text, citation|None)."""
+    """Strip a trailing (citation); return (text, citation|None).
+
+    A sentence stop that followed the bracket is given back to the sentence —
+    it punctuates the Māori, not the citation.
+    """
     m = CITE_PAREN.search(s)
-    return (s[:m.start()].strip(), m.group(1)) if m else (s.strip(), None)
+    if not m:
+        return s.strip(), None
+    return (s[:m.start()].strip() + (m.group(2) or "")), m.group(1)
 
 
 class Builder:
@@ -318,12 +327,32 @@ def split_filters(filters):
     return ("; ".join(loans) or None), domains
 
 
+def te_aka_example(item):
+    """One Te Aka example -> (text_mi, text_en, citation).
+
+    Accepts the {mi, en} dicts the parser now emits and the bare Māori strings
+    it emitted before translations were captured, so a slice parsed either way
+    projects correctly.
+    """
+    if isinstance(item, dict):
+        mi, en = item.get("mi"), item.get("en")
+    elif isinstance(item, str):
+        mi, en = item, None
+    else:
+        return None
+    if not mi:
+        return None
+    text, cite = split_cite(mi)          # Te Aka example = Māori + (citation)
+    return text, en, cite
+
+
 def build_te_aka(con, b):
     sql = ("SELECT word_id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, senses, usage_examples, audio_url, synonyms, filters "
            "FROM te_aka_entries ORDER BY word_id")
     for (wid, hw, hs, hse, pos, d, sj, ux, au, syn, filt) in con.execute(sql):
-        examples = [e for e in jload(ux) if isinstance(e, str)]
+        # {mi, en} dicts now; bare strings before translations were captured.
+        examples = [e for e in jload(ux) if isinstance(e, (str, dict))]
         senses = [s for s in jload(sj) if isinstance(s, dict)]
         loan_marker, filter_domains = split_filters(jload(filt))
         eid = b.add_entry(wid, hw, hs, hse, pos=pos, audio_url=au,
@@ -354,9 +383,11 @@ def build_te_aka(con, b):
                               part_of_speech=s.get("part_of_speech"))
             if first_sid is None:
                 first_sid = sid
-            for i, ex in enumerate(e for e in (s.get("examples") or []) if isinstance(e, str)):
-                text, cite = split_cite(ex)            # Te Aka example = Māori + (citation)
-                b.add_example(sid, eid, text, None, None, cite, i)
+            for i, ex in enumerate(s.get("examples") or []):
+                parsed = te_aka_example(ex)
+                if parsed:
+                    text, en, cite = parsed
+                    b.add_example(sid, eid, text, en, None, cite, i)
 
         for sy in jload(syn):
             if isinstance(sy, dict):

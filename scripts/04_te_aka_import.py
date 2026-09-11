@@ -118,11 +118,24 @@ def _serialise(v) -> str:
     return v or ""
 
 
+def _expand_example(ex, abbrevs):
+    """Expand abbreviations in an example, whichever shape it arrives in.
+
+    Examples are {mi, en} dicts since translations were captured; bare Māori
+    strings are the older shape. The citation lives in the Māori half, but the
+    English half is expanded too so a citation quoted there matches.
+    """
+    if isinstance(ex, dict):
+        return {k: (expand_citations(v, abbrevs) if isinstance(v, str) else v)
+                for k, v in ex.items()}
+    return expand_citations(ex, abbrevs) if isinstance(ex, str) else ex
+
+
 def _expand_entry(entry: dict, abbrevs: dict) -> dict:
     """Return a copy of entry with source abbreviations expanded in text fields."""
     out = entry.copy()
     out["usage_examples"] = [
-        expand_citations(ex, abbrevs) for ex in (entry.get("usage_examples") or [])
+        _expand_example(ex, abbrevs) for ex in (entry.get("usage_examples") or [])
     ]
     out["source_citations"] = [
         expand_citations(c, abbrevs) for c in (entry.get("source_citations") or [])
@@ -132,7 +145,7 @@ def _expand_entry(entry: dict, abbrevs: dict) -> dict:
     senses = []
     for s in (entry.get("senses") or []):
         s = s.copy()
-        s["examples"] = [expand_citations(ex, abbrevs) for ex in (s.get("examples") or [])]
+        s["examples"] = [_expand_example(ex, abbrevs) for ex in (s.get("examples") or [])]
         s["citations"] = [expand_citations(c, abbrevs) for c in (s.get("citations") or [])]
         senses.append(s)
     out["senses"] = senses
