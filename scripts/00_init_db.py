@@ -945,6 +945,9 @@ def create_tables(conn: sqlite3.Connection) -> None:
         -- within its own source. Without this it is a correlated scan of 153k
         -- entries per relation and a rebuild takes many minutes instead of seconds.
         CREATE INDEX IF NOT EXISTS idx_entry_src_hw  ON entry(source_id, headword);
+        -- resolve_within_source_relations matches case-insensitively: Williams
+        -- capitalises headwords but writes its cross-reference targets lower case.
+        CREATE INDEX IF NOT EXISTS idx_entry_src_lhw ON entry(source_id, LOWER(headword));
 
         -- ── form: variant / alternative / inflected forms ────────────────────
         CREATE TABLE IF NOT EXISTS form (

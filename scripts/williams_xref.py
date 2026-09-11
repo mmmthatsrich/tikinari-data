@@ -170,3 +170,57 @@ def parse_see_also_targets(raw):
             continue
         out.append((normalise_search_key(word), sense))
     return out
+
+# Williams marks a variant with '=' at the head of an entry — 'Ahine. = wahine.'
+# — as distinct from the '‖' compare marker handled above. 680 senses open with
+# one and 611 of those entries had no relation at all, so the link was invisible
+# and the POS and gloss behind it stayed stranded in the definition.
+#
+# The shape is '= target[, target...][, POS.] rest'. Targets are comma-separated
+# and the list ends at the first part-of-speech abbreviation, which is what
+# separates 'au, awau, awahau' (three variants) from 'kahore, ad.' (one variant
+# then a POS).
+_EQ_POS = (r"v\.t\.i|v\.t|v\.i|v|n|a|ad|adv|pt|pl|pos|int|num|pron|def|indef"
+           r"|prefix|conj|prep|interj|l\.n|loc|part|art|suf|pref")
+_EQ_HEAD = re.compile(r"^\s*=\s*(.+)$", re.S)
+_EQ_POS_RE = re.compile(rf"^({_EQ_POS})\.", re.I)
+_EQ_STOP_RE = re.compile(r"\.(?=\s+[A-Z0-9Ā-ſ]|\s*$)")
+
+
+def parse_equals_variants(definition):
+    """('targets', remaining definition) for a leading '= ...' variant marker.
+
+    The list terminates at the FIRST full stop, not at a comma: 'Hakirara' reads
+    '= hakurara. 1. a. Idling...' and everything after that stop is the entry's
+    own numbered senses. Within the head, targets are comma-separated, and a
+    trailing part-of-speech abbreviation belongs to the definition rather than
+    the list — 'kahore, ad.' is one variant and a POS, while 'au, awau, awahau'
+    is three variants.
+
+    Only a marker at the very START counts. A '=' later in the text is a gloss
+    equivalence ('Tahu. = tuahine.') and belongs to the prose.
+    """
+    if not definition:
+        return [], ""
+    m = _EQ_HEAD.match(definition)
+    if not m:
+        return [], definition
+    rest = m.group(1).strip()
+    if not rest:
+        return [], definition
+
+    # The terminator is a SENTENCE stop — one followed by the end of the text or
+    # by a capital or a digit. A stop inside an abbreviation ('v.t.', 'l.n.') is
+    # not one, and splitting there turned 'v.t.' into 'v. t.'.
+    stop = _EQ_STOP_RE.search(rest)
+    head, tail = ((rest, "") if not stop
+                  else (rest[:stop.start()], rest[stop.end():].strip()))
+
+    tokens = [t.strip() for t in head.split(",") if t.strip()]
+    if not tokens:
+        return [], definition
+    if len(tokens) > 1 and _EQ_POS_RE.match(tokens[-1] + "."):
+        # The stop we split on was the POS abbreviation's own.
+        tail = (tokens[-1] + ". " + tail).strip()
+        tokens = tokens[:-1]
+    return tokens, tail

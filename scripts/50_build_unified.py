@@ -47,7 +47,7 @@ from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
-from williams_xref import parse_see_also_targets
+from williams_xref import parse_see_also_targets, parse_equals_variants
 from papakupu_gloss import clean_gloss
 from paekupu_alternatives import parse_alternative
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
@@ -300,6 +300,17 @@ def build_williams(con, b):
                           locator=f"p{pg}/{sec}" if pg else sec,
                           material={"hw": hw, "pos": pos, "def": d,
                                     "ex": examples, "xr": jload(xr)})
+        # Williams marks a variant with '=' at the head of an entry
+        # ('Ahine. = wahine.'). 611 such entries carried no relation at all and
+        # the POS behind the marker stayed stranded in the gloss.
+        variants, d = parse_equals_variants(d)
+        # A pure-variant entry has nothing left once the marker is lifted out.
+        # Synthesise a readable gloss the same way the parser already does for a
+        # pure '‖' pointer ("Cf. <targets>."), rather than leaving the bare
+        # target word standing as if it were an English gloss.
+        if not d and variants:
+            d = "Variant of " + ", ".join(variants) + "."
+
         senses = split_senses(d) or [{"sense_number": 1, "part_of_speech": None,
                                       "gloss_en": d, "definition_raw": d}]
         first_sid = None
@@ -328,6 +339,8 @@ def build_williams(con, b):
             b.add_example(first_sid, eid, ex, None, None, None, i)
         for pl in note["plural"]:
             b.add_form(eid, pl, "plural")
+        for target in variants:
+            b.add_relation(eid, "variant_of", target)
         for t in jload(xr):
             if isinstance(t, dict):                       # typed ‖ cross-ref
                 b.add_relation(eid, t.get("type") or "cross_ref", t.get("target"))

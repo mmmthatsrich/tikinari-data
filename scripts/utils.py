@@ -83,6 +83,10 @@ def resolve_within_source_relations(con) -> int:
     several rows — and choosing one would be a guess dressed as a fact. Those
     stay NULL and are the sweep's to judge.
 
+    Matching is case-insensitive: Williams capitalises its main headwords but
+    writes cross-reference targets in lower case, so an exact match never fired
+    for 230 of its own relations and 1,056 of Te Matatiki's.
+
     Never crosses a source boundary, never overwrites a target already set, and
     never points an entry at itself.
     """
@@ -93,14 +97,14 @@ def resolve_within_source_relations(con) -> int:
             SELECT t.id FROM entry t
              WHERE t.source_id = (SELECT e.source_id FROM entry e
                                    WHERE e.id = relation.entry_id)
-               AND t.headword = relation.target_headword
+               AND LOWER(t.headword) = LOWER(relation.target_headword)
                AND t.id <> relation.entry_id)
         WHERE target_entry_id IS NULL
           AND target_headword IS NOT NULL
           AND (SELECT COUNT(*) FROM entry t
                 WHERE t.source_id = (SELECT e.source_id FROM entry e
                                       WHERE e.id = relation.entry_id)
-                  AND t.headword = relation.target_headword
+                  AND LOWER(t.headword) = LOWER(relation.target_headword)
                   AND t.id <> relation.entry_id) = 1
     """).rowcount
     con.commit()
