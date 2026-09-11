@@ -43,7 +43,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
                    compute_content_hash, pos_atoms, resolve_relations_by_domain,
-                   resolve_unambiguous_senses, resolve_within_source_relations)
+                   resolve_relations_by_gloss, resolve_unambiguous_senses,
+                   resolve_within_source_relations)
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
@@ -1090,6 +1091,12 @@ def main():
     by_domain = resolve_relations_by_domain(con)
     if by_domain:
         print(f"resolved {by_domain:,} more relation target_entry_id by subject domain")
+
+    # Last, on what those left: He Pataka Kupu reuses one definition across a
+    # whole synonym set, so a repeated definition names the sense meant.
+    by_gloss = resolve_relations_by_gloss(con)
+    if by_gloss:
+        print(f"resolved {by_gloss:,} more relation target_entry_id by shared definition")
 
     resolved = resolve_unambiguous_senses(con)
     if resolved.get("relation"):

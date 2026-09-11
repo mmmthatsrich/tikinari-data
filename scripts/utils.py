@@ -177,6 +177,77 @@ def resolve_relations_by_domain(con) -> int:
     return len(updates)
 
 
+_NO_GLOSS = frozenset()
+
+
+def resolve_relations_by_gloss(con) -> int:
+    """Disambiguate a relation by a definition the source reused verbatim.
+
+    He Pātaka Kupu is a synonym-set dictionary: one definition serves every
+    headword in the set, to the character. 3,763 of its 10,443 definitions are
+    shared by two or more headwords, so `aho` and `au` both read 'He weu kua
+    kōmiroa, kua whiria kia ū, kia roa, kia kōrahirahi.' When `aho` names `au`
+    as a synonym and four entries carry that headword, the one repeating that
+    sentence is the one meant; the others are a brave heart, a bone for
+    catching fish, and an expanse of sea.
+
+    The same evidence settles homographs in the bilingual sources. papakupu's
+    `karahe` is 'class', 'glass' and 'grass' — three loans that collapsed onto
+    one Māori spelling — and an entry glossed 'grass' pointing at it means the
+    third. `turi` is 'knee' and 'deaf'; `moko` is 'grandchild' and 'tattoo'.
+
+    Identity is exact string equality after stripping, never similarity. The
+    signal is that the source reused one text, not that two texts resemble each
+    other, and a looser comparison would be inventing the link rather than
+    reading it.
+
+    Runs last, after the headword and domain passes, on what they left. Like
+    them it only ever chooses between candidates the headword match already
+    found, only when exactly one survives; never crosses a source boundary,
+    never overwrites a target already set, and never points an entry at itself.
+    Resolves ~3,100, of which ~3,000 are He Pātaka Kupu's.
+    """
+    if not (_has_table(con, "relation") and _has_table(con, "sense")):
+        return 0
+
+    by_headword, source = {}, {}
+    for eid, src, hw in con.execute(
+            "SELECT id, source_id, LOWER(headword) FROM entry "
+            "WHERE headword IS NOT NULL"):
+        by_headword.setdefault((src, hw), []).append(eid)
+        source[eid] = src
+
+    glosses = {}
+    for eid, gloss in con.execute(
+            "SELECT entry_id, COALESCE(gloss_mi, gloss_en) FROM sense "
+            "WHERE COALESCE(gloss_mi, gloss_en) IS NOT NULL"):
+        text = gloss.strip()
+        if text:
+            glosses.setdefault(eid, set()).add(text)
+
+    updates = []
+    for rid, eid, target in con.execute(
+            "SELECT id, entry_id, LOWER(target_headword) FROM relation "
+            "WHERE target_entry_id IS NULL AND target_headword IS NOT NULL"):
+        candidates = [x for x in by_headword.get((source.get(eid), target), ())
+                      if x != eid]
+        if len(candidates) < 2:
+            continue          # the headword pass's business, not ours
+        mine = glosses.get(eid)
+        if not mine:
+            continue
+        shared = [x for x in candidates if glosses.get(x, _NO_GLOSS) & mine]
+        if len(shared) == 1:
+            updates.append((shared[0], rid))
+
+    if updates:
+        con.executemany(
+            "UPDATE relation SET target_entry_id = ? "
+            " WHERE id = ? AND target_entry_id IS NULL", updates)
+        con.commit()
+    return len(updates)
+
+
 def resolve_unambiguous_senses(con) -> dict:
     """Point entry-level references at a sense, where the sense is determined.
 
