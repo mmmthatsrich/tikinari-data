@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from utils import DB_PATH
+from utils import DB_PATH, pos_atoms
 
 NOW = datetime.now(timezone.utc).isoformat()
 SEED_CSV = Path(__file__).parent.parent / "seeds" / "std_pos_seed.csv"
@@ -110,6 +110,21 @@ SEED = {
     "indef.": ("Determiner (indefinite)", None),
     "prefix.": ("Prefix", None),
     "num.": ("Numeral", None),
+    # Te Matatiki / Kimikupu Hou / Tregear bracket their POS ('[noun, transitive
+    # verb]'); utils.pos_atoms strips the brackets, after which almost every
+    # atom already resolved above. These are the genuinely new terms those
+    # sources brought, mapped onto the existing canonical vocabulary rather than
+    # extending it where an equivalent label already exists.
+    "phrase": ("Phrase", "Kīanga"),
+    "verb transitive": ("Verb (transitive)", "Tūmahi whiti"),
+    "verb intransitive": ("Verb (intransitive)", "Tūmahi poro"),
+    "noun and verb": ("Noun, Verb", "Tūingoa, Tūmahi"),
+    "noun usage": ("Noun", "Tūingoa"),
+    "passive": ("Verb (passive)", "Tūmahi hāngū"),
+    "prefix": ("Prefix", "Pīmua"),
+    "definite article": ("Determiner (definite)", None),
+    "auxiliary verb": ("Auxiliary Verb", None),
+    "abbreviation": ("Abbreviation", None),
 }
 
 DDL = """
@@ -194,9 +209,7 @@ def main():
     ).fetchall()
     if core_rows:
         for sid, pos, n in core_rows:
-            for tok in (x.strip() for x in pos.split(",")):
-                if not tok:
-                    continue
+            for tok in pos_atoms(pos):
                 allp.setdefault(tok, {})
                 allp[tok][sid] = allp[tok].get(sid, 0) + n
     else:
@@ -205,9 +218,7 @@ def main():
                 f"SELECT part_of_speech, COUNT(*) FROM {t} "
                 f"WHERE part_of_speech IS NOT NULL AND part_of_speech!='' GROUP BY part_of_speech"
             ):
-                for tok in (x.strip() for x in pos.split(",")):
-                    if not tok:
-                        continue
+                for tok in pos_atoms(pos):
                     allp.setdefault(tok, {})
                     allp[tok][sid] = allp[tok].get(sid, 0) + n
 

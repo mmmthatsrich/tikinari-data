@@ -64,6 +64,37 @@ def load_source_abbrevs(source_dict: str, db_path: Path = DB_PATH) -> dict[str, 
     return {r["abbrev"]: dict(r) for r in rows}
 
 
+_POS_QUALIFIER = re.compile(r"\s*\(([^)]*)\)\s*$")
+
+
+def pos_atoms(raw: str | None) -> list[str]:
+    """Split a raw part-of-speech string into atomic codes.
+
+    Te Matatiki and Kimikupu Hou bracket the whole value — '[noun, transitive
+    verb]' — so a plain comma split severed the brackets and produced '[noun'
+    and 'transitive verb]'. Neither is a part of speech, neither is in std_pos,
+    and between them they accounted for most of the unmapped atoms; the stripped
+    forms were in std_pos all along.
+
+    A trailing parenthetical is a subject note, not part of the code:
+    'noun (volleyball)' is a noun. A value that is ONLY parenthesised, '(prefix)',
+    keeps its word.
+    """
+    if not raw:
+        return []
+    text = raw.strip()
+    if text.startswith("[") and text.endswith("]"):
+        text = text[1:-1]
+    out = []
+    for tok in (t.strip() for t in text.split(",")):
+        tok = tok.strip("[]").strip()
+        if not tok:
+            continue
+        stripped = _POS_QUALIFIER.sub("", tok).strip("[]").strip()
+        out.append(stripped or tok.strip("()").strip())
+    return [t for t in out if t]
+
+
 def expand_citations(text: str, abbrevs: dict[str, dict]) -> str:
     """Replace inline citation abbreviations in *text* with expanded forms.
 

@@ -42,7 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
-                   compute_content_hash)
+                   compute_content_hash, pos_atoms)
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_xref import parse_see_also_targets
@@ -206,9 +206,7 @@ def resolve_pos(raw, std_pos):
     if whole and (whole[0] or whole[1]):
         return [whole]
     out = []
-    for tok in (t.strip() for t in raw.split(",")):
-        if not tok:
-            continue
+    for tok in pos_atoms(raw):
         pair = std_pos.get(tok)
         if pair and (pair[0] or pair[1]):
             out.append(pair)

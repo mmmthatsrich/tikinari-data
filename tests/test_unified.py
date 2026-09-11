@@ -165,6 +165,24 @@ class UnifiedCore(unittest.TestCase):
                     "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
                     "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
 
+    def test_bracketed_pos_resolves_to_a_canonical_label(self):
+        # Te Matatiki writes '[noun]' and '[noun, transitive verb]'. Splitting on
+        # the comma severed the brackets into '[noun' and 'transitive verb]',
+        # so 5,371 sense-atoms went unmapped — though 'noun' and 'transitive
+        # verb' were in std_pos all along.
+        for src in ("te_matatiki", "kimikupu_hou", "tregear_exceptions"):
+            with self.subTest(source=src):
+                unmapped = self._one(
+                    "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+                    "WHERE e.source_id=? AND s.part_of_speech IS NOT NULL "
+                    "AND s.part_of_speech_en IS NULL", src)
+                self.assertEqual(unmapped, 0)
+
+    def test_no_canonical_pos_label_is_a_bracket_fragment(self):
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM sense WHERE part_of_speech_en LIKE '%[%' "
+            "OR part_of_speech_en LIKE '%]%'"), 0)
+
     def test_no_domain_is_a_url_slug(self):
         # Paekupu's domains came from `subject_areas`, a JSON list of URL slugs
         # ('te-reo-matatini', 'ngā-toi'), while the same table holds the display
