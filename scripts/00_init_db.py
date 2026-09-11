@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from sweep_patch import PATCH_DDL
+from sweep_queue import QUEUE_DDL
 
 DB_PATH = Path(__file__).parent.parent / "data" / "staging_dictionary.db"
 
@@ -1264,13 +1265,14 @@ def migrate_pos_columns(conn: sqlite3.Connection) -> None:
 
 
 def create_sweep_patch(conn: sqlite3.Connection) -> None:
-    """The audit sweep's patch layer (scripts/sweep_patch.py).
+    """The audit sweep's patch layer and cluster queue.
 
     50_build_unified.py rebuilds a source's slice from scratch, so sweep
     corrections cannot live in the unified core. They are recorded here and
     replayed after each build.
     """
     conn.executescript(PATCH_DDL)
+    conn.executescript(QUEUE_DDL)
 
 
 def migrate_wakareo_body_text(conn: sqlite3.Connection) -> None:
