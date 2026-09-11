@@ -49,7 +49,7 @@ from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
 from williams_xref import (parse_equals_variants, pick_target,
-                           see_also_spellings)
+                           see_also_spellings, supported_parents)
 from papakupu_gloss import clean_gloss
 from paekupu_alternatives import parse_alternative
 from hepatakakupu_synonyms import pair_synonyms, parse_synonym
@@ -294,8 +294,10 @@ def write_sense_pos(con, std_pos):
 def build_williams(con, b):
     sql = ("SELECT id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, usage_examples, sense_number, cross_refs, page_number, "
-           "source_section, headword_note FROM williams_entries ORDER BY id")
-    for (id_, hw, hs, hse, pos, d, ux, sn, xr, pg, sec, hnote) in con.execute(sql):
+           "source_section, headword_note, parent_headword "
+           "FROM williams_entries ORDER BY id")
+    for (id_, hw, hs, hse, pos, d, ux, sn, xr, pg, sec, hnote,
+         parent_hw) in con.execute(sql):
         # '(pl. wāhine)', '(poetical)', '(less correctly tūāhu)' printed with the
         # headword. Eight are plural forms — a lexical fact the form table exists
         # for — and the rest qualify the entry rather than define it.
@@ -1040,6 +1042,58 @@ def resolve_williams_xrefs(con):
     return resolved, len(rows)
 
 
+def resolve_williams_parents(con):
+    """Point each Williams sub-entry at the base whose paragraph printed it.
+
+    Williams sets a derivative inside its base entry: 'Iti, a. Small ... itinga,
+    n. Childhood, youth.' 01_williams_parse splits those out and records the base
+    as parent_headword on 3,032 rows, and until D36 the import dropped it, so the
+    derivation the source states by layout never reached the database.
+
+    The parent string is the printed headword and carries its decoration, so
+    parent_candidates offers the keys worth trying in order and pick_target
+    settles a homograph on the roman marker or the spelling, refusing to guess
+    otherwise — the same contract as see_also.
+
+    Returns (rows_resolved, rows_total).
+    """
+    by_key: dict = {}
+    for eid, hwk, rsense, disp in con.execute(
+            "SELECT e.id, w.headword_search, w.sense_number, w.headword "
+            "FROM entry e JOIN williams_entries w "
+            "  ON w.id = CAST(e.source_entry_id AS INTEGER) "
+            "WHERE e.source_id = 'williams'"):
+        by_key.setdefault(hwk, []).append((eid, rsense, disp))
+
+    rows = con.execute(
+        "SELECT e.id, w.headword, w.parent_headword FROM entry e "
+        "JOIN williams_entries w ON w.id = CAST(e.source_entry_id AS INTEGER) "
+        "WHERE e.source_id = 'williams' AND w.parent_headword IS NOT NULL").fetchall()
+
+    emitted = 0
+    for entry_id, child_hw, raw in rows:
+        # Only a parent the child's own spelling attests. Without this, 308 of
+        # 1,875 resolved rows asserted a derivation that is not one — 'itinga'
+        # from 'Itaupa', 'atawhai' from 'atatuhi' — because the recorded parent
+        # is sometimes just the previous headword on the page.
+        hit = None
+        for key, sense in supported_parents(raw, child_hw):
+            hit = pick_target(by_key.get(key) or [], sense, key)
+            if hit:
+                break
+        if not hit or hit[0] == entry_id:
+            continue
+        target_id, display = hit
+        con.execute(
+            "INSERT INTO relation (entry_id, rel_type, target_headword, "
+            "target_entry_id, note) VALUES (?,?,?,?,?)",
+            (entry_id, "derived_from", display, target_id,
+             None if display == raw else raw))
+        emitted += 1
+    con.commit()
+    return emitted, len(rows)
+
+
 def first_seen_snapshot(con, source_id) -> dict:
     """Preserve first_seen across a rebuild, keyed by source_entry_id."""
     return {r[0]: r[1] for r in con.execute(
@@ -1060,6 +1114,8 @@ def unify_source(con, source_id) -> dict:
     if source_id == "williams":
         n, tot = resolve_williams_xrefs(con)
         print(f"  williams see_also resolved {n}/{tot}")
+        n, tot = resolve_williams_parents(con)
+        print(f"  williams derived_from: {n} recorded of {tot} sub-entries")
     # keep source_metadata.last_updated honest for the unified projection
     con.execute("UPDATE source_metadata SET last_updated=? WHERE source_id=?",
                 (NOW, source_id))

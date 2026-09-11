@@ -44,6 +44,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             cross_refs     TEXT,          -- JSON array
             headword_note  TEXT,          -- bracket qualifier printed with the headword
                                           --   ('pl. wāhine', 'poetical')
+            parent_headword TEXT,         -- for a sub-entry, the base whose paragraph
+                                          --   printed it: 'itinga' under 'Iti' (D36)
             page_number    INTEGER,
             source_section TEXT,
             created_at     TEXT DEFAULT (datetime('now')),

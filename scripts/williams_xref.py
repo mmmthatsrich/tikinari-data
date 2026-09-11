@@ -266,3 +266,72 @@ def parse_equals_variants(definition):
         tail = (tokens[-1] + ". " + tail).strip()
         tokens = tokens[:-1]
     return tokens, tail
+
+
+# Williams prints a derivative inside its base entry's paragraph, and
+# 01_williams_parse records the base on each sub-entry as `parent_headword`.
+# That string is the printed headword, so it carries the same decoration the
+# headword does: a roman homograph marker ('He (i)'), a trailing colon, an '='
+# clause naming equivalents, and comma-separated variants of which the first
+# may be an OCR slip ('Eml, emiemi').
+_PARENT_ROMAN_RE = re.compile(r"\(([ivxlcdm]+)\)", re.IGNORECASE)
+
+
+def parent_candidates(raw):
+    """[(search_key, roman_sense), ...] worth trying for a sub-entry's base.
+
+    Ordered: each comma-separated variant as printed, then the first word of a
+    multi-word variant as a fallback, since 'Ahuru mowai:' is the base `ahuru`
+    with a phrase after it. Duplicates are dropped, keeping the first.
+    """
+    if not raw:
+        return []
+    text = str(raw).strip().rstrip(":").strip()
+    # '= huare, hauware' names what the base equals, not further bases.
+    text = text.split("=", 1)[0].strip()
+    if not text:
+        return []
+
+    out, seen = [], set()
+
+    def _add(word, sense):
+        key = normalise_search_key(word)
+        if key and key not in seen:
+            seen.add(key)
+            out.append((key, sense))
+
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        m = _PARENT_ROMAN_RE.search(part)
+        sense = m.group(1).lower() if m else None
+        word = _PARENT_ROMAN_RE.sub(" ", part).strip().strip(".").strip()
+        if not word:
+            continue
+        _add(word, sense)
+        first = word.split()[0]
+        if first != word:
+            _add(first, sense)
+    return out
+
+
+def supported_parents(raw, child_headword):
+    """The parent candidates the child's own spelling attests, in order.
+
+    `parent_headword` means 'the base whose paragraph printed this', and on
+    about one sub-entry in twenty that is merely the preceding headword on the
+    page: Williams prints `itinga` under `Itaupa`, though its base is plainly
+    `iti`. Recording that would invent a derivation.
+
+    A Maori derivative contains its base — by prefix (whakaae), by suffix
+    (itinga), by reduplication (akahukahu) — so the parent's key appearing
+    inside the child's key is the source's own evidence that the relationship
+    is derivational. A parent identical to the child is the entry itself, not
+    a derivation of anything.
+    """
+    child = normalise_search_key(child_headword or "")
+    if not child:
+        return []
+    return [(key, sense) for key, sense in parent_candidates(raw)
+            if key and key != child and key in child]
