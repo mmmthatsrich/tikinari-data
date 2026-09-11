@@ -3,7 +3,11 @@ and seeds source_metadata. Safe to re-run (CREATE IF NOT EXISTS).
 """
 
 import sqlite3
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from sweep_patch import PATCH_DDL
 
 DB_PATH = Path(__file__).parent.parent / "data" / "staging_dictionary.db"
 
@@ -1259,6 +1263,16 @@ def migrate_pos_columns(conn: sqlite3.Connection) -> None:
     _add_column(conn, "entry", "part_of_speech_mi", "TEXT")
 
 
+def create_sweep_patch(conn: sqlite3.Connection) -> None:
+    """The audit sweep's patch layer (scripts/sweep_patch.py).
+
+    50_build_unified.py rebuilds a source's slice from scratch, so sweep
+    corrections cannot live in the unified core. They are recorded here and
+    replayed after each build.
+    """
+    conn.executescript(PATCH_DDL)
+
+
 def migrate_wakareo_body_text(conn: sqlite3.Connection) -> None:
     """Add body_text to every Wakareo landing table (idempotent)."""
     for table in WAKAREO_EN_MI_TABLES + WAKAREO_MI_EN_TABLES + ("te_matatiki_entries",):
@@ -1366,6 +1380,7 @@ def main() -> None:
     with sqlite3.connect(DB_PATH) as conn:
         create_tables(conn)
         create_wakareo_tables(conn)
+        create_sweep_patch(conn)
         migrate_wakareo_unique_key(conn)
         migrate_wakareo_body_text(conn)
         migrate_pos_columns(conn)

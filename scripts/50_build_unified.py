@@ -50,6 +50,7 @@ from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
 from wakareo_records import example_owners, parse_derivation, parse_tregear
+from sweep_patch import apply_patches
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -1002,6 +1003,13 @@ def main():
 
     # relation rows are rebuilt per source, so the sense pointers have to be
     # re-derived on every run, not backfilled once.
+    # The projection has just overwritten this source's slice with the source's
+    # own values, so the sweep's corrections are replayed on top.
+    patched = apply_patches(con)
+    if any(patched.values()):
+        print(f"patches: {patched['applied']:,} applied, {patched['stale']:,} stale, "
+              f"{patched['missing']:,} missing")
+
     resolved = resolve_unambiguous_senses(con)
     if resolved.get("relation"):
         print(f"resolved {resolved['relation']:,} relation target_sense_id "
