@@ -28,6 +28,12 @@ import re
 
 _SEP = " - "
 _QUALIFIER = re.compile(r"\s*\([^)]*\)\s*$")
+# "he kupu mino" is "it is a loan word" — a marker, not another term. 411 of
+# them, sometimes naming the source language: (reo Hapanihi), (reo Wiwi),
+# (reo Itariana), (reo Hiperu). They belong in entry.loan_marker alongside Te
+# Aka's own marker, which is also what makes them visible to the etymology
+# filter: a borrowed word cannot descend from Proto-Polynesian.
+_LOAN_NOTE = re.compile(r"^\s*he\s+kupu\s+mino", re.I)
 
 
 def parse_alternative(value: str | None) -> dict | None:
@@ -38,6 +44,9 @@ def parse_alternative(value: str | None) -> dict | None:
     if text.startswith("-"):
         # A gloss with no component in front of it names nothing to point at.
         return None
+
+    if _LOAN_NOTE.match(text):
+        return {"target": None, "rel_type": "loan_marker", "note": text}
 
     if _SEP in text:
         word = text.split(_SEP, 1)[0].strip()

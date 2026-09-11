@@ -753,10 +753,18 @@ def build_entry_links(con) -> dict:
     # Where the real word exists too ('ama' is both a borrowed yam and an
     # inherited outrigger float) Te Aka carries separate entries, and the set
     # stays on the unmarked one.
+    # Te Aka marks a borrowing two ways and both must be honoured: the
+    # loan_marker column (18,439 entries) and the part-of-speech itself
+    # ('loan, noun', 'loan, personal'). 558 entries carried 1,884 links through
+    # the second route alone — 'āria' = aria (music) from PN.HAALIQA 'Shallows',
+    # 'Arihi' = Alice, 'Āti' = Archie, 'hāwhe' = to halve from MP.AFE.1A
+    # 'Deviate, turn aside'.
     entry_idx = {}
     for eid, hs in con.execute(
             "SELECT id, headword_search FROM entry "
-            "WHERE headword_search IS NOT NULL AND loan_marker IS NULL"):
+            "WHERE headword_search IS NOT NULL AND loan_marker IS NULL "
+            "  AND COALESCE(part_of_speech, '') NOT LIKE '%loan%' "
+            "  AND COALESCE(part_of_speech_en, '') NOT LIKE '%Loan%'"):
         entry_idx.setdefault(hs, []).append(eid)
 
     seen = set()

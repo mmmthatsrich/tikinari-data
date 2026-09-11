@@ -77,5 +77,42 @@ class ParseAlternative(unittest.TestCase):
         self.assertIsNone(parse_alternative(" - just a gloss"))
 
 
+class LoanAnnotations(unittest.TestCase):
+    """'he kupu mino' is 'it is a loan word' — a marker, not a synonym.
+
+    411 of Paekupu's alternative_words are this annotation, sometimes naming the
+    source language: (reo Hapanihi) Japanese, (reo Wiwi) French, (reo Itariana)
+    Italian, (reo Hiperu) Hebrew. D22 routed them to synonym relations pointing
+    at a sentence. They belong in entry.loan_marker, where Te Aka's own loan
+    marker lives — which also makes them visible to the D23 etymology filter.
+    """
+
+    def test_the_bare_annotation_is_a_loan_marker(self):
+        self.assertEqual(parse_alternative("He kupu mino."),
+                         {"target": None, "rel_type": "loan_marker",
+                          "note": "He kupu mino."})
+
+    def test_case_and_a_missing_stop_do_not_matter(self):
+        self.assertEqual(parse_alternative("he kupu mino")["rel_type"],
+                         "loan_marker")
+
+    def test_the_source_language_is_kept(self):
+        out = parse_alternative("he kupu mino (reo Hapanihi)")
+        self.assertEqual(out["rel_type"], "loan_marker")
+        self.assertEqual(out["note"], "he kupu mino (reo Hapanihi)")
+
+    def test_an_html_entity_left_by_the_scrape_does_not_defeat_it(self):
+        self.assertEqual(parse_alternative("He kupu mino.&nbsp")["rel_type"],
+                         "loan_marker")
+
+    def test_an_ordinary_synonym_is_untouched(self):
+        self.assertEqual(parse_alternative("aroaro")["rel_type"], "synonym")
+
+    def test_a_dashed_component_is_untouched(self):
+        self.assertEqual(parse_alternative("wete - to release")["rel_type"],
+                         "cross_ref")
+
+
+
 if __name__ == "__main__":
     unittest.main()

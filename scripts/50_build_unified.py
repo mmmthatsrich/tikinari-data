@@ -492,9 +492,16 @@ def build_paekupu(con, b):
         # of every form row in the corpus.
         for w in jload(alt):
             parsed = parse_alternative(w if isinstance(w, str) else str(w))
-            if parsed:
-                b.add_relation(eid, parsed["rel_type"], parsed["target"],
-                               note=parsed["note"])
+            if not parsed:
+                continue
+            if parsed["rel_type"] == "loan_marker":
+                # Paekupu marks a borrowing inside alternative_words; it belongs
+                # on the entry, where the etymology filter can see it.
+                con.execute("UPDATE entry SET loan_marker = ? WHERE id = ?",
+                            (parsed["note"], eid))
+                continue
+            b.add_relation(eid, parsed["rel_type"], parsed["target"],
+                           note=parsed["note"])
         # The curriculum learning areas are bilingual in the source:
         # subject_area 'Pūtaiao' / subject_area_en 'Science'. The builder used
         # `subject_areas` instead — a JSON list of URL slugs ('ngā-toi') — and

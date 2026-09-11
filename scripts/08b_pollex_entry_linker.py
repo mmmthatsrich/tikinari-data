@@ -52,7 +52,9 @@ def _build_entry_index(conn: sqlite3.Connection) -> dict:
         # Proto-Polynesian, and the two bridges must agree or the parity
         # test between them is meaningless.
         'SELECT id, headword_search FROM entry '
-        'WHERE headword_search IS NOT NULL AND loan_marker IS NULL'
+        'WHERE headword_search IS NOT NULL AND loan_marker IS NULL '
+        "  AND COALESCE(part_of_speech, '') NOT LIKE '%loan%' "
+        "  AND COALESCE(part_of_speech_en, '') NOT LIKE '%Loan%'"
     ):
         idx.setdefault(hs, []).append(eid)
     return idx
