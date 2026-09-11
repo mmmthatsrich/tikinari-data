@@ -165,6 +165,34 @@ class UnifiedCore(unittest.TestCase):
                     "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
                     "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
 
+    def test_no_domain_is_a_url_slug(self):
+        # Paekupu's domains came from `subject_areas`, a JSON list of URL slugs
+        # ('te-reo-matatini', 'ngā-toi'), while the same table holds the display
+        # forms in subject_area / subject_area_en.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM entry_domain WHERE domain LIKE '%-%' "
+            "AND domain NOT LIKE '% %'"), 0)
+
+    def test_paekupu_domains_are_tagged_in_both_languages(self):
+        # Every one of Paekupu's 16,486 domain rows was Māori text tagged 'en'.
+        # domain_lang is the only thing telling the app how to render them.
+        mi = self._one(
+            "SELECT COUNT(*) FROM entry_domain d JOIN entry e ON e.id=d.entry_id "
+            "WHERE e.source_id='paekupu' AND d.domain_lang='mi'")
+        en = self._one(
+            "SELECT COUNT(*) FROM entry_domain d JOIN entry e ON e.id=d.entry_id "
+            "WHERE e.source_id='paekupu' AND d.domain_lang='en'")
+        self.assertGreater(mi, 16000)
+        self.assertGreater(en, 16000)
+
+    def test_paekupu_maori_domain_is_never_tagged_english(self):
+        # 'Pūtaiao' is Māori; 'Science' is its English counterpart.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM entry_domain d JOIN entry e ON e.id=d.entry_id "
+            "WHERE e.source_id='paekupu' AND d.domain_lang='en' "
+            "AND d.domain IN ('Pūtaiao','Ngā Toi','Hauora','Hangarau','Pāngarau',"
+            "'Tikanga ā-Iwi','Te Reo Matatini','Mātauranga Whānui')"), 0)
+
     def test_te_aka_loan_marker_is_not_a_semantic_domain(self):
         # 'Historical Loan Word' was the single most common value in
         # entry_domain (18,439 rows). It is a register marker; entry.loan_marker

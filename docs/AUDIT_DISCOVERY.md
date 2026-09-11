@@ -293,7 +293,7 @@ never captured.
 | D10 | Kimikupu Hou contentless definitions | 2,198 | ✅ **fixed** — now NULL |
 | D11 | Ngata leading `</B>` boundary artefact | cosmetic | ✅ **fixed** — never reached derived fields |
 | D12 | Derived spellings filed as variant forms | 7,984 | ✅ **fixed** — guarded in `Builder.add_form`, all sources |
-| D13 | Māori domains tagged English | ~16,500 | `04_paekupu_parse.py` |
+| D13 | Māori domains tagged English, and slugs not display text | 16,486 | ✅ **fixed** — both languages from `subject_area` / `subject_area_en` |
 | D14 | `std_pos` gaps + comma-split damage | 5,367 | `13_build_pos_normalisation.py` |
 | D15 | Ngata synonym-group example misattachment | 9,936 | ✅ **fixed** — `example_owners`; down to 252 |
 | D16 | Te Aka example translations absent | 45,939 | `04_te_aka_parse.py` |
@@ -312,7 +312,7 @@ never captured.
    `5b43f78`) and **D8** (commit pending).
 6. **D16** — verify against the upstream sources before changing anything.
 
-**Open:** D13, D14, D16, D17.
+**Open:** D14, D16, D17.
 
 ## What this changes about the sweep
 

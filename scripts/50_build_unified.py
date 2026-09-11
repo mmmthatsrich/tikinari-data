@@ -400,8 +400,10 @@ def build_hepatakakupu(con, b):
 def build_paekupu(con, b):
     sql = ("SELECT slug, headword, headword_sort, headword_search, headword_en, "
            "part_of_speech, definition, definition_mi, usage_examples, audio_url, "
-           "alternative_words, subject_areas FROM paekupu_entries ORDER BY id")
-    for (slug, hw, hs, hse, hen, pos, d, dmi, ux, au, alt, subj) in con.execute(sql):
+           "alternative_words, subject_areas, subject_area, subject_area_en "
+           "FROM paekupu_entries ORDER BY id")
+    for (slug, hw, hs, hse, hen, pos, d, dmi, ux, au, alt, subj,
+         subj_mi, subj_en) in con.execute(sql):
         examples = [e.strip() for e in jload(ux) if isinstance(e, str)]
         raw = (d or "") + (" || MI: " + dmi if dmi else "")
         eid = b.add_entry(slug, hw, hs, hse, pos=pos, headword_en=hen, audio_url=au,
@@ -417,8 +419,15 @@ def build_paekupu(con, b):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         for w in jload(alt):
             b.add_form(eid, w if isinstance(w, str) else str(w), "alt_spelling")
-        for s in jload(subj):
-            b.add_domain(eid, sid, s if isinstance(s, str) else str(s), "en")
+        # The curriculum learning areas are bilingual in the source:
+        # subject_area 'Pūtaiao' / subject_area_en 'Science'. The builder used
+        # `subject_areas` instead — a JSON list of URL slugs ('ngā-toi') — and
+        # tagged all 16,486 of them 'en' though every value was Māori.
+        # domain_lang is the only thing telling the app how to render these.
+        if subj_mi:
+            b.add_domain(eid, sid, subj_mi, "mi")
+        if subj_en:
+            b.add_domain(eid, sid, subj_en, "en")
 
 
 def build_papakupu(con, b):
