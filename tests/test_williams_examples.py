@@ -130,5 +130,38 @@ class SplitGlossExamples(unittest.TestCase):
         self.assertEqual(split_gloss_examples(None), ("", []))
 
 
+
+class EmDashSeparatedExamples(unittest.TestCase):
+    """Williams separates two examples for one sense with an em-dash.
+
+    714 example rows hold two sentences glued this way, so each counted as one
+    example and neither could be read on its own.
+    """
+
+    def test_two_sentences_joined_by_an_em_dash_become_two_examples(self):
+        gloss, ex = split_gloss_examples(
+            "Gather things that are thinly scattered, glean. "
+            "Ka ongeonge nga kai ka hamu ai i nga puka.\u2014"
+            "Ka ori i te whare ki te hamu rarauhe (Nga Moteatea 47).")
+        self.assertEqual(gloss, "Gather things that are thinly scattered, glean.")
+        self.assertEqual([e["text"] for e in ex], [
+            "Ka ongeonge nga kai ka hamu ai i nga puka.",
+            "Ka ori i te whare ki te hamu rarauhe",
+        ])
+
+    def test_the_citation_belongs_to_the_sentence_it_follows(self):
+        _, ex = split_gloss_examples(
+            "Glean. Ka ongeonge nga kai.\u2014Ka ori i te whare (Nga Moteatea 47).")
+        self.assertIsNone(ex[0]["citation"])
+        self.assertEqual(ex[1]["citation"], "Nga Moteatea 47")
+
+    def test_a_single_example_is_unaffected(self):
+        _, ex = split_gloss_examples("Glean. Ka ongeonge nga kai ka hamu ai.")
+        self.assertEqual(len(ex), 1)
+
+    def test_a_fragment_too_short_to_be_a_sentence_is_dropped(self):
+        _, ex = split_gloss_examples("Glean. Ka ongeonge nga kai ka hamu ai.\u2014e.")
+        self.assertEqual([e["text"] for e in ex], ["Ka ongeonge nga kai ka hamu ai."])
+
 if __name__ == "__main__":
     unittest.main()

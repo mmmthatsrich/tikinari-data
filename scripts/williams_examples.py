@@ -46,6 +46,9 @@ _CITATION = re.compile(r"\(([^()]{2,60})\)[.\s]*$")
 # follows is never seen.
 _GLUED = re.compile(r"(?<=[.!?])(?=[A-ZĀĒĪŌŪ])")
 _MIN_EXAMPLE_TOKENS = 3
+# Williams separates two examples for one sense with an em-dash; 714 rows
+# held two sentences glued this way, so neither could be read on its own.
+_EM_DASH = "—"
 
 
 def _is_maori(tok: str):
@@ -136,7 +139,12 @@ def split_gloss_examples(definition: str | None) -> tuple[str, list[dict]]:
             chunk = chunk[:m.start()].strip()
         chunk = chunk.rstrip(" ,;")
         if chunk:
-            examples.append({"text": chunk, "citation": citation})
+            # The citation belongs to the sentence it follows — the last one.
+            parts = [p.strip(" ,;") for p in chunk.split(_EM_DASH)]
+            parts = [p for p in parts if len(p.split()) >= _MIN_EXAMPLE_TOKENS]
+            for i, part in enumerate(parts):
+                examples.append({"text": part,
+                                 "citation": citation if i == len(parts) - 1 else None})
         cursor = end
     kept.append(text[cursor:])
 
