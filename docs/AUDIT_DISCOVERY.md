@@ -327,3 +327,48 @@ remain open against them but none of those obscure the text the way markup did.
 
 Tregear (D6) still needs `body_raw`'s `<B>` structure to split its senses — that work must read
 the archive, not `body_text`.
+
+---
+
+## D18. Macronisation is inconsistent across sources — **blocked on the concept layer**
+
+Unlike D1–D17 this is **not** a pipeline defect, and it cannot be fixed before the sweep. It is
+an *output* of deduplication rather than a prerequisite for it.
+
+Williams is often described as macron-free. It is not: 31% of its headwords carry one, within
+the range of every other source (paekupu 48%, te_aka 35%, papakupu 27%). Most Māori words have
+no long vowel, so the percentage is not the signal. The inconsistency is:
+
+**2,297 Williams headwords are unmacronised while another source writes the same word with a
+macron.** Across all sources, 3,393 `headword_search` keys carry both a macronised and a plain
+spelling.
+
+**Search is unaffected.** `headword_search` strips macrons and collapses double vowels, so
+`āho` / `aho` / `aaho` all resolve to `aho`. This is display consistency, not findability.
+
+### Why it needs the concept layer first
+
+| Of the 2,297 inheritable Williams headwords | |
+|---|---|
+| on a key with more than one Williams entry (homographs) | **1,300 (57%)** |
+| with competing macronisations across sources | 304 |
+| clean single-candidate | ~1,000 |
+
+`aho` is the case in point: PPN \*afo "fishing line" and \*aho "daylight" share a search key.
+Inheriting a macron on key identity alone asserts that two different words are one — exactly
+the error the concept layer prevents. Even the clean cases need proof that the macronised
+counterpart is the *same word* rather than a homophone.
+
+A concept record supplies that proof: if Williams #133 and Te Aka #1204 sense 2 are witnesses
+to one concept, and Te Aka writes `āho`, then Williams's `Aho` is that word.
+
+### Constraints on the eventual fix
+
+- **Do not rewrite `headword`.** Williams 1957 printed `Aho`; that is the record, and under
+  CC BY-SA a quotation. Same rule as part-of-speech: raw preserved, canonical alongside. No
+  field exists for it yet — `headword_sort` and `headword_search` are stripped keys, not
+  spellings — so this needs a new column (`entry.headword_modern` or similar).
+- **Source precedence is a tie-breaker within a concept, never a licence across one.** Te Aka
+  can supply 1,943 of the 2,297, then hepatakakupu (1,530) and ngata (1,075).
+- **Sequence:** sense addressability → concept layer → macronisation. It is the first item that
+  genuinely depends on the sweep having run.
