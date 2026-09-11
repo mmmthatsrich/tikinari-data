@@ -42,7 +42,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
-                   compute_content_hash, pos_atoms, resolve_unambiguous_senses)
+                   compute_content_hash, pos_atoms, resolve_unambiguous_senses,
+                   resolve_within_source_relations)
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
@@ -118,6 +119,7 @@ class Builder:
         self.first_seen_map = first_seen_map      # {source_entry_id: first_seen}
         self.counts = {t: 0 for t in CORE_TABLES}
         self._lemmas = {}                         # {entry_id: {headword, sort}} for add_form
+        self._examples = set()                    # (sense_id, mi, en) already inserted
 
     def add_entry(self, source_entry_id, headword, headword_sort, headword_search,
                   pos=None, headword_en=None, loan_marker=None, audio_url=None,
@@ -158,6 +160,15 @@ class Builder:
                     citation, sort_no):
         if not (text_mi or text_en):
             return
+        # The same sentence twice on one sense is never meaningful. Williams
+        # got them from two routes at once — split out of the sense's own text,
+        # and again from the parser's entry-level usage_examples — so 91 rows
+        # were stored twice. Distinct senses sharing a sentence is legitimate
+        # and is not caught here.
+        key = (sense_id, text_mi, text_en)
+        if key in self._examples:
+            return
+        self._examples.add(key)
         self.con.execute(
             "INSERT INTO example (sense_id, entry_id, text_mi, text_en, source_abbrev, "
             "citation, sort_no) VALUES (?,?,?,?,?,?,?)",
@@ -291,6 +302,7 @@ def build_williams(con, b):
         senses = split_senses(d) or [{"sense_number": 1, "part_of_speech": None,
                                       "gloss_en": d, "definition_raw": d}]
         first_sid = None
+        inline_texts = set()
         for s in senses:
             # Williams prints its examples inline, in Māori, after the English
             # gloss — so gloss_en held the whole definition (18,792 senses were
@@ -304,11 +316,14 @@ def build_williams(con, b):
                               note=note["note"] if first_sid is None else None)
             for i, ex in enumerate(inline):
                 b.add_example(sid, eid, ex["text"], None, None, ex["citation"], i)
+                inline_texts.add(_ws(ex["text"]))
             if first_sid is None:
                 first_sid = sid
-        # The parser's own <span lang="mi"> examples (61 entries) have no sense
-        # of their own to sit on.
-        for i, ex in enumerate(examples):
+        # The parser's own <span lang="mi"> examples have no sense of their own,
+        # so they go on the first one — but only if the per-sense split did not
+        # already place them. Adding them unconditionally put sense 3's example
+        # on sense 1, where nothing marks it as misplaced.
+        for i, ex in enumerate(e for e in examples if _ws(e) not in inline_texts):
             b.add_example(first_sid, eid, ex, None, None, None, i)
         for pl in note["plural"]:
             b.add_form(eid, pl, "plural")
@@ -786,6 +801,22 @@ def delete_source_slice(con, source_id):
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
     con.execute("DELETE FROM form WHERE entry_id IN "
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
+    # Sense-level references from other tables must be released before the
+    # senses go. Both were added with sense addressability and would otherwise
+    # make a source impossible to rebuild — the same failure the relation
+    # target_entry_id release below was added for, one level down.
+    for sql in (
+        "UPDATE ETY_entry_link SET sense_id = NULL WHERE sense_id IN "
+        "(SELECT s.id FROM sense s JOIN entry e ON e.id = s.entry_id "
+        " WHERE e.source_id = ?)",
+        "UPDATE relation SET target_sense_id = NULL WHERE target_sense_id IN "
+        "(SELECT s.id FROM sense s JOIN entry e ON e.id = s.entry_id "
+        " WHERE e.source_id = ?)",
+    ):
+        try:
+            con.execute(sql, (source_id,))
+        except sqlite3.OperationalError:
+            pass            # column not present in an older DB
     con.execute("DELETE FROM sense WHERE entry_id IN "
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
     # Relations from OTHER sources may point into this one — Te Matatiki
@@ -1009,6 +1040,12 @@ def main():
     if any(patched.values()):
         print(f"patches: {patched['applied']:,} applied, {patched['stale']:,} stale, "
               f"{patched['missing']:,} missing")
+
+    # Resolve relation targets BEFORE senses, so a target resolved here can have
+    # its sense picked up in the same run.
+    linked = resolve_within_source_relations(con)
+    if linked:
+        print(f"resolved {linked:,} within-source relation target_entry_id")
 
     resolved = resolve_unambiguous_senses(con)
     if resolved.get("relation"):

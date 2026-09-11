@@ -652,6 +652,9 @@ def create_tables(conn: sqlite3.Connection) -> None:
             match_confidence REAL
         );
         CREATE INDEX IF NOT EXISTS idx_ety_entry_link_set   ON ETY_entry_link(cognateset_id);
+        -- delete_source_slice releases sense-level references before dropping a
+        -- source's senses; unindexed these turn a rebuild into an 8-minute scan.
+        CREATE INDEX IF NOT EXISTS idx_ety_entry_link_sense ON ETY_entry_link(sense_id);
         CREATE INDEX IF NOT EXISTS idx_ety_entry_link_entry ON ETY_entry_link(entry_id);
 
         -- ── Personal Lexicon ─────────────────────────────────────────────────
@@ -938,6 +941,10 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_entry_search  ON entry(headword_search);
         CREATE INDEX IF NOT EXISTS idx_entry_sort    ON entry(headword_sort);
         CREATE INDEX IF NOT EXISTS idx_entry_srcpk   ON entry(source_id, source_entry_id);
+        -- resolve_within_source_relations() looks a relation's target_headword up
+        -- within its own source. Without this it is a correlated scan of 153k
+        -- entries per relation and a rebuild takes many minutes instead of seconds.
+        CREATE INDEX IF NOT EXISTS idx_entry_src_hw  ON entry(source_id, headword);
 
         -- ── form: variant / alternative / inflected forms ────────────────────
         CREATE TABLE IF NOT EXISTS form (
@@ -996,6 +1003,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_relation_entry ON relation(entry_id);
         CREATE INDEX IF NOT EXISTS idx_relation_target ON relation(target_entry_id);
+        CREATE INDEX IF NOT EXISTS idx_relation_tsense ON relation(target_sense_id);
 
         -- ── entry_domain: subject / semantic-domain tags ─────────────────────
         CREATE TABLE IF NOT EXISTS entry_domain (

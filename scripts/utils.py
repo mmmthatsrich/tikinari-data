@@ -70,6 +70,43 @@ def _has_table(con, name: str) -> bool:
     ).fetchone() is not None
 
 
+def resolve_within_source_relations(con) -> int:
+    """Point a relation at its target where the source names it unambiguously.
+
+    14,853 relations name a headword that exists in their own source and were
+    never resolved — hepatakakupu's synonyms had no resolution pass at all,
+    though Te Aka's synonyms and Williams's see_also each have one.
+
+    Only the unambiguous ones are resolved: 5,197 where exactly one entry in
+    that source carries the headword. The other 9,656 name a headword held by
+    two or more entries — hepatakakupu splits senses across entries, so 'ahu' is
+    several rows — and choosing one would be a guess dressed as a fact. Those
+    stay NULL and are the sweep's to judge.
+
+    Never crosses a source boundary, never overwrites a target already set, and
+    never points an entry at itself.
+    """
+    if not _has_table(con, "relation"):
+        return 0
+    n = con.execute("""
+        UPDATE relation SET target_entry_id = (
+            SELECT t.id FROM entry t
+             WHERE t.source_id = (SELECT e.source_id FROM entry e
+                                   WHERE e.id = relation.entry_id)
+               AND t.headword = relation.target_headword
+               AND t.id <> relation.entry_id)
+        WHERE target_entry_id IS NULL
+          AND target_headword IS NOT NULL
+          AND (SELECT COUNT(*) FROM entry t
+                WHERE t.source_id = (SELECT e.source_id FROM entry e
+                                      WHERE e.id = relation.entry_id)
+                  AND t.headword = relation.target_headword
+                  AND t.id <> relation.entry_id) = 1
+    """).rowcount
+    con.commit()
+    return n
+
+
 def resolve_unambiguous_senses(con) -> dict:
     """Point entry-level references at a sense, where the sense is determined.
 
