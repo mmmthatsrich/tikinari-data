@@ -745,9 +745,18 @@ def build_entry_links(con) -> dict:
     """Bridge every source's Māori reflexes to unified `entry` rows by macron-
     neutral headword key (extends 08b_pollex_entry_linker to all sources)."""
     con.execute("DELETE FROM ETY_entry_link")
+    # A borrowed word cannot descend from Proto-Polynesian: inheritance and
+    # borrowing are mutually exclusive, so a cognate set on an entry Te Aka
+    # marks `Historical Loan Word` is wrong wherever the marker is right. 8,314
+    # links reached 2,457 such entries purely because the loan's Māori spelling
+    # coincides with a Māori word — 'Aki' = Jack, 'Ahua' = Asshur, 'āka' = ark.
+    # Where the real word exists too ('ama' is both a borrowed yam and an
+    # inherited outrigger float) Te Aka carries separate entries, and the set
+    # stays on the unmarked one.
     entry_idx = {}
     for eid, hs in con.execute(
-            "SELECT id, headword_search FROM entry WHERE headword_search IS NOT NULL"):
+            "SELECT id, headword_search FROM entry "
+            "WHERE headword_search IS NOT NULL AND loan_marker IS NULL"):
         entry_idx.setdefault(hs, []).append(eid)
 
     seen = set()

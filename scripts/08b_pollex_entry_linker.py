@@ -47,7 +47,12 @@ def _build_entry_index(conn: sqlite3.Connection) -> dict:
     """Return {headword_search: [entry_id, ...]} over the unified entry table."""
     idx: dict = {}
     for eid, hs in conn.execute(
-        'SELECT id, headword_search FROM entry WHERE headword_search IS NOT NULL'
+        # Loanwords are excluded here for the same reason as in
+        # 52_build_etymology_unified: a borrowed word cannot descend from
+        # Proto-Polynesian, and the two bridges must agree or the parity
+        # test between them is meaningless.
+        'SELECT id, headword_search FROM entry '
+        'WHERE headword_search IS NOT NULL AND loan_marker IS NULL'
     ):
         idx.setdefault(hs, []).append(eid)
     return idx
