@@ -165,6 +165,17 @@ class UnifiedCore(unittest.TestCase):
                     "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
                     "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
 
+    def test_te_aka_loan_marker_is_not_a_semantic_domain(self):
+        # 'Historical Loan Word' was the single most common value in
+        # entry_domain (18,439 rows). It is a register marker; entry.loan_marker
+        # is the column for it, and was NULL on every entry in the database.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM entry_domain d JOIN entry e ON e.id=d.entry_id "
+            "WHERE e.source_id='te_aka' AND d.domain LIKE '%Loan%'"), 0)
+        self.assertGreater(self._one(
+            "SELECT COUNT(*) FROM entry WHERE source_id='te_aka' "
+            "AND loan_marker IS NOT NULL"), 18000)
+
     def test_temarareo_proto_levels_are_not_semantic_domains(self):
         # 'P. Polynesian', 'P. Oceanic' etc. are reconstruction levels. They
         # belong to the etymology layer (ETY_cognateset.level already carries

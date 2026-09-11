@@ -302,6 +302,24 @@ def build_williams(con, b):
                 b.add_relation(eid, "cross_ref", t)
 
 
+def split_filters(filters):
+    """Te Aka `filters` -> (loan_marker, semantic domains).
+
+    Te Aka ships one filter value, 'Historical Loan Word', on 18,439 entries,
+    and it went into entry_domain — making a register/etymology marker the most
+    common "semantic domain" in the database. `entry.loan_marker` is the column
+    for it and was NULL everywhere.
+
+    Anything that is NOT a loan marker stays a domain, so a genuine subject
+    filter added upstream later lands in the right place without another fix.
+    """
+    loans, domains = [], []
+    for f in filters or []:
+        text = f if isinstance(f, str) else str(f)
+        (loans if "loan" in text.casefold() else domains).append(text)
+    return ("; ".join(loans) or None), domains
+
+
 def build_te_aka(con, b):
     sql = ("SELECT word_id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, senses, usage_examples, audio_url, synonyms, filters "
@@ -309,7 +327,9 @@ def build_te_aka(con, b):
     for (wid, hw, hs, hse, pos, d, sj, ux, au, syn, filt) in con.execute(sql):
         examples = [e for e in jload(ux) if isinstance(e, str)]
         senses = [s for s in jload(sj) if isinstance(s, dict)]
+        loan_marker, filter_domains = split_filters(jload(filt))
         eid = b.add_entry(wid, hw, hs, hse, pos=pos, audio_url=au,
+                          loan_marker=loan_marker,
                           locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "syn": jload(syn), "filt": jload(filt)})
@@ -348,8 +368,8 @@ def build_te_aka(con, b):
                 b.add_relation(eid, "synonym", sy.get("text"), None, note=wid_note)
             elif isinstance(sy, str):
                 b.add_relation(eid, "synonym", sy)
-        for fdom in jload(filt):
-            b.add_domain(eid, first_sid, fdom if isinstance(fdom, str) else str(fdom), "en")
+        for fdom in filter_domains:
+            b.add_domain(eid, first_sid, fdom, "en")
 
 
 def build_hepatakakupu(con, b):

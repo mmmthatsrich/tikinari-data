@@ -109,7 +109,7 @@ Full rationale: `SCHEMA_PROPOSAL.md`.
 | `example` | 92,690 | structured `text_mi` / `text_en` + `source_abbrev` (joins `source_abbreviations`) / `citation` |
 | `form` | 12,955 | variant / alternative / inflected forms (`form_search` normalised) |
 | `relation` | 107,870 | `synonym` / `see_also` / `cross_ref` / `citation` (Te Aka synonyms resolved to `target_entry_id`; Williams `‖` refs → `see_also` headword links + `citation` literature refs, e.g. `J. vii, 120`). Williams `see_also` rows are resolved to `target_entry_id` at build (3,490 / 4,230 = 83%): multi-target strings like `mataaho, tiaho` are split into one row each, `(i)`/`(ii)` sense pointers prefer the matching homograph, and cognate/citation/relative pointers (`Tah, ao`, `J. vii, 120`, `6, below`) stay NULL with the raw text kept in `note`. The app renders resolved rows as clickable links and unresolved rows as plain text |
-| `entry_domain` | 59,570 | subject / semantic-domain tags (`domain_lang` = mi/en) |
+| `entry_domain` | 41,131 | subject / semantic-domain tags (`domain_lang` = mi/en). Subject areas **only** — Te Aka's loan marker moved to `entry.loan_marker` and Te Māra Reo's proto-levels to the `ETY_*` layer |
 
 Key columns on `entry`:
 - `source_id` + `source_entry_id` — provenance. The device id is `'{source_id}:{source_entry_id}'`
@@ -126,7 +126,11 @@ Key columns on `entry`:
   no Māori term is recorded for any of the entry's POS values (e.g. He Pātaka Kupu entries whose
   POS codes have not yet been added to `std_pos`).
 - `dialect` — e.g. `'Tai Tokerau'` (Papakupu). **Ranking/boost reads `dialect`, never `source_id`.**
-- `audio_url`, `headword_en`, `loan_marker`, `locator`, `content_hash`, `first_seen`.
+- `loan_marker` — register/etymology label, e.g. `'Historical Loan Word'` (18,439 Te Aka
+  entries). **Read it here, not from `entry_domain`**: it used to be written as a semantic
+  domain, where it was the single most common "domain" in the database. `entry_domain` is
+  subject areas only.
+- `audio_url`, `headword_en`, `locator`, `content_hash`, `first_seen`.
 
 Key columns on `sense`:
 - `sense_number` — 1-based integer ordering within the entry. **Williams and Te Aka are multi-sense**:

@@ -288,7 +288,7 @@ never captured.
 | D5 | Te Matatiki citation codes as relations | 6,429 | ✅ **fixed** — `parse_derivation` + page/word resolution; 68% now resolve |
 | D6 | Tregear multi-sense / example / xref in one field | 321 | ✅ **fixed** — `parse_tregear`; 86 examples, 218 relations, 49 notes recovered |
 | D7 | Te Māra Reo protoform as gloss, cognate group as domain | 203 | ✅ **fixed** — `temarareo_gloss.py`; 181 domain rows → 0, 16 glossless senses → 0 |
-| D8 | Te Aka register marker as domain | 18,439 | `04_te_aka_parse.py` |
+| D8 | Te Aka register marker as domain | 18,439 | ✅ **fixed** — `split_filters` → `entry.loan_marker` |
 | D9 | Source HTML reached `definition_raw` | 42,189 | ✅ **fixed** — `wakareo_records.py` + `50_build_unified.py` |
 | D10 | Kimikupu Hou contentless definitions | 2,198 | ✅ **fixed** — now NULL |
 | D11 | Ngata leading `</B>` boundary artefact | cosmetic | ✅ **fixed** — never reached derived fields |
@@ -309,10 +309,10 @@ never captured.
    distinct headword-prefix-strip defect affecting 44 senses, which remains open.
 5. ~~**D5 + D6 + D12**~~ — ✅ **done 2026-09-11** (commit `58f388a`), together with D15 and a
    follow-up to the `body_text` NULL rule. ~~**D7**~~ — ✅ **done 2026-09-11** (commit
-   `5b43f78`). **D8 remains open.**
+   `5b43f78`) and **D8** (commit pending).
 6. **D16** — verify against the upstream sources before changing anything.
 
-**Open:** D8, D13, D14, D16, D17.
+**Open:** D13, D14, D16, D17.
 
 ## What this changes about the sweep
 
