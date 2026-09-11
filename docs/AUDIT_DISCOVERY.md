@@ -372,3 +372,15 @@ to one concept, and Te Aka writes `āho`, then Williams's `Aho` is that word.
   can supply 1,943 of the 2,297, then hepatakakupu (1,530) and ngata (1,075).
 - **Sequence:** sense addressability → concept layer → macronisation. It is the first item that
   genuinely depends on the sweep having run.
+
+### D7 residue — 12 protoform glosses in the etymology layer
+
+The D7 fix cleaned `sense.gloss_en`, but the same scrape artefact also reached
+`ETY_cognateset.gloss`, a different table. 12 of Te Māra Reo's 271 cognate sets
+carry a bare protoform where a gloss belongs (`'*Falafala'`, `'*Kauere'`); three
+more begin with one but go on to real content (`'*Aute, *Siapo, Broussonetia
+papyfera, "Paper mulberry" (Moraceae)'`) and are fine as they are.
+
+Left for the sweep rather than fixed in the pipeline: 12 rows is below the point
+where a re-parse and rebuild is cheaper than a judgement, and the batch
+assembler surfaces them in the etymology section where they will be read anyway.
