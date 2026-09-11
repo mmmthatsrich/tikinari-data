@@ -46,6 +46,7 @@ from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
 from williams_senses import split_senses
 from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
+from wakareo_records import example_owners, parse_derivation, parse_tregear
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -98,10 +99,11 @@ class Builder:
         self.dialect = dialect
         self.first_seen_map = first_seen_map      # {source_entry_id: first_seen}
         self.counts = {t: 0 for t in CORE_TABLES}
+        self._lemmas = {}                         # {entry_id: {headword, sort}} for add_form
 
     def add_entry(self, source_entry_id, headword, headword_sort, headword_search,
                   pos=None, headword_en=None, loan_marker=None, audio_url=None,
-                  locator=None, homonym_no=None, material=None):
+                  locator=None, homonym_no=None, material=None, dialect=None):
         seid = str(source_entry_id)
         first_seen = self.first_seen_map.get(seid) or NOW
         content_hash = compute_content_hash(material) if material else None
@@ -111,18 +113,21 @@ class Builder:
             "dialect, audio_url, locator, content_hash, first_seen, created_at, last_updated) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (self.source_id, seid, headword, headword_sort, headword_search, homonym_no,
-             headword_en, pos, loan_marker, self.dialect, audio_url, locator,
+             headword_en, pos, loan_marker, dialect or self.dialect, audio_url, locator,
              content_hash, first_seen, NOW, NOW))
         self.counts["entry"] += 1
+        self._lemmas[cur.lastrowid] = {(headword or "").casefold(),
+                                       (headword_sort or "").casefold()}
         return cur.lastrowid
 
     def add_sense(self, entry_id, sense_number, gloss_en, gloss_mi, definition_raw,
-                  register=None, parent_sense_id=None, part_of_speech=None):
+                  register=None, parent_sense_id=None, part_of_speech=None, note=None):
         cur = self.con.execute(
             "INSERT INTO sense (entry_id, sense_number, parent_sense_id, gloss_en, "
-            "gloss_mi, definition_raw, register, part_of_speech) VALUES (?,?,?,?,?,?,?,?)",
+            "gloss_mi, definition_raw, register, part_of_speech, note) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
             (entry_id, sense_number, parent_sense_id, gloss_en, gloss_mi,
-             definition_raw, register, part_of_speech))
+             definition_raw, register, part_of_speech, note))
         self.counts["sense"] += 1
         return cur.lastrowid
 
@@ -138,6 +143,11 @@ class Builder:
 
     def add_form(self, entry_id, form, form_type, note=None):
         if not form:
+            return
+        # A form that merely restates the headword or its macron-stripped sort
+        # key is not a variant: headword_search already normalises both, so the
+        # row adds nothing and inflates the app's "has variants" signal.
+        if form.casefold() in self._lemmas.get(entry_id, ()):
             return
         self.con.execute(
             "INSERT INTO form (entry_id, form, form_search, form_type, note) "
@@ -489,6 +499,10 @@ def _wakareo_en_mi(con, b, table):
         # The qualifier narrows the English lemma ('(balanced)' + 'View, argument');
         # fold it into the gloss so it is not lost at the unified layer.
         gloss = _fold_qualifier(lemma_en, qual)
+        # One record, one example — but it illustrates only the equivalent it
+        # actually uses. Attaching it to every sibling puts a sentence on an
+        # entry whose headword it never contains.
+        owners = set(example_owners(equivalents, ex_mi))
         siblings = []
         for i, mi in enumerate(equivalents, start=1):
             # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
@@ -497,7 +511,8 @@ def _wakareo_en_mi(con, b, table):
                 pos=pos, headword_en=lemma_en,
                 material={"hw": mi, "en": lemma_en, "ex": [ex_en, ex_mi]})
             sid = b.add_sense(eid, None, gloss, None, raw, part_of_speech=pos)
-            b.add_example(sid, eid, ex_mi, ex_en, None, None, 0)
+            if mi in owners:
+                b.add_example(sid, eid, ex_mi, ex_en, None, None, 0)
             for v in variants:
                 b.add_form(eid, v, "variant")
             siblings.append((eid, mi))
@@ -507,8 +522,41 @@ def _wakareo_en_mi(con, b, table):
                     b.add_relation(eid, "synonym", other_mi, other_eid)
 
 
+def _williams_page_index(con) -> dict:
+    """{headword_search: [(page_number, unified entry.id)]} for Williams.
+
+    Te Matatiki's derivation codes are Williams PAGE numbers, so page + word is
+    the resolution key. Empty when Williams has not been projected yet, in which
+    case derivations stay unresolved exactly as they were before.
+    """
+    index = {}
+    sql = ("SELECT w.headword_search, w.page_number, e.id "
+           "FROM williams_entries w "
+           "JOIN entry e ON e.source_id='williams' "
+           "               AND e.source_entry_id = CAST(w.id AS TEXT) "
+           "WHERE w.page_number IS NOT NULL")
+    for hws, page, eid in con.execute(sql):
+        index.setdefault(hws, []).append((page, eid))
+    return index
+
+
+def _resolve_williams(index: dict, word: str, page: int | None):
+    """Entry id for `word` on Williams page `page`, tolerating a page-break ±1."""
+    if not word or page is None:
+        return None
+    candidates = index.get(normalise_search_key(word))
+    if not candidates:
+        return None
+    for tolerance in (0, 1):
+        for p, eid in candidates:
+            if abs(p - page) <= tolerance:
+                return eid
+    return None
+
+
 def _wakareo_mi_en(con, b, table, matatiki=False):
     extra = ", derivation, williams_refs" if matatiki else ""
+    williams_index = _williams_page_index(con) if matatiki else {}
     sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
            f"gloss_en, body_text{extra} FROM {table} ORDER BY id")
     for row in con.execute(sql):
@@ -520,13 +568,50 @@ def _wakareo_mi_en(con, b, table, matatiki=False):
         for v in jload(scope):
             b.add_form(eid, v, "variant")
         if matatiki:
-            derivation, refs = row[7], jload(row[8])
-            for page in refs:
-                b.add_relation(eid, "cross_ref", f"W.{page}", None,
-                               note=(derivation or "")[:500])
+            # The derivation's source WORD is the target; the W.nnn code is the
+            # Williams page it sits on, which disambiguates homographs for free.
+            for part in parse_derivation(row[7]):
+                word = part["word"] or hw          # a bare [W.nnn] cites the headword
+                target = (_resolve_williams(williams_index, word, part["page"])
+                          if part["ref"] == "W" else None)
+                b.add_relation(eid, "cross_ref", word, target,
+                               note=part["gloss"][:500] or None)
 
 
-def build_tregear_exceptions(con, b):  _wakareo_mi_en(con, b, "tregear_exceptions_entries")
+def build_tregear_exceptions(con, b):
+    """Tregear exceptions: recover the structure the source already labelled.
+
+    Every section is bold-labelled (`Maori Example:`, `Compare With:`,
+    `Word Base:`, `See Also:`, `Comments:`) and nothing consumed them, so senses,
+    examples, citations, cross-references and editorial notes all landed as prose
+    in one sense row. parse_tregear reads body_raw — the markup IS the structure,
+    which is why the archive is kept.
+    """
+    sql = ("SELECT source_entry_id, wakareo_id, headword, part_of_speech, "
+           "search_scope, body_text, body_raw FROM tregear_exceptions_entries "
+           "ORDER BY id")
+    for seid, wid, hw, pos, scope, text, raw in con.execute(sql):
+        p = parse_tregear(raw)
+        eid = b.add_entry(f"{seid}#{wid}", hw, normalise_sort_key(hw),
+                          normalise_search_key(hw), pos=pos, dialect=p["dialect"],
+                          material={"hw": hw, "gloss": text})
+        senses = p["senses"] or ([text] if text else [None])
+        first_sid = None
+        for n, sense_text in enumerate(senses, start=1):
+            sid = b.add_sense(eid, n if len(senses) > 1 else None, sense_text, None,
+                              sense_text, part_of_speech=pos,
+                              note=p["comments"] if n == 1 else None)
+            first_sid = first_sid or sid
+        # Which sense an example illustrates is a judgement call, not a parse:
+        # park them on the first and let the audit sweep reassign.
+        for i, ex in enumerate(p["examples"]):
+            b.add_example(first_sid, eid, ex["text"], None, None, ex["citation"], i)
+        for v in jload(scope):
+            b.add_form(eid, v, "variant")
+        for part in p["compare"] + p["word_base"]:
+            b.add_relation(eid, "cross_ref", part["word"], None, note=part["gloss"])
+        for target in p["see_also"]:
+            b.add_relation(eid, "see_also", target, None)
 def build_tai_kupu_variants(con, b):   _wakareo_mi_en(con, b, "tai_kupu_variants_entries")
 def build_nga_tini_a_tangaroa(con, b): _wakareo_mi_en(con, b, "nga_tini_a_tangaroa_entries")
 def build_maori_law_lexicon(con, b):   _wakareo_mi_en(con, b, "maori_law_lexicon_entries")

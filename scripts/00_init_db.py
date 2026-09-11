@@ -1245,6 +1245,7 @@ def migrate_wakareo_unique_key(conn: sqlite3.Connection) -> None:
 
 def migrate_pos_columns(conn: sqlite3.Connection) -> None:
     """Add part-of-speech columns to sense and entry tables (idempotent)."""
+    _add_column(conn, "sense", "note", "TEXT")   # editorial remarks, kept out of the gloss
     _add_column(conn, "sense", "part_of_speech", "TEXT")
     _add_column(conn, "sense", "part_of_speech_en", "TEXT")
     _add_column(conn, "sense", "part_of_speech_mi", "TEXT")

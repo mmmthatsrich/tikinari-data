@@ -17,6 +17,8 @@ upstream template bug. Only the WR- tag identifies the component.
 """
 import re
 
+from utils import normalise_search_key
+
 _HEADWORD = re.compile(r"(?is)<FONT\s+SIZE='\+2'>(.*?)</FONT>")
 _POS = re.compile(r"(?is)</FONT>\s*</TD>\s*<TD>(.*?)</TD>")
 _SCOPE = re.compile(r"(?is)<TD\s+ALIGN='Right'>(.*?)</TD>")
@@ -178,9 +180,162 @@ def _body_text(rec: dict, body: str) -> str | None:
     text = strip_tags(body)
     if not text:
         return None
+    # The qualifier ('(cricket)', 'View, argument') narrows the English lemma and
+    # is already folded into the gloss, so 'qualifier + lemma' is no more a
+    # definition than the bare lemma is.
+    stem = text
+    qualifier = rec.get("qualifier")
+    if qualifier and stem.casefold().startswith(qualifier.casefold()):
+        stem = stem[len(qualifier):].strip()
     lemmas = {rec["headword"].casefold()}
     lemmas.update(e.casefold() for e in rec.get("equivalents") or [])
-    return None if text.casefold() in lemmas else text
+    return None if stem.casefold() in lemmas else text
+
+
+_TREGEAR_LABELS = ("Maori Example:", "Compare With:", "Word Base:",
+                   "See Also:", "Comments:")
+_TG_LABEL = re.compile(r"(?is)<B>\s*(Maori Example|Compare With|Word Base|"
+                       r"See Also|Comments)\s*:\s*</B>")
+_TG_DIALECT = re.compile(r"(?is)^\s*\[\s*Dialect:\s*(.*?)\s*\]")
+_TG_SENSE_NO = re.compile(r"(?m)^\s*\d+\.\s*")
+_TG_CITATION = re.compile(r"[\[(]([^\])]*)[\])]\s*$")
+
+
+def _tg_pairs(text: str) -> list[dict]:
+    """`whawhaki ; to pluck off. kowhaki ; to tear off` -> word/gloss dicts."""
+    out = []
+    for chunk in re.split(r"(?<=[.;])\s+(?=\S+\s*;)", text):
+        if ";" not in chunk:
+            continue
+        word, _, gloss = chunk.partition(";")
+        word = word.strip().strip(".,")
+        if word:
+            out.append({"word": word, "gloss": gloss.strip().strip(".").strip() or None})
+    return out
+
+
+def parse_tregear(body: str | None) -> dict:
+    """Split a Tregear exception body into its labelled sections.
+
+    Every section is labelled in bold by the source, so this is recovery of
+    structure the source already declared — not inference. The first bold run is
+    the definition block; `1.` / `2.` inside it are distinct senses.
+    """
+    empty = {"dialect": None, "senses": [], "examples": [], "compare": [],
+             "word_base": [], "see_also": [], "comments": None}
+    if not body:
+        return empty
+
+    dialect = None
+    if (m := _TG_DIALECT.search(body)):
+        # The source is inconsistent about capitalisation ('South island').
+        dialect = m.group(1).strip().title()
+        body = body[m.end():]
+
+    # Section boundaries: everything before the first label is the definition.
+    marks = [(m.start(), m.end(), m.group(1)) for m in _TG_LABEL.finditer(body)]
+    head = body[:marks[0][0]] if marks else body
+    sections = {}
+    for i, (_, end, name) in enumerate(marks):
+        stop = marks[i + 1][0] if i + 1 < len(marks) else len(body)
+        sections.setdefault(name, []).append(strip_tags(body[end:stop]))
+
+    # Numbered senses are separated by <BR> inside the bold block, so split on
+    # the break BEFORE strip_tags collapses it. Only treat the segments as
+    # distinct senses when the source actually numbered them; otherwise an
+    # unnumbered multi-line definition would be torn into fragments.
+    segments = [s for s in (strip_tags(p) for p in _BR.split(head)) if s]
+    if any(_TG_SENSE_NO.match(s) for s in segments):
+        senses = [_TG_SENSE_NO.sub("", s, count=1).strip() for s in segments]
+    else:
+        joined = " ".join(segments).strip()
+        senses = [joined] if joined else []
+
+    examples = []
+    for raw in sections.get("Maori Example", []):
+        citation = None
+        if (m := _TG_CITATION.search(raw)):
+            citation, raw = m.group(1).strip(), raw[:m.start()].strip()
+        if raw:
+            examples.append({"text": raw, "citation": citation})
+
+    see_also = []
+    for raw in sections.get("See Also", []):
+        # `ahau` is a headword; `Williams and Ngata definitions.` is prose.
+        if raw and len(raw.split()) <= 2 and not raw.endswith("."):
+            see_also.append(raw.strip())
+
+    comments = " ".join(sections.get("Comments", [])).strip() or None
+    return {
+        "dialect": dialect,
+        "senses": senses,
+        "examples": examples,
+        "compare": _tg_pairs(" ".join(sections.get("Compare With", []))),
+        "word_base": _tg_pairs(" ".join(sections.get("Word Base", []))),
+        "see_also": see_also,
+        "comments": comments,
+    }
+
+
+_DERIV_PART = re.compile(r"(W\.(\d+)|TM)\s*[‘'\"](.*?)[’'\"]")
+
+
+def parse_derivation(text: str | None) -> list[dict]:
+    """Split a Te Matatiki derivation bracket into its (word, ref, gloss) parts.
+
+    `[taku W.374 ‘my’ hē W.43 ‘error, mistake’]` is two derivational elements,
+    not one opaque string — and `W.374` is a Williams PAGE number (verified:
+    kāhua W.85 -> p85, hiki W.49 -> p49, unu W.467 -> p467), so page + word
+    resolves to a real entry where the bare code never could.
+
+    A part with no preceding word cites the headword's own Williams entry.
+    `TM` cites Te Matatiki itself and carries no page.
+    """
+    if not text:
+        return []
+    inner = text.strip()
+    if inner.startswith("[") and inner.endswith("]"):
+        inner = inner[1:-1]
+    parts, cursor = [], 0
+    for m in _DERIV_PART.finditer(inner):
+        # Some brackets put the ref before its word, leaving a stray ref and
+        # gloss in the gap ahead of the next element — keep only what follows
+        # the last quote, and never a reference code.
+        gap = re.sub(r"^.*[’'\"]", "", inner[cursor:m.start()])
+        gap = re.sub(r"\b(?:W\.\d+|TM)\b", "", gap)
+        word = gap.strip(" ,;") or None
+        parts.append({
+            "word": word,
+            "ref": "TM" if m.group(1) == "TM" else "W",
+            "page": int(m.group(2)) if m.group(2) else None,
+            "gloss": m.group(3).strip(),
+        })
+        cursor = m.end()
+    return parts
+
+
+def example_owners(equivalents: list[str], example_mi: str | None) -> list[str]:
+    """Which equivalents the record's one example sentence actually illustrates.
+
+    Ngata stores a synonym set as a single record carrying a single example, so
+    attaching that example to every equivalent puts a sentence on an entry whose
+    headword it never contains (`parau` given `teka`'s sentence). Match on whole
+    words over the search-normalised text, so `tōrere` does not claim
+    `tōreretia`'s sentence.
+
+    When nothing matches — usually a phrase equivalent whose example uses only
+    its head word — the record's lead term takes it, which puts the example on
+    one entry instead of on all of them.
+    """
+    if not example_mi or not equivalents:
+        return []
+    key = normalise_search_key(example_mi)
+    owners = [
+        e for e in equivalents
+        if (n := normalise_search_key(e))
+        and re.search(rf"(?<![a-z]){re.escape(n)}(?![a-z])", key)
+    ]
+    return owners or equivalents[:1]
 
 
 def parse_record(html: str) -> dict | None:

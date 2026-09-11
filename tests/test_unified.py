@@ -138,6 +138,32 @@ class UnifiedCore(unittest.TestCase):
                     "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
                     "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
 
+    def test_te_matatiki_relations_target_words_not_page_codes(self):
+        # `W.61` is a Williams page number, not a Māori headword, so it could
+        # never resolve. The derivation's source word is the real target.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM relation r JOIN entry e ON e.id=r.entry_id "
+            "WHERE e.source_id='te_matatiki' AND r.target_headword LIKE 'W.%'"), 0)
+
+    def test_te_matatiki_derivations_mostly_resolve_to_williams(self):
+        # page + word is a high-precision key; most parts should land.
+        total = self._one(
+            "SELECT COUNT(*) FROM relation r JOIN entry e ON e.id=r.entry_id "
+            "WHERE e.source_id='te_matatiki'")
+        resolved = self._one(
+            "SELECT COUNT(*) FROM relation r JOIN entry e ON e.id=r.entry_id "
+            "WHERE e.source_id='te_matatiki' AND r.target_entry_id IS NOT NULL")
+        self.assertGreater(total, 5000)
+        self.assertGreater(resolved / total, 0.5)
+
+    def test_forms_never_merely_restate_the_headword(self):
+        # A form equal to the headword or to its macron-stripped sort key adds
+        # nothing — headword_search already normalises both — and inflates the
+        # "this word has variants" signal the app reads.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM form f JOIN entry e ON e.id=f.entry_id "
+            "WHERE LOWER(f.form) IN (LOWER(e.headword), LOWER(e.headword_sort))"), 0)
+
     # ── structured examples ───────────────────────────────────────────────────
     def test_te_aka_examples_have_maori_text(self):
         self.assertGreater(self._one(
@@ -170,10 +196,18 @@ class UnifiedCore(unittest.TestCase):
         self.assertEqual(non_tt, 0)
 
     def test_other_sources_have_no_dialect(self):
-        # Only the two Tai Tokerau sources carry a dialect tag.
+        # The two Tai Tokerau sources tag every entry; Tregear tags per-entry
+        # from its own `[Dialect: ...]` prefix (South Island, Moriori).
         self.assertEqual(self._one(
-            "SELECT COUNT(*) FROM entry WHERE source_id NOT IN ('papakupu', 'taikupu') "
-            "AND dialect IS NOT NULL"), 0)
+            "SELECT COUNT(*) FROM entry WHERE source_id NOT IN "
+            "('papakupu', 'taikupu', 'tregear_exceptions') AND dialect IS NOT NULL"), 0)
+
+    def test_tregear_dialect_casing_is_normalised(self):
+        # The source writes both 'South Island' and 'South island'.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM entry WHERE source_id='tregear_exceptions' "
+            "AND dialect IS NOT NULL AND dialect <> ''"
+            "  AND dialect GLOB '*[a-z] [a-z]*'"), 0)
 
     # ── relation resolution ───────────────────────────────────────────────────
     def test_te_aka_synonyms_mostly_resolved(self):

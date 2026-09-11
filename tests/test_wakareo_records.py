@@ -169,6 +169,26 @@ class BodyText(unittest.TestCase):
         r = wr.parse_record(fx("shape_MATATIKI_47800.html"))
         self.assertIsNotNone(r["body_text"])  # this one has real content
 
+    def test_qualifier_plus_lemma_is_not_a_definition(self):
+        # Body is `View, argument<BR><B>haurite</B>` — stripped it reads
+        # 'View, argument haurite', which is the qualifier and the equivalent.
+        # The qualifier is already folded into the gloss; this is not content.
+        r = wr.parse_record(fx("entry_DICT5_52724.html"))
+        self.assertEqual(r["qualifier"], "View, argument")
+        self.assertIsNone(r["body_text"])
+
+    def test_parenthesised_qualifier_plus_lemma_is_not_a_definition(self):
+        rec = {"headword": "Bowling crease", "equivalents": ["pae epa"],
+               "qualifier": "(cricket)"}
+        self.assertIsNone(wr._body_text(rec, "(cricket)<BR><B>pae epa</B><BR>"))
+
+    def test_qualifier_with_real_content_still_survives(self):
+        rec = {"headword": "Vent", "equivalents": [], "qualifier": None}
+        self.assertEqual(
+            wr._body_text(rec, "Vent<BR>[W.22 ‘a smoke vent’]"),
+            "Vent [W.22 ‘a smoke vent’]",
+        )
+
     def test_no_fixture_leaks_markup_into_body_text(self):
         for p in sorted(FIXTURES.glob("*.html")):
             r = wr.parse_record(p.read_text(encoding="utf-8"))
@@ -177,6 +197,172 @@ class BodyText(unittest.TestCase):
             with self.subTest(fixture=p.name):
                 self.assertNotIn("<", r["body_text"])
                 self.assertNotIn("&nbsp;", r["body_text"])
+
+
+class ParseTregear(unittest.TestCase):
+    """Tregear exception bodies -> senses, examples, relations, comments.
+
+    The source labels every section (`Maori Example:`, `Compare With:`,
+    `Word Base:`, `See Also:`, `Comments:`) in bold; nothing ever consumed them,
+    so all of it landed in one sense row as prose.
+    """
+
+    KAWHAKI = ("<B>1. To take by violence. To remove by force. (Also kahaki)."
+               "<BR>2. To remove by stratagem.</B><BR><BR><B>Maori Example:</B> "
+               "Ka haere ki te kawhaki i a Kuramarotini. (PM 109)<BR>"
+               "<B>Compare With:</B> whawhaki ; to pluck off. kowhaki ; to tear "
+               "off.<BR><BR><BR>")
+    ATITI = ("<B>To stray, to wander about.</B><BR><BR><B>Word Base:</B> titi ; "
+             "to go astray<BR><B>Compare With:</B> atiutiu ; to wander. kotiti ; "
+             "to wander about<BR><BR><BR>")
+    AWAU = ("[Dialect: South Island]<BR><B>I, me. (In South Island dialect)</B>"
+            "<BR><BR><B>Maori Example:</B> Nahau ano awau. [WT vii 37]<BR>"
+            "<B>See Also:</B> ahau<BR><BR><BR>")
+    ATAHU = ("<B>An assembly of a tribe.</B><BR><BR><B>Comments:</B> Differes "
+             "from meanings given by Williams.<BR><BR><BR>")
+
+    def test_numbered_senses_split(self):
+        r = wr.parse_tregear(self.KAWHAKI)
+        self.assertEqual(r["senses"], [
+            "To take by violence. To remove by force. (Also kahaki).",
+            "To remove by stratagem.",
+        ])
+
+    def test_unnumbered_body_is_a_single_sense(self):
+        self.assertEqual(wr.parse_tregear(self.ATITI)["senses"],
+                         ["To stray, to wander about."])
+
+    def test_example_and_parenthesised_citation_split(self):
+        self.assertEqual(wr.parse_tregear(self.KAWHAKI)["examples"], [
+            {"text": "Ka haere ki te kawhaki i a Kuramarotini.", "citation": "PM 109"},
+        ])
+
+    def test_example_with_bracketed_citation(self):
+        self.assertEqual(wr.parse_tregear(self.AWAU)["examples"], [
+            {"text": "Nahau ano awau.", "citation": "WT vii 37"},
+        ])
+
+    def test_compare_with_yields_word_and_gloss_pairs(self):
+        self.assertEqual(wr.parse_tregear(self.KAWHAKI)["compare"], [
+            {"word": "whawhaki", "gloss": "to pluck off"},
+            {"word": "kowhaki", "gloss": "to tear off"},
+        ])
+
+    def test_word_base_is_kept_apart_from_compare_with(self):
+        r = wr.parse_tregear(self.ATITI)
+        self.assertEqual(r["word_base"], [{"word": "titi", "gloss": "to go astray"}])
+        self.assertEqual([p["word"] for p in r["compare"]], ["atiutiu", "kotiti"])
+
+    def test_see_also_headword_captured(self):
+        self.assertEqual(wr.parse_tregear(self.AWAU)["see_also"], ["ahau"])
+
+    def test_dialect_prefix_extracted(self):
+        self.assertEqual(wr.parse_tregear(self.AWAU)["dialect"], "South Island")
+        self.assertIsNone(wr.parse_tregear(self.ATITI)["dialect"])
+
+    def test_comments_kept_as_a_note(self):
+        self.assertEqual(wr.parse_tregear(self.ATAHU)["comments"],
+                         "Differes from meanings given by Williams.")
+
+    def test_labels_never_leak_into_a_sense(self):
+        for body in (self.KAWHAKI, self.ATITI, self.AWAU, self.ATAHU):
+            for sense in wr.parse_tregear(body)["senses"]:
+                for label in ("Maori Example:", "Compare With:", "Word Base:",
+                              "See Also:", "Comments:"):
+                    self.assertNotIn(label, sense)
+
+
+class ParseDerivation(unittest.TestCase):
+    """Te Matatiki derivation brackets -> (word, ref, gloss) parts.
+
+    `W.61` is a Williams PAGE number, verified against williams_entries: kāhua
+    W.85 -> p85, hiki W.49 -> p49, unu W.467 -> p467. So the resolvable key is
+    page + word, not the bare code that currently sits in target_headword.
+    """
+
+    def test_single_part_with_source_word(self):
+        self.assertEqual(
+            wr.parse_derivation("[horohororē W.61 ‘to eat greedily’]"),
+            [{"word": "horohororē", "ref": "W", "page": 61,
+              "gloss": "to eat greedily"}],
+        )
+
+    def test_bare_reference_has_no_source_word(self):
+        # `[W.22 '...']` cites the headword's own Williams entry.
+        self.assertEqual(
+            wr.parse_derivation("[W.22 ‘a hollowed-out space’]"),
+            [{"word": None, "ref": "W", "page": 22,
+              "gloss": "a hollowed-out space"}],
+        )
+
+    def test_compound_yields_one_part_per_element(self):
+        self.assertEqual(
+            wr.parse_derivation("[taku W.374 ‘my’ hē W.43 ‘error, mistake’]"),
+            [{"word": "taku", "ref": "W", "page": 374, "gloss": "my"},
+             {"word": "hē", "ref": "W", "page": 43, "gloss": "error, mistake"}],
+        )
+
+    def test_te_matatiki_self_reference_carries_no_page(self):
+        # 'TM' cites Te Matatiki itself, not Williams.
+        self.assertEqual(
+            wr.parse_derivation("[whakamatua W.195 ‘rest, pause’ ā-tau TM ‘annual’]"),
+            [{"word": "whakamatua", "ref": "W", "page": 195, "gloss": "rest, pause"},
+             {"word": "ā-tau", "ref": "TM", "page": None, "gloss": "annual"}],
+        )
+
+    def test_malformed_bracket_does_not_swallow_the_preceding_element(self):
+        # Real record (Mānawanawa): the first element puts the ref BEFORE the
+        # word, so the gap ahead of the second ref contains a stray ref and
+        # gloss. The word must still come out as just `manawa`.
+        self.assertEqual(
+            wr.parse_derivation("[W.174 mānawanawa ‘space’ manawa W.174 ‘heart’]"),
+            [{"word": "manawa", "ref": "W", "page": 174, "gloss": "heart"}],
+        )
+
+    def test_absent_derivation_is_empty(self):
+        self.assertEqual(wr.parse_derivation(None), [])
+        self.assertEqual(wr.parse_derivation(""), [])
+
+
+class ExampleOwners(unittest.TestCase):
+    """Which equivalents a record's single example actually illustrates.
+
+    Ngata stores a synonym set as one record with one example sentence. The
+    example uses ONE of the equivalents, so attaching it to all of them puts a
+    sentence on an entry whose headword it never contains.
+    """
+
+    def test_example_goes_only_to_the_equivalent_it_uses(self):
+        self.assertEqual(
+            wr.example_owners(["turituri", "hoihoi", "manioro"],
+                              "Ka anga mātau ki te whakaminenga turituri."),
+            ["turituri"],
+        )
+
+    def test_inflected_form_wins_over_its_own_stem(self):
+        # 'tōrere' is a substring of 'tōreretia' but not a whole word in it.
+        self.assertEqual(
+            wr.example_owners(["tōrere", "tōreretia"], "I tōreretia rāua ki a rāua."),
+            ["tōreretia"],
+        )
+
+    def test_macrons_and_doubled_vowels_do_not_block_a_match(self):
+        self.assertEqual(
+            wr.example_owners(["ūtongatia"], "Kua ūtongatia te kaunihera."),
+            ["ūtongatia"],
+        )
+
+    def test_unmatched_example_falls_back_to_the_lead_equivalent(self):
+        # Phrase equivalents whose example uses only the head word: no whole
+        # phrase matches, so the record's first (lead) term takes it.
+        self.assertEqual(
+            wr.example_owners(["whakahauhau ki te hara", "whakahauhautia ki te hara"],
+                              "Tokorua rāua i whakahauhau i a ia."),
+            ["whakahauhau ki te hara"],
+        )
+
+    def test_no_example_owns_nothing(self):
+        self.assertEqual(wr.example_owners(["turituri", "hoihoi"], None), [])
 
 
 if __name__ == "__main__":
