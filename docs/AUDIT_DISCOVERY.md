@@ -261,17 +261,17 @@ never captured.
 | D2 | Williams examples never extracted | 14,881 entries | `01_williams_parse.py` |
 | D3 | Williams truncated senses | 148 | `01_williams_parse.py` |
 | D4 | Williams gloss = whole definition | 18,792 | resolved by D2 |
-| D5 | Te Matatiki citation codes as relations | 6,429 | `41_wakareo_*` |
-| D6 | Tregear multi-sense / example / xref in one field | 321 | `41_wakareo_*` |
+| D5 | Te Matatiki citation codes as relations | 6,429 | ✅ **fixed** — `parse_derivation` + page/word resolution; 68% now resolve |
+| D6 | Tregear multi-sense / example / xref in one field | 321 | ✅ **fixed** — `parse_tregear`; 86 examples, 218 relations, 49 notes recovered |
 | D7 | Te Māra Reo protoform as gloss, cognate group as domain | 203 | `42_temarareo_parse.py` |
 | D8 | Te Aka register marker as domain | 18,439 | `04_te_aka_parse.py` |
 | D9 | Source HTML reached `definition_raw` | 42,189 | ✅ **fixed** — `wakareo_records.py` + `50_build_unified.py` |
 | D10 | Kimikupu Hou contentless definitions | 2,198 | ✅ **fixed** — now NULL |
 | D11 | Ngata leading `</B>` boundary artefact | cosmetic | ✅ **fixed** — never reached derived fields |
-| D12 | Derived spellings filed as variant forms | 5,793 | multiple |
+| D12 | Derived spellings filed as variant forms | 7,984 | ✅ **fixed** — guarded in `Builder.add_form`, all sources |
 | D13 | Māori domains tagged English | ~16,500 | `04_paekupu_parse.py` |
 | D14 | `std_pos` gaps + comma-split damage | 5,367 | `13_build_pos_normalisation.py` |
-| D15 | Ngata synonym-group example misattachment | ≤9,936 | `41_wakareo_import.py` |
+| D15 | Ngata synonym-group example misattachment | 9,936 | ✅ **fixed** — `example_owners`; down to 252 |
 | D16 | Te Aka example translations absent | 45,939 | `04_te_aka_parse.py` |
 
 ## Recommended fix order
@@ -283,8 +283,9 @@ never captured.
    coverage.
 4. **D2 + D3 + D4** — the Williams parser. The largest single body of misplaced content; needs
    care and a fixture-based test suite.
-5. **D5 + D6 + D7 + D8 + D12** — per-source misfiling; each small and independent.
-6. **D15 + D16** — verify against the upstream sources before changing anything.
+5. ~~**D5 + D6 + D12**~~ — ✅ **done 2026-09-11** (commit `58f388a`), together with D15 and a
+   follow-up to the `body_text` NULL rule. **D7 + D8 remain open.**
+6. **D16** — verify against the upstream sources before changing anything.
 
 ## What this changes about the sweep
 
