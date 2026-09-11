@@ -281,9 +281,10 @@ never captured.
 | # | Defect | Scale | Script |
 |---|---|---|---|
 | D1 | Paekupu senses empty, recoverable from `headword_en` | 13,050 | ✅ **fixed** — `build_paekupu` projects `headword_en`; blank→NULL in `add_sense` |
-| D2 | Williams examples never extracted | 14,881 entries | `01_williams_parse.py` |
-| D3 | Williams truncated senses | 148 | `01_williams_parse.py` |
-| D4 | Williams gloss = whole definition | 18,792 | resolved by D2 |
+| D2 | Williams examples never extracted | 14,881 entries | ✅ **fixed** — `williams_examples.py`; 61 → 8,004 entries, 15,696 examples |
+| D3 | Williams truncated senses | 148 | ✅ **fixed** — `_MARKER_RE` lookbehind; 7 remain, all source typos |
+| D4 | Williams gloss = whole definition | 18,792 | ✅ **fixed** — 18,792 → 9,878, via D2 |
+| D17 | Williams headword-prefix strip orphans a parenthetical | 44 | `01_williams_parse.py` — **new, open** |
 | D5 | Te Matatiki citation codes as relations | 6,429 | ✅ **fixed** — `parse_derivation` + page/word resolution; 68% now resolve |
 | D6 | Tregear multi-sense / example / xref in one field | 321 | ✅ **fixed** — `parse_tregear`; 86 examples, 218 relations, 49 notes recovered |
 | D7 | Te Māra Reo protoform as gloss, cognate group as domain | 203 | `42_temarareo_parse.py` |
@@ -304,8 +305,8 @@ never captured.
 2. ~~**D1**~~ — ✅ **done 2026-09-11.** 13,050 Paekupu senses recovered by one projection change, plus a central blank→NULL rule in `add_sense`.
 3. **D13 + D14** — tagging and vocabulary; small, mechanical, and unblocks canonical POS
    coverage.
-4. **D2 + D3 + D4** — the Williams parser. The largest single body of misplaced content; needs
-   care and a fixture-based test suite.
+4. ~~**D2 + D3 + D4**~~ — ✅ **done 2026-09-11** (commit `f8013b9`). Surfaced **D17**, a
+   distinct headword-prefix-strip defect affecting 44 senses, which remains open.
 5. ~~**D5 + D6 + D12**~~ — ✅ **done 2026-09-11** (commit `58f388a`), together with D15 and a
    follow-up to the `body_text` NULL rule. **D7 + D8 remain open.**
 6. **D16** — verify against the upstream sources before changing anything.
