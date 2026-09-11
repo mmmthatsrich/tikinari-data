@@ -77,7 +77,14 @@ def _runs(text: str) -> list[tuple[int, int]]:
             continue
         alpha, end, j, ended = 0, None, i, False
         while j < n:
-            wj, _, wend = toks[j]
+            wj, wstart, wend = toks[j]
+            # An opening bracket starts a parenthetical — a citation, almost
+            # always — and is never part of the example sentence. It has to end
+            # the run even when the word inside scans as Māori: '(Korero',
+            # '(Ngā', '(Māori' all do, and swallowing the bracket left the
+            # citation check with nothing to find on 1,050 senses.
+            if wj.startswith("(") and j > i:
+                break
             if _is_maori(wj) is False:
                 break
             if any(c.isalpha() for c in wj):

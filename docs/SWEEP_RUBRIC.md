@@ -1,4 +1,4 @@
-# Audit Sweep Rubric — v1
+# Audit Sweep Rubric — v2
 
 The standard the cluster sweep judges by. Every finding records the rubric
 version that produced it (`sweep_finding.rubric_version`), and every completed
@@ -200,6 +200,8 @@ noise, and noise in the log is what makes a log unreadable.
 | Latin binomials in a gloss | `Myrsine australis`, `Apteryx` are the definition for plant and bird entries |
 | Te Māra Reo glosses that are species lists | 86 entries have no prose definition; the species list is the content the source gives |
 | A source's entry having exactly one sense | Normal, not a truncation |
+| A relation rendered `[UNRESOLVED]` where the target headword is carried by several entries in that source | Expected, not a defect. 9,656 rows. `resolve_within_source_relations` deliberately resolves only the 5,197 unambiguous ones; choosing among homographs needs the concept layer. Do not flag per cluster |
+| The same Māori sentence appearing twice on one sense with different English | Two sources' renderings, e.g. papakupu's 'Maranga mai.' as both 'Rise and shine.' [TWK] and 'Get up.' [MWA] |
 
 ---
 
@@ -219,7 +221,19 @@ Not the sweep's to decide, even when visible in a batch.
 
 ---
 
-## 6. Calibration and versioning
+## 6. Version history
+
+**v2** — added two rows to the known-correct table after the first calibration
+cluster: relations left unresolved because the target headword is ambiguous
+within its source, and one Māori sentence carrying two sources' translations.
+Both would otherwise have been flagged on thousands of clusters. Two defects the
+same cluster found — duplicate examples, and hepatakakupu synonyms that were
+resolvable — were fixed in the pipeline instead (D19, D20) rather than written
+into the rubric, because a systemic defect belongs in the script that causes it.
+
+**v1** — initial, seeded from the 18 discovery findings.
+
+## 7. Calibration and versioning
 
 The first 500 clusters are the calibration slice (`priority = 0`), stratified
 125 per tier and deterministic. The sweep stops after them. You read the log,

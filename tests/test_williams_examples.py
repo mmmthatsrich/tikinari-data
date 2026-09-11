@@ -95,13 +95,35 @@ class SplitGlossExamples(unittest.TestCase):
     def test_separator_left_by_an_excised_example_is_tidied(self):
         # `Kōwhatu`: the gloss ends 'Stone, rock,' — a comma, because the source
         # ran straight on into the example. Lifting the example out used to
-        # leave 'Stone, rock,.'; the dangling separator goes, and no stop is
-        # invented to replace it.
+        # leave 'Stone, rock,.'. The dangling separator goes and the sentence's
+        # own stop, which sat after the citation, comes back to it. Nothing is
+        # invented: that stop is in the source.
         gloss, ex = split_gloss_examples(
             "Stone, rock, Ka whakapupuni ia ki nga tauwharewharenga kowhatu "
             "o te waiariki (Tregear 133).")
-        self.assertEqual(gloss, "Stone, rock")
+        self.assertEqual(gloss, "Stone, rock.")
         self.assertEqual(len(ex), 1)
+
+    def test_a_citation_whose_first_word_scans_as_maori_still_ends_the_run(self):
+        # '(Korero', '(Ngā', '(Māori' are all orthographically Māori, so the run
+        # swallowed the opening bracket and then broke on the English word after
+        # it — leaving no citation for the terminator check to find. 1,050
+        # senses kept their example inside the gloss this way.
+        gloss, ex = split_gloss_examples(
+            "Luck, success. Homai he tina; homai he marie; homai he angitu ki "
+            "tenei ko (Korero oral narrative texts).")
+        self.assertEqual(gloss, "Luck, success.")
+        self.assertEqual(len(ex), 1)
+        self.assertEqual(ex[0]["text"],
+                         "Homai he tina; homai he marie; homai he angitu ki tenei ko")
+        self.assertEqual(ex[0]["citation"], "Korero oral narrative texts")
+
+    def test_a_fully_maori_citation_is_separated_too(self):
+        gloss, ex = split_gloss_examples(
+            "Heaped up. He mea ahu nga onepu e nga ringaringa o te tohunga "
+            "(Ngā Mōteatea lxxxiii).")
+        self.assertEqual(gloss, "Heaped up.")
+        self.assertEqual(ex[0]["citation"], "Ngā Mōteatea lxxxiii")
 
     def test_empty_input(self):
         self.assertEqual(split_gloss_examples(""), ("", []))
