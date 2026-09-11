@@ -638,6 +638,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             cognateset_id    INTEGER NOT NULL REFERENCES ETY_cognateset(id),
             reflex_id        INTEGER REFERENCES ETY_reflex(id),
             entry_id         INTEGER NOT NULL REFERENCES entry(id),
+            sense_id         INTEGER REFERENCES sense(id),  -- which sense the protoform means;
+                                                            --   NULL until the sweep decides
             source           TEXT NOT NULL,     -- etymology source that produced the bridge
             match_key        TEXT,
             match_method     TEXT,
@@ -982,6 +984,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             rel_type        TEXT NOT NULL,         -- synonym | see_also | cross_ref | antonym | variant_of
             target_headword TEXT NOT NULL,
             target_entry_id INTEGER REFERENCES entry(id),   -- resolved when possible (Te Aka word_id)
+            target_sense_id INTEGER REFERENCES sense(id),   -- Williams prints sense-level pointers
+                                                            --   ('apa (i), 2'); NULL until resolved
             note            TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_relation_entry ON relation(entry_id);
@@ -1264,6 +1268,10 @@ def migrate_wakareo_body_text(conn: sqlite3.Connection) -> None:
 def migrate_tables(conn: sqlite3.Connection) -> None:
     """Add columns that were missing from initial schema versions."""
     _add_column(conn, "williams_entries", "headword_note", "TEXT")
+    # A headword could always be addressed; a sense never could. Williams's
+    # 'see apa (i), sense 2' and POLLEX's '*afo is sense 2' both needed this.
+    _add_column(conn, "ETY_entry_link", "sense_id", "INTEGER REFERENCES sense(id)")
+    _add_column(conn, "relation", "target_sense_id", "INTEGER REFERENCES sense(id)")
     pollex_cols = {row[1] for row in conn.execute("PRAGMA table_info(pollex_entries)")}
     if "source_author" not in pollex_cols:
         conn.execute("ALTER TABLE pollex_entries ADD COLUMN source_author TEXT")

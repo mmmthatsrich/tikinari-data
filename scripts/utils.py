@@ -64,6 +64,49 @@ def load_source_abbrevs(source_dict: str, db_path: Path = DB_PATH) -> dict[str, 
     return {r["abbrev"]: dict(r) for r in rows}
 
 
+def _has_table(con, name: str) -> bool:
+    return con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)
+    ).fetchone() is not None
+
+
+def resolve_unambiguous_senses(con) -> dict:
+    """Point entry-level references at a sense, where the sense is determined.
+
+    ETY_entry_link and relation can name an entry but not a sense, so Williams's
+    'see apa (i), sense 2' and POLLEX's '*afo is sense 2' were both inexpressible.
+
+    Where the target entry has exactly ONE sense there is nothing to judge — the
+    sense follows from the entry. That covers 89% of etymology links and 58% of
+    resolved relations. Everything else is left NULL for the audit sweep, and a
+    sense already chosen is never overwritten, so a sweep judgement survives the
+    next rebuild.
+
+    Resolving a pointer makes it PRECISE, not CORRECT: every etymology link is
+    still match_method='headword_exact', matched on spelling with no semantic
+    check. A spurious link stays spurious, now about a specific sense.
+
+    Both tables are repopulated by their build scripts (50 rebuilds a source's
+    relations, 52 deletes and reinserts every link), so this runs at the end of
+    each of those, not once.
+    """
+    counts = {}
+    single = ("(SELECT entry_id FROM sense GROUP BY entry_id HAVING COUNT(*) = 1)")
+    if _has_table(con, "ETY_entry_link"):
+        counts["ETY_entry_link"] = con.execute(
+            "UPDATE ETY_entry_link SET sense_id = "
+            "  (SELECT s.id FROM sense s WHERE s.entry_id = ETY_entry_link.entry_id) "
+            f"WHERE sense_id IS NULL AND entry_id IN {single}").rowcount
+    if _has_table(con, "relation"):
+        counts["relation"] = con.execute(
+            "UPDATE relation SET target_sense_id = "
+            "  (SELECT s.id FROM sense s WHERE s.entry_id = relation.target_entry_id) "
+            "WHERE target_sense_id IS NULL AND target_entry_id IS NOT NULL "
+            f"  AND target_entry_id IN {single}").rowcount
+    con.commit()
+    return counts
+
+
 _POS_QUALIFIER = re.compile(r"\s*\(([^)]*)\)\s*$")
 
 

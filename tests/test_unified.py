@@ -222,6 +222,26 @@ class UnifiedCore(unittest.TestCase):
             "SELECT COUNT(*) FROM entry WHERE source_id='te_aka' "
             "AND loan_marker IS NOT NULL"), 18000)
 
+    def test_relation_can_address_a_sense(self):
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(relation)")}
+        self.assertIn("target_sense_id", cols)
+
+    def test_relation_sense_pointers_are_resolved_where_determined(self):
+        # Where the target entry has exactly one sense the sense follows from
+        # the entry — nothing to judge. 58% of resolved relations qualify.
+        self.assertGreater(self._one(
+            "SELECT COUNT(*) FROM relation WHERE target_sense_id IS NOT NULL"), 70000)
+
+    def test_a_resolved_sense_pointer_belongs_to_its_target_entry(self):
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM relation r JOIN sense s ON s.id=r.target_sense_id "
+            "WHERE s.entry_id IS NOT r.target_entry_id"), 0)
+
+    def test_no_sense_pointer_without_an_entry_pointer(self):
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM relation "
+            "WHERE target_sense_id IS NOT NULL AND target_entry_id IS NULL"), 0)
+
     def test_temarareo_proto_levels_are_not_semantic_domains(self):
         # 'P. Polynesian', 'P. Oceanic' etc. are reconstruction levels. They
         # belong to the etymology layer (ETY_cognateset.level already carries

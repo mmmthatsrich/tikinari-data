@@ -39,6 +39,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, canonical_level, normalise_proto_key,
+                   resolve_unambiguous_senses,
                    normalise_search_key, normalise_sort_key)
 
 # Walworth is gap-fill only (S58) and MUST build LAST — its novelty test reads the
@@ -766,9 +767,13 @@ def build_entry_links(con) -> dict:
         "(cognateset_id, reflex_id, entry_id, source, match_key, match_method, match_confidence) "
         "VALUES (?, ?, ?, ?, ?, 'headword_exact', 1.0)", rows)
     con.commit()
+    # Every link is rewritten here, so the sense pointer is re-derived rather
+    # than backfilled. Where the entry has one sense the protoform's sense is
+    # determined; the rest wait for the sweep.
+    resolved = resolve_unambiguous_senses(con).get("ETY_entry_link", 0)
     by_source = dict(con.execute(
         "SELECT source, COUNT(*) FROM ETY_entry_link GROUP BY source"))
-    return {"total": len(rows),
+    return {"total": len(rows), "sense_resolved": resolved,
             "entries": len({r[2] for r in rows}),
             "by_source": by_source}
 

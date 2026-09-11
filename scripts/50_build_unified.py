@@ -42,7 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
-                   compute_content_hash, pos_atoms)
+                   compute_content_hash, pos_atoms, resolve_unambiguous_senses)
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
@@ -999,6 +999,13 @@ def main():
     std_pos = load_std_pos(con)
     write_sense_pos(con, std_pos)
     write_entry_pos(con, std_pos)
+
+    # relation rows are rebuilt per source, so the sense pointers have to be
+    # re-derived on every run, not backfilled once.
+    resolved = resolve_unambiguous_senses(con)
+    if resolved.get("relation"):
+        print(f"resolved {resolved['relation']:,} relation target_sense_id "
+              f"(single-sense targets)")
     con.close()
 
 
