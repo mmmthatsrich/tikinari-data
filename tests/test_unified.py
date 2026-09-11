@@ -281,6 +281,25 @@ class UnifiedCore(unittest.TestCase):
             "SELECT COUNT(*) FROM example x JOIN entry e ON e.id=x.entry_id "
             "WHERE e.source_id='williams' AND x.citation IS NOT NULL"), 5000)
 
+    def test_williams_definitions_have_no_orphaned_closing_bracket(self):
+        # `Tūāahu (less correctly tūāhu), n. ...` — the headword-prefix strip
+        # ran lstrip(",.() "), eating the OPENING bracket and leaving
+        # 'less correctly tūāhu), n. ...' at the head of 44 definitions.
+        # 3 survive and are the source's own typography, verified in the Wayback
+        # HTML: `Tiaki` prints 'hei tiaki i a raua Pi. 175, 4).' with no opening
+        # bracket, and `Harirau` has a stray ')' after its cross-reference.
+        self.assertLessEqual(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='williams' AND "
+            "(LENGTH(s.definition_raw)-LENGTH(REPLACE(s.definition_raw,')',''))) > "
+            "(LENGTH(s.definition_raw)-LENGTH(REPLACE(s.definition_raw,'(','')))"), 3)
+
+    def test_williams_plural_forms_are_recovered(self):
+        # '(pl. wāhine)' is a lexical fact; the form table is where it lives.
+        self.assertGreater(self._one(
+            "SELECT COUNT(*) FROM form f JOIN entry e ON e.id=f.entry_id "
+            "WHERE e.source_id='williams' AND f.form_type='plural'"), 5)
+
     def test_williams_senses_are_not_truncated_mid_citation(self):
         # The sense-marker separator used to eat the ')' closing the previous
         # sense's citation ('...(Ngā Mōteatea 124'), truncating 148 senses.

@@ -70,6 +70,7 @@ def import_williams(conn: sqlite3.Connection, entries: list) -> int:
             ),
             e.get("sense_number") or None,
             json.dumps(e.get("cross_refs") or [], ensure_ascii=False),
+            e.get("headword_note") or None,
             e.get("page_number"),
             e.get("source_section"),
         ))
@@ -77,8 +78,9 @@ def import_williams(conn: sqlite3.Connection, entries: list) -> int:
     conn.executemany(
         """INSERT INTO williams_entries
                (id, headword, headword_sort, headword_search, part_of_speech, definition,
-                usage_examples, sense_number, cross_refs, page_number, source_section)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                usage_examples, sense_number, cross_refs, headword_note,
+                page_number, source_section)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         rows,
     )
 

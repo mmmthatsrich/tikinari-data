@@ -295,6 +295,7 @@ def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
     number in plain text, and that convention must be left untouched.
     """
     tail = head_tail or ""
+    headword_note = None
 
     sense_number = ""
     roman_m = ROMAN_RE.match(tail)
@@ -315,8 +316,18 @@ def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
         roman_m2 = ROMAN_RE.match(full_text)
         if roman_m2:
             full_text = full_text[roman_m2.end():].strip()
-        # Strip leading punctuation
-        full_text = full_text.lstrip(",.() ").strip()
+        # A bracket still here is a headword qualifier, not a homograph numeral
+        # (ROMAN_RE took those above): '(pl. wāhine)', '(poetical)',
+        # '(less correctly tūāhu)'. Capture it — lstrip'ing '(' ate the opening
+        # bracket and stranded the closing one at the head of 44 definitions.
+        m_note = re.match(r"\(([^)]*)\)\s*", full_text)
+        if m_note and clean_text(full_text[m_note.end():]).strip(",. "):
+            # Only when a definition survives it. 'Tētē. ‖ tē (iii, iv, v)' is
+            # nothing BUT the bracket, and lifting it out would drop the entry.
+            headword_note = clean_text(m_note.group(1)) or None
+            full_text = full_text[m_note.end():]
+        # Strip leading punctuation — brackets are NOT punctuation here.
+        full_text = full_text.lstrip(",. ").strip()
         # Strip POS if it's right at the start
         if part_of_speech and full_text.startswith(part_of_speech):
             full_text = full_text[len(part_of_speech):].strip()
@@ -343,6 +354,7 @@ def _build_entry(headword, head_tail, para_texts, mi_examples, source_section,
         "sense_number": sense_number,
         "part_of_speech": part_of_speech,
         "definition": definition,
+        "headword_note": headword_note,
         "usage_examples": usage_examples,
         "cross_refs": cross_refs,
         "page_number": page_number,

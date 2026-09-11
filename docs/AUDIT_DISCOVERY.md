@@ -284,7 +284,7 @@ never captured.
 | D2 | Williams examples never extracted | 14,881 entries | ✅ **fixed** — `williams_examples.py`; 61 → 8,004 entries, 15,696 examples |
 | D3 | Williams truncated senses | 148 | ✅ **fixed** — `_MARKER_RE` lookbehind; 7 remain, all source typos |
 | D4 | Williams gloss = whole definition | 18,792 | ✅ **fixed** — 18,792 → 9,878, via D2 |
-| D17 | Williams headword-prefix strip orphans a parenthetical | 44 | `01_williams_parse.py` — **new, open** |
+| D17 | Williams headword-prefix strip orphans a parenthetical | 44 | ✅ **fixed** — `williams_headword.py`; 11 plurals, 16 registers, 11 notes recovered |
 | D5 | Te Matatiki citation codes as relations | 6,429 | ✅ **fixed** — `parse_derivation` + page/word resolution; 68% now resolve |
 | D6 | Tregear multi-sense / example / xref in one field | 321 | ✅ **fixed** — `parse_tregear`; 86 examples, 218 relations, 49 notes recovered |
 | D7 | Te Māra Reo protoform as gloss, cognate group as domain | 203 | ✅ **fixed** — `temarareo_gloss.py`; 181 domain rows → 0, 16 glossless senses → 0 |
@@ -312,7 +312,7 @@ never captured.
    `5b43f78`) and **D8** (commit pending).
 6. **D16** — verify against the upstream sources before changing anything.
 
-**Open:** D17 only.
+**All 17 findings resolved.** The residues that remain (7 unclosed and 3 orphaned brackets in Williams, 423 `needs_review` POS codes, one papakupu etymology-in-POS outlier) are source-level or expert-review items, documented in the rows above.
 
 ## What this changes about the sweep
 

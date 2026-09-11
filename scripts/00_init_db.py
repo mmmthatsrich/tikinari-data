@@ -36,6 +36,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             usage_examples TEXT,          -- JSON array
             sense_number   INTEGER,
             cross_refs     TEXT,          -- JSON array
+            headword_note  TEXT,          -- bracket qualifier printed with the headword
+                                          --   ('pl. wāhine', 'poetical')
             page_number    INTEGER,
             source_section TEXT,
             created_at     TEXT DEFAULT (datetime('now')),
@@ -1261,6 +1263,7 @@ def migrate_wakareo_body_text(conn: sqlite3.Connection) -> None:
 
 def migrate_tables(conn: sqlite3.Connection) -> None:
     """Add columns that were missing from initial schema versions."""
+    _add_column(conn, "williams_entries", "headword_note", "TEXT")
     pollex_cols = {row[1] for row in conn.execute("PRAGMA table_info(pollex_entries)")}
     if "source_author" not in pollex_cols:
         conn.execute("ALTER TABLE pollex_entries ADD COLUMN source_author TEXT")

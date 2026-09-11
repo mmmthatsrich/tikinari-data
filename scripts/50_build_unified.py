@@ -45,6 +45,7 @@ from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
                    compute_content_hash, pos_atoms)
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
+from williams_headword import parse_headword_note
 from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
@@ -275,8 +276,12 @@ def write_sense_pos(con, std_pos):
 def build_williams(con, b):
     sql = ("SELECT id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, usage_examples, sense_number, cross_refs, page_number, "
-           "source_section FROM williams_entries ORDER BY id")
-    for (id_, hw, hs, hse, pos, d, ux, sn, xr, pg, sec) in con.execute(sql):
+           "source_section, headword_note FROM williams_entries ORDER BY id")
+    for (id_, hw, hs, hse, pos, d, ux, sn, xr, pg, sec, hnote) in con.execute(sql):
+        # '(pl. wāhine)', '(poetical)', '(less correctly tūāhu)' printed with the
+        # headword. Eight are plural forms — a lexical fact the form table exists
+        # for — and the rest qualify the entry rather than define it.
+        note = parse_headword_note(hnote)
         examples = [e.strip() for e in jload(ux) if isinstance(e, str)]
         eid = b.add_entry(id_, hw, hs, hse, pos=pos,
                           locator=f"p{pg}/{sec}" if pg else sec,
@@ -293,7 +298,9 @@ def build_williams(con, b):
             # the sense it illustrates rather than all of them on sense 1.
             gloss, inline = split_gloss_examples(s["gloss_en"])
             sid = b.add_sense(eid, s["sense_number"], gloss, None,
-                              s["definition_raw"], part_of_speech=s["part_of_speech"])
+                              s["definition_raw"], part_of_speech=s["part_of_speech"],
+                              register=note["register"] if first_sid is None else None,
+                              note=note["note"] if first_sid is None else None)
             for i, ex in enumerate(inline):
                 b.add_example(sid, eid, ex["text"], None, None, ex["citation"], i)
             if first_sid is None:
@@ -302,6 +309,8 @@ def build_williams(con, b):
         # of their own to sit on.
         for i, ex in enumerate(examples):
             b.add_example(first_sid, eid, ex, None, None, None, i)
+        for pl in note["plural"]:
+            b.add_form(eid, pl, "plural")
         for t in jload(xr):
             if isinstance(t, dict):                       # typed ‖ cross-ref
                 b.add_relation(eid, t.get("type") or "cross_ref", t.get("target"))
