@@ -49,6 +49,7 @@ from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
 from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
+from paekupu_alternatives import parse_alternative
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
 from wakareo_records import example_owners, parse_derivation, parse_tregear
 from sweep_patch import apply_patches
@@ -471,8 +472,16 @@ def build_paekupu(con, b):
         sid = b.add_sense(eid, None, d or hen, dmi, raw, part_of_speech=pos)
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
+        # alternative_words are not alternative spellings. A dashed item is a
+        # component of the coined term with its meaning — the same shape as Te
+        # Matatiki's derivations — and a plain one is another term for the same
+        # concept. Neither is a variant form, and 11,875 of them were the bulk
+        # of every form row in the corpus.
         for w in jload(alt):
-            b.add_form(eid, w if isinstance(w, str) else str(w), "alt_spelling")
+            parsed = parse_alternative(w if isinstance(w, str) else str(w))
+            if parsed:
+                b.add_relation(eid, parsed["rel_type"], parsed["target"],
+                               note=parsed["note"])
         # The curriculum learning areas are bilingual in the source:
         # subject_area 'Pūtaiao' / subject_area_en 'Science'. The builder used
         # `subject_areas` instead — a JSON list of URL slugs ('ngā-toi') — and
