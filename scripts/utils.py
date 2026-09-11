@@ -111,6 +111,72 @@ def resolve_within_source_relations(con) -> int:
     return n
 
 
+def resolve_relations_by_domain(con) -> int:
+    """Disambiguate a relation by the subject domain its entry sits in.
+
+    `resolve_within_source_relations` leaves 9,656 relations NULL because two or
+    more entries in the source carry the target headword. For paekupu and He
+    Pātaka Kupu most of those are not really ambiguous: both are organised by
+    subject, and a cross-reference written inside a Hangarau entry names the
+    Hangarau term. paekupu's `kawa` is a Pūtaiao noun ('sour'), a Hangarau noun
+    ('protocol'), a Hangarau adjective ('sour, bitter') and a Tikanga ā-Iwi noun
+    — and `hīmoemoe`, a Hangarau adjective, means the third.
+
+    Domain only ever *chooses between* candidates the headword match already
+    found, and only when exactly one survives. Where the domain leaves two,
+    part of speech breaks the tie; where it leaves none or several, the relation
+    stays NULL and is the sweep's to judge. Resolves ~5,300: paekupu 1,432 and
+    hepatakakupu 3,899. Williams, Te Matatiki and papakupu gain nothing —
+    they carry no domains — so this never fires for them.
+
+    Runs after `resolve_within_source_relations`, never crosses a source
+    boundary, never overwrites a target already set, and never points an entry
+    at itself. Indexes are built in Python: the equivalent correlated SQL scans
+    `entry` once per relation and does not finish.
+    """
+    if not (_has_table(con, "relation") and _has_table(con, "entry_domain")):
+        return 0
+
+    by_headword, pos, source = {}, {}, {}
+    for eid, src, hw, p in con.execute(
+            "SELECT id, source_id, LOWER(headword), part_of_speech FROM entry "
+            "WHERE headword IS NOT NULL"):
+        by_headword.setdefault((src, hw), []).append(eid)
+        pos[eid], source[eid] = p, src
+
+    domains = {}
+    for eid, dom in con.execute(
+            "SELECT entry_id, domain FROM entry_domain "
+            "WHERE domain_lang = 'mi' AND entry_id IS NOT NULL AND domain IS NOT NULL"):
+        domains.setdefault(eid, set()).add(dom)
+
+    updates = []
+    for rid, eid, target in con.execute(
+            "SELECT id, entry_id, LOWER(target_headword) FROM relation "
+            "WHERE target_entry_id IS NULL AND target_headword IS NOT NULL"):
+        # Fewer than two candidates is the headword pass's business, not ours.
+        candidates = [x for x in by_headword.get((source.get(eid), target), ())
+                      if x != eid]
+        if len(candidates) < 2:
+            continue
+        mine = domains.get(eid)
+        if not mine:
+            continue
+        narrowed = [x for x in candidates if domains.get(x, ()) and
+                    domains[x] & mine]
+        if len(narrowed) > 1:
+            narrowed = [x for x in narrowed if pos.get(x) == pos.get(eid)]
+        if len(narrowed) == 1:
+            updates.append((narrowed[0], rid))
+
+    if updates:
+        con.executemany(
+            "UPDATE relation SET target_entry_id = ? "
+            " WHERE id = ? AND target_entry_id IS NULL", updates)
+        con.commit()
+    return len(updates)
+
+
 def resolve_unambiguous_senses(con) -> dict:
     """Point entry-level references at a sense, where the sense is determined.
 

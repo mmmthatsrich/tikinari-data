@@ -42,8 +42,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import (DB_PATH, normalise_search_key, normalise_sort_key,
-                   compute_content_hash, pos_atoms, resolve_unambiguous_senses,
-                   resolve_within_source_relations)
+                   compute_content_hash, pos_atoms, resolve_relations_by_domain,
+                   resolve_unambiguous_senses, resolve_within_source_relations)
 from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_headword import parse_headword_note
@@ -1075,6 +1075,12 @@ def main():
     linked = resolve_within_source_relations(con)
     if linked:
         print(f"resolved {linked:,} within-source relation target_entry_id")
+
+    # Then the ones the headword alone could not settle: paekupu and He Pataka
+    # Kupu tell same-named entries apart by subject domain.
+    by_domain = resolve_relations_by_domain(con)
+    if by_domain:
+        print(f"resolved {by_domain:,} more relation target_entry_id by subject domain")
 
     resolved = resolve_unambiguous_senses(con)
     if resolved.get("relation"):
