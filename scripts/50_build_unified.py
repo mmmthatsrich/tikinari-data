@@ -52,7 +52,8 @@ from papakupu_gloss import clean_gloss
 from paekupu_alternatives import parse_alternative
 from hepatakakupu_synonyms import parse_synonym
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
-from wakareo_records import example_owners, parse_derivation, parse_tregear
+from wakareo_records import (drop_truncated_tail, example_owners,
+                            parse_derivation, parse_tregear)
 from sweep_patch import apply_patches
 
 NOW = datetime.now(timezone.utc).isoformat()
@@ -647,7 +648,10 @@ def _wakareo_en_mi(con, b, table):
            f"equivalents, qualifier, example_en, example_mi, body_text "
            f"FROM {table} ORDER BY id")
     for (seid, wid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
-        equivalents = [e for e in jload(equivs) if e]
+        # Wakareo caps this run at 50 characters, so the last equivalent can be
+        # a fragment: 'atawhai, atawhait' is 'atawhaitia' cut short. Minting an
+        # entry for 'whakah' asserts a word the source never did (D31).
+        equivalents = drop_truncated_tail(jload(equivs))
         if not equivalents:
             continue                      # nothing to hang a Māori headword on
         variants = jload(scope)

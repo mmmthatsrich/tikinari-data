@@ -364,3 +364,26 @@ def parse_record(html: str) -> dict | None:
                else _parse_mi_en(rec, segs))
     rec["body_text"] = _body_text(rec, slots["body"])
     return rec
+
+
+# Wakareo caps the Māori equivalents run at 50 characters. No list in the source
+# is longer, and 103 of the lists that reach the cap end in a consonant, which
+# Māori orthography does not allow — 'atawhait' is 'atawhaitia' with the tail
+# cut. The damage is in body_raw, so the landing table keeps it; what the
+# unified core must not do is mint an entry for a word the source never
+# asserted. A cut that lands on a vowel is undetectable and is left alone.
+EQUIVALENTS_CAP = 50
+_VOWEL_FINAL = re.compile(r"[aeiouāēīōū]$", re.IGNORECASE)
+
+
+def drop_truncated_tail(equivalents):
+    """Drop a final equivalent that the 50-character cap provably cut."""
+    items = [e for e in (equivalents or []) if e and str(e).strip()]
+    if not items:
+        return []
+    if len(", ".join(str(e).strip() for e in items)) < EQUIVALENTS_CAP:
+        return items
+    last = str(items[-1]).strip()
+    if _VOWEL_FINAL.search(last) or last.endswith("-"):
+        return items                  # the cut is invisible; do not guess
+    return items[:-1]
