@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from hepatakakupu_synonyms import parse_synonym
+from hepatakakupu_synonyms import pair_synonyms, parse_synonym
 
 
 class ParseSynonym(unittest.TestCase):
@@ -56,6 +56,43 @@ class ParseSynonym(unittest.TestCase):
         # there is no marker to read, so the text is kept as it stands.
         self.assertEqual(parse_synonym("(tū atu"),
                          {"headword": "(tū atu", "has_entry": True})
+
+
+
+class PairSynonyms(unittest.TestCase):
+    """A synonym may name a sense of its target: 'hikoki (2)' (D35).
+
+    He Pātaka Kupu splits each sense into its own entry row, so the sense
+    pointer identifies the exact entry rather than merely narrowing it — which
+    is the difference between a resolvable reference and an ambiguous one.
+
+    The two lists come from JSON written by separate parser runs, so the
+    pairing must survive a sense list that is short, absent, or longer.
+    """
+
+    def test_pairs_each_synonym_with_its_sense(self):
+        self.assertEqual(
+            pair_synonyms(["hikoki", "kōkeke"], [2, None]),
+            [("hikoki", 2), ("kōkeke", None)])
+
+    def test_a_missing_sense_list_yields_no_senses(self):
+        self.assertEqual(pair_synonyms(["hikoki", "kōkeke"], None),
+                         [("hikoki", None), ("kōkeke", None)])
+
+    def test_a_short_sense_list_pads_with_none(self):
+        self.assertEqual(pair_synonyms(["a", "b", "c"], [1]),
+                         [("a", 1), ("b", None), ("c", None)])
+
+    def test_a_longer_sense_list_is_truncated(self):
+        self.assertEqual(pair_synonyms(["a"], [1, 2, 3]), [("a", 1)])
+
+    def test_blank_synonyms_are_dropped_with_their_sense(self):
+        self.assertEqual(pair_synonyms(["a", "  ", "c"], [1, 2, 3]),
+                         [("a", 1), ("c", 3)])
+
+    def test_no_synonyms(self):
+        self.assertEqual(pair_synonyms([], [1]), [])
+        self.assertEqual(pair_synonyms(None, None), [])
 
 
 if __name__ == "__main__":

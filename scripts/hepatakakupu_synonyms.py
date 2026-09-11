@@ -36,3 +36,21 @@ def parse_synonym(raw):
     if not text:
         return None
     return {"headword": text, "has_entry": has_entry}
+
+
+def pair_synonyms(synonyms, senses):
+    """Pair each synonym with the sense of its target that the source named.
+
+    He Pātaka Kupu writes 'hikoki (2)' — sense 2 of hikoki. Because the source
+    splits every sense into its own entry row, that pointer identifies the exact
+    entry rather than merely narrowing it, which is the difference between a
+    reference that resolves and one that stays ambiguous.
+
+    The two lists arrive from JSON and are only as parallel as the parser made
+    them, so a sense list that is absent, short or long is tolerated rather than
+    trusted. A blank synonym takes its sense with it.
+    """
+    names = list(synonyms or [])
+    marks = list(senses or [])
+    marks += [None] * (len(names) - len(marks))
+    return [(n.strip(), m) for n, m in zip(names, marks) if n and n.strip()]

@@ -45,6 +45,9 @@ _CREATE_SQL = """
         usage_examples   TEXT DEFAULT '[]',      -- JSON array
         sense_number     INTEGER,
         synonyms         TEXT DEFAULT '[]',      -- JSON array
+        synonym_senses   TEXT DEFAULT '[]',      -- JSON array, parallel to synonyms
+        master_word_id   INTEGER,                -- word holding this sense's master definition
+        master_sense     INTEGER,                -- which sense of that word
         semantic_domain  TEXT,
         definition_mi    TEXT,                   -- unused (no English gloss)
         created_at       TEXT DEFAULT (datetime('now')),
@@ -52,6 +55,7 @@ _CREATE_SQL = """
     );
     CREATE INDEX idx_hepatakakupu_search  ON hepatakakupu_entries(headword_search);
     CREATE INDEX idx_hepatakakupu_word_id ON hepatakakupu_entries(word_id);
+    CREATE INDEX idx_hepatakakupu_master ON hepatakakupu_entries(master_word_id, master_sense);
 
     CREATE VIRTUAL TABLE hepatakakupu_fts USING fts5(
         headword, definition, usage_examples,
@@ -79,8 +83,9 @@ _INSERT_SQL = """
     INSERT INTO hepatakakupu_entries
         (id, word_id, headword, headword_sort, headword_search,
          part_of_speech, definition, usage_examples,
-         sense_number, synonyms, semantic_domain)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         sense_number, synonyms, synonym_senses,
+         master_word_id, master_sense, semantic_domain)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -125,6 +130,9 @@ def main() -> None:
                     ),
                     r.get("sense_number"),
                     json.dumps(r.get("synonyms") or [], ensure_ascii=False),
+                    json.dumps(r.get("synonym_senses") or [], ensure_ascii=False),
+                    r.get("master_word_id"),
+                    r.get("master_sense"),
                     r.get("semantic_domain"),
                 ))
 

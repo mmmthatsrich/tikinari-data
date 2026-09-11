@@ -116,15 +116,43 @@ def parse_page(html_bytes: bytes, word_id: int) -> list[dict]:
                     usage_examples.append(t)
 
         # ── synonyms ──────────────────────────────────────────────────────────
+        # A synonym may name a SENSE of its target: 'hikoki (2)'. The number was
+        # being stripped, so a pointer at one sense of a multi-sense word arrived
+        # pointing at none (D35). The <sup> that _text_no_sup drops is the
+        # target's homograph index, which is a different thing and stays dropped.
         synonyms_span = div.find('.//span[@class="synonyms"]')
         synonyms: list[str] = []
+        synonym_senses: list[int | None] = []
         if synonyms_span is not None:
             raw = _ws(_text_no_sup(synonyms_span)).strip("{}").strip()
             for part in raw.split(","):
-                part = re.sub(r"\s*\(\s*\d+\s*\)\s*", "", part)
                 part = _ws(part)
-                if part:
-                    synonyms.append(part)
+                m_sense = re.search(r"\(\s*(\d+)\s*\)", part)
+                name = _ws(re.sub(r"\s*\(\s*\d+\s*\)\s*", " ", part))
+                if name:
+                    synonyms.append(name)
+                    synonym_senses.append(int(m_sense.group(1)) if m_sense else None)
+
+        # ── master definition ─────────────────────────────────────────────────
+        # He Pataka Kupu names the entry holding this sense's authoritative
+        # definition: <a class="master_definition" href="/word/1226">hurori (1)</a>
+        # says turori sense 1 is defined at word 1226, sense 1 — and the two
+        # definition texts are identical because it is the same definition.
+        # 14,379 of these exist and none was being read.
+        master_word_id: int | None = None
+        master_sense: int | None = None
+        for a in div.iter("a"):
+            if "master_definition" not in (a.get("class") or ""):
+                continue
+            m_word = re.search(r"/word/(\d+)", a.get("href") or "")
+            if not m_word:
+                continue
+            master_word_id = int(m_word.group(1))
+            # '<headword> <sup>homograph</sup> (sense)' — the word id already
+            # settles the homograph, so only the trailing parenthesis is new.
+            m_sense = re.search(r"\((\d+)\)\s*$", _ws("".join(a.itertext())))
+            master_sense = int(m_sense.group(1)) if m_sense else None
+            break
 
         records.append({
             "id":              sense_id,
@@ -136,6 +164,9 @@ def parse_page(html_bytes: bytes, word_id: int) -> list[dict]:
             "definition":      definition,
             "usage_examples":  usage_examples,
             "synonyms":        synonyms,
+            "synonym_senses":  synonym_senses,
+            "master_word_id":  master_word_id,
+            "master_sense":    master_sense,
         })
 
     return records

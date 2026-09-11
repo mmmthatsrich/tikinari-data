@@ -52,7 +52,7 @@ from williams_xref import (parse_equals_variants, pick_target,
                            see_also_spellings)
 from papakupu_gloss import clean_gloss
 from paekupu_alternatives import parse_alternative
-from hepatakakupu_synonyms import parse_synonym
+from hepatakakupu_synonyms import pair_synonyms, parse_synonym
 from temarareo_gloss import build_raw, clean_definition, dedupe_species
 from wakareo_records import (drop_truncated_tail, example_owners,
                             parse_derivation, parse_tregear)
@@ -195,13 +195,14 @@ class Builder:
         self.counts["form"] += 1
 
     def add_relation(self, entry_id, rel_type, target_headword, target_entry_id=None,
-                     note=None):
+                     note=None, target_sense_id=None):
         if not target_headword:
             return
         self.con.execute(
             "INSERT INTO relation (entry_id, rel_type, target_headword, target_entry_id, "
-            "note) VALUES (?,?,?,?,?)",
-            (entry_id, rel_type, target_headword, target_entry_id, note))
+            "note, target_sense_id) VALUES (?,?,?,?,?,?)",
+            (entry_id, rel_type, target_headword, target_entry_id, note,
+             target_sense_id))
         self.counts["relation"] += 1
 
     def add_domain(self, entry_id, sense_id, domain, domain_lang):
@@ -447,8 +448,20 @@ def build_te_aka(con, b):
 def build_hepatakakupu(con, b):
     sql = ("SELECT id, word_id, headword, headword_sort, headword_search, "
            "part_of_speech, definition, usage_examples, sense_number, synonyms, "
-           "semantic_domain FROM hepatakakupu_entries ORDER BY word_id, sense_number, id")
-    for (id_, wid, hw, hs, hse, pos, d, ux, sn, syn, dom) in con.execute(sql):
+           "synonym_senses, master_word_id, master_sense, semantic_domain "
+           "FROM hepatakakupu_entries ORDER BY word_id, sense_number, id")
+    # He Pataka Kupu addresses a sense as (word_id, sense_number) and splits every
+    # sense into its own row, so that pair names exactly one entry. Collected on
+    # the way through and used afterwards, because a master definition or a
+    # synonym can point at a sense that has not been built yet (D35).
+    by_sense: dict = {}          # (word_id, sense_number) -> (entry_id, sense_id)
+    by_word: dict = {}           # word_id -> headword, for the target text
+    by_key_sense: dict = {}      # (headword_search, sense_number) -> (entry_id, sense_id)
+    senses_of_word: dict = {}    # word_id -> [(entry_id, sense_id), ...]
+    masters: list = []           # (entry_id, master_word_id, master_sense)
+    synonym_refs: list = []      # (entry_id, headword, sense, note)
+    for (id_, wid, hw, hs, hse, pos, d, ux, sn, syn, syn_senses,
+         master_wid, master_sn, dom) in con.execute(sql):
         # He Pātaka Kupu word_id is NOT unique per row (same word_id repeats across
         # senses, and some word_ids are shared sentinels), so it cannot be the device-id
         # stem. Use the source row PK — guaranteed unique and stable. word_id is kept in
@@ -466,15 +479,52 @@ def build_hepatakakupu(con, b):
         # '(whārona awatea )'. The parens are a marker about the reference, not
         # part of the term, and passing them through made 734 targets that could
         # never resolve. Strip them and say so in the note instead (D30).
-        for sy in jload(syn):
-            parsed = parse_synonym(sy.get("text") if isinstance(sy, dict) else sy)
+        for sy, sy_sense in pair_synonyms(jload(syn), jload(syn_senses)):
+            parsed = parse_synonym(sy)
             if not parsed:
                 continue
-            b.add_relation(eid, "synonym", parsed["headword"],
-                           note=None if parsed["has_entry"]
-                           else "no entry under this word in He Pātaka Kupu")
+            synonym_refs.append((
+                eid, parsed["headword"], sy_sense,
+                None if parsed["has_entry"]
+                else "no entry under this word in He Pātaka Kupu"))
         if dom:
             b.add_domain(eid, sid, dom, "mi")
+
+        by_sense[(wid, sn)] = (eid, sid)
+        by_word.setdefault(wid, hw)
+        by_key_sense[(hse, sn)] = (eid, sid)
+        senses_of_word.setdefault(wid, []).append((eid, sid))
+        if master_wid:
+            masters.append((eid, master_wid, master_sn))
+
+    # A synonym may name the sense it means — 'hikoki (2)'. Because a sense is a
+    # row here, that names one entry outright, where the headword alone leaves
+    # several for the sweep to judge.
+    for eid, target_hw, sy_sense, note in synonym_refs:
+        hit = None
+        if sy_sense is not None:
+            hit = by_key_sense.get((normalise_search_key(target_hw), sy_sense))
+        b.add_relation(eid, "synonym", target_hw,
+                       hit[0] if hit else None, note=note,
+                       target_sense_id=hit[1] if hit else None)
+
+    # 'This sense's authoritative definition lives at word N, sense M.' The
+    # source states it for 14,379 senses and names the sense for 9,854 of them.
+    for eid, master_wid, master_sn in masters:
+        target_hw = by_word.get(master_wid)
+        if not target_hw:
+            continue
+        hit = by_sense.get((master_wid, master_sn))
+        if hit is None:
+            # No sense named, or none matching: take the word's own sense only
+            # when it has exactly one, and otherwise leave the target open.
+            rows = senses_of_word.get(master_wid) or []
+            hit = rows[0] if len(rows) == 1 else None
+        b.add_relation(eid, "master_definition", target_hw,
+                       hit[0] if hit else None,
+                       note=f"word_id={master_wid}"
+                            + (f" sense={master_sn}" if master_sn else ""),
+                       target_sense_id=hit[1] if hit else None)
 
 
 def build_paekupu(con, b):
