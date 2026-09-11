@@ -59,7 +59,14 @@ class LoanwordsHaveNoProtoAncestry(unittest.TestCase):
     def test_the_corpus_still_has_most_of_its_links(self):
         # A filter that removed far more than the 8,314 measured would mean the
         # marker is matching something it should not.
-        self.assertGreater(self._one("SELECT COUNT(*) FROM ETY_entry_link"), 170000)
+        #
+        # The floor was 170,000 when this was written. D33 then removed a
+        # further ~15,000 links for an unrelated reason — POLLEX marks morpheme
+        # boundaries with '/', so 'Hoi/hoi' was being keyed as `hoi` and
+        # attaching hoihoi's etymology to seventeen unrelated words — bringing
+        # the total to 160,712. Recalibrated to 155,000 rather than deleted:
+        # this guards the loan filter, and that filter has not changed.
+        self.assertGreater(self._one("SELECT COUNT(*) FROM ETY_entry_link"), 155000)
 
 
 if __name__ == "__main__":

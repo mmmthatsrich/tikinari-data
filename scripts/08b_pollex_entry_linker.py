@@ -24,9 +24,16 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding='utf-8')
 from utils import DB_PATH, normalise_search_key
 
-# Split a reflex field into individual forms.
-_SPLIT_RE = re.compile(r'[,/;]')
+# Split a reflex field into individual forms. '/' is NOT a separator: POLLEX
+# uses it to mark a morpheme boundary inside one word, so 'Hoi/hoi' is hoihoi
+# and 'Ahu/nga' is ahunga. Splitting on it keyed those to `hoi` and to `ahu`
+# plus `nga`, moving an etymology onto words that never had it — 17 `hoi`
+# entries carried PN.SOI.3 'Interjection expressing exasperation' while the 9
+# `hoihoi` entries glossed 'noisy, deafening, loud' carried none (D33).
+# Commas and semicolons do separate: 'Aa/ku, oo/ku' is āku and ōku.
+_SPLIT_RE = re.compile(r'[,;]')
 # Keep only Māori orthographic letters (incl. macron vowels); drop notes/punct.
+# This also removes the '/' inside a part, joining the morphemes back up.
 _CLEAN_RE = re.compile(r'[^a-zāēīōū]')
 
 

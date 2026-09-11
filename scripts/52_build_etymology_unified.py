@@ -58,8 +58,11 @@ _DEDUP_GLOSS_THRESHOLD = 0.20
 _STOPWORDS = frozenset({'a', 'an', 'the', 'of', 'to', 'in', 'is', 'be', 'or',
                         'and', 'for', 'with', 'as', 'by', 'at', 'from', 'on',
                         'into', 'v', 'n', 'adj', 'sp', 'vs'})
-# split a reflex field into individual forms (mirror 08b_pollex_entry_linker)
-_SPLIT_RE = re.compile(r'[,/;|]')
+# split a reflex field into individual forms (mirror 08b_pollex_entry_linker).
+# '/' is excluded deliberately: POLLEX marks a morpheme boundary with it, so
+# 'Hoi/hoi' is hoihoi and 'Ahu/nga' is ahunga. _CLEAN_RE removes it inside a
+# part, joining the morphemes back up (D33). ',', ';' and '|' do separate.
+_SPLIT_RE = re.compile(r'[,;|]')
 _CLEAN_RE = re.compile(r'[^a-zāēīōū]')
 
 
