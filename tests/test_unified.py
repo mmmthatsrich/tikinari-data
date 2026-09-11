@@ -165,6 +165,45 @@ class UnifiedCore(unittest.TestCase):
                     "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
                     "WHERE e.source_id=? AND s.definition_raw = e.headword", src), 0)
 
+    def test_temarareo_proto_levels_are_not_semantic_domains(self):
+        # 'P. Polynesian', 'P. Oceanic' etc. are reconstruction levels. They
+        # belong to the etymology layer (ETY_cognateset.level already carries
+        # them for these entries), not to entry_domain, which is subject areas.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM entry_domain d JOIN entry e ON e.id=d.entry_id "
+            "WHERE e.source_id='temarareo'"), 0)
+
+    def test_temarareo_definition_does_not_repeat_its_own_species(self):
+        # `aruhe`: the definition already reads 'Pteridium esculentum
+        # (Dennstaedtiaceae)' and had '[Pteridium esculentum]' appended.
+        raw = self._one(
+            "SELECT s.definition_raw FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='temarareo' AND e.headword='aruhe'")
+        self.assertEqual(raw, "Pteridium esculentum (Dennstaedtiaceae)")
+
+    def test_temarareo_species_only_records_are_not_wrapped_in_a_bracket(self):
+        # `nonokia`: gloss 'Pomaderris apetala' but definition_raw
+        # '[Pomaderris apetala]' — a bracket around the entire content.
+        # (Entries whose SOURCE text is bracketed, like `Hapuku`, keep theirs.)
+        raw = self._one(
+            "SELECT s.definition_raw FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='temarareo' AND e.headword='nonokia'")
+        self.assertEqual(raw, "Pomaderris apetala")
+
+    def test_temarareo_note_only_records_still_get_a_gloss(self):
+        # 16 entries carry their content in `note` alone ('"stalk, stem" [a word
+        # once associated with the coconut]'), leaving gloss_en NULL.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='temarareo' AND s.gloss_en IS NULL"), 0)
+
+    def test_temarareo_gloss_is_never_just_a_protoform(self):
+        # `kauere` and `Pūriri` both had gloss_en '*Kauere'.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM sense s JOIN entry e ON e.id=s.entry_id "
+            "WHERE e.source_id='temarareo' AND s.gloss_en GLOB '[*]*' "
+            "AND s.gloss_en NOT GLOB '[*]* *'"), 0)
+
     def test_williams_examples_extracted_from_the_definitions(self):
         # Williams prints examples inline after the gloss; before extraction
         # only 61 of 14,942 entries had an example row.

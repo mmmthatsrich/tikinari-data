@@ -47,6 +47,7 @@ from williams_senses import split_senses
 from williams_examples import split_gloss_examples
 from williams_xref import parse_see_also_targets
 from papakupu_gloss import clean_gloss
+from temarareo_gloss import build_raw, clean_definition, dedupe_species
 from wakareo_records import example_owners, parse_derivation, parse_tregear
 
 NOW = datetime.now(timezone.utc).isoformat()
@@ -456,30 +457,39 @@ def build_temarareo(con, b):
            "stage_name, page, url, has_page FROM temarareo_entries ORDER BY id")
     for (seid, hw, hs, hse, definition, note, species, related, ppn, stage_no,
          stage_name, page, url, has_page) in con.execute(sql):
-        sp = [s for s in jload(species) if isinstance(s, str)]
+        sp = dedupe_species([s for s in jload(species) if isinstance(s, str)])
         rel = [r for r in jload(related) if isinstance(r, dict)]
 
+        # stage_name ('P. Polynesian', 'P. Oceanic') is a proto-language
+        # reconstruction level, not a semantic domain — it used to be written to
+        # entry_domain, which is for subject areas. Its real home is the
+        # etymology layer, where ETY_cognateset.level already carries it for
+        # these entries; it rides along in the locator so the provenance string
+        # still names the stage it came from.
         locator = "; ".join(filter(None, [
             page or "index",
-            f"stage {stage_no}" if stage_no else None,
+            f"stage {stage_no} ({stage_name})" if stage_no and stage_name
+            else (f"stage {stage_no}" if stage_no else None),
             f"*{ppn}" if ppn else None,
         ]))
         eid = b.add_entry(seid, hw, hs, hse, pos="noun", locator=locator,
                           material={"hw": hw, "def": definition, "note": note,
                                     "sp": sp, "ppn": ppn, "stage": stage_no})
         # gloss_en is the definition where the source gives one, else the species it
-        # names; definition_raw keeps the whole record (definition + note + species).
-        gloss = definition or ("; ".join(sp) if sp else None)
-        raw = " ".join(filter(None, [definition, note,
-                                     f"[{'; '.join(sp)}]" if sp else None])) or None
+        # names; definition_raw keeps the record without repeating itself — only
+        # the species the definition does not already name are appended.
+        definition = clean_definition(definition)
+        # 16 records carry their content in `note` alone — '"stalk, stem" [a word
+        # once associated with the coconut (niu)]' — and were left glossless.
+        gloss = (definition or ("; ".join(sp) if sp else None)
+                 or ((note or "").strip() or None))
+        raw = build_raw(definition, note, sp)
         sid = b.add_sense(eid, None, gloss, None, raw, part_of_speech="noun")
         # Plant names discussed on the page — attested in its prose, not headwords of
         # their own, so they are cross-references rather than entries.
         for r in rel:
             for name in r.get("names", []):
                 b.add_relation(eid, "see_also", name, note=r.get("literal_meaning"))
-        if stage_name:
-            b.add_domain(eid, sid, stage_name, "en")
 
 
 # --- Wakareo components (session 67) --------------------------------------
