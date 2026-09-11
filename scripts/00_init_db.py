@@ -9,6 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from sweep_patch import PATCH_DDL
 from sweep_queue import QUEUE_DDL
+from sweep_findings import FINDING_DDL
 
 DB_PATH = Path(__file__).parent.parent / "data" / "staging_dictionary.db"
 
@@ -1273,6 +1274,7 @@ def create_sweep_patch(conn: sqlite3.Connection) -> None:
     """
     conn.executescript(PATCH_DDL)
     conn.executescript(QUEUE_DDL)
+    conn.executescript(FINDING_DDL)
 
 
 def migrate_wakareo_body_text(conn: sqlite3.Connection) -> None:
