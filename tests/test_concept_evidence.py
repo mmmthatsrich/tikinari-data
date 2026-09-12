@@ -106,6 +106,23 @@ class PositiveEvidence(unittest.TestCase):
         self.assertIn("gloss_overlap",
                       [e["kind"] for e in positive_evidence(a, b)])
 
+    def test_a_single_shared_word_is_weak_evidence(self):
+        # 51,318 of 69,268 gloss overlaps rest on one word. Rating those
+        # 'probable' would ship the corpus's weakest signal to users as
+        # though it were well attested.
+        a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
+        b = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
+        kinds = [e["kind"] for e in positive_evidence(a, b)]
+        self.assertIn("gloss_overlap_weak", kinds)
+        self.assertNotIn("gloss_overlap", kinds)
+
+    def test_two_shared_words_are_ordinary_evidence(self):
+        a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
+        b = _sense(source_id="papakupu", gloss_en="the hill ridge")
+        kinds = [e["kind"] for e in positive_evidence(a, b)]
+        self.assertIn("gloss_overlap", kinds)
+        self.assertNotIn("gloss_overlap_weak", kinds)
+
     def test_stopwords_alone_are_not_overlap(self):
         # 'of a the' must never link two senses.
         a = _sense(source_id="te_aka", gloss_en="of a the")
@@ -127,7 +144,7 @@ class PositiveEvidence(unittest.TestCase):
 
     def test_every_kind_has_a_weight(self):
         for kind in ("cites_source", "shared_example", "attributed_quote",
-                     "gloss_overlap"):
+                     "gloss_overlap", "gloss_overlap_weak"):
             self.assertIn(kind, EVIDENCE_WEIGHT)
 
     def test_shared_cognate_set_is_not_a_kind(self):

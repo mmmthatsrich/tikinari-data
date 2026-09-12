@@ -51,6 +51,7 @@ EVIDENCE_WEIGHT = {
     "shared_example":     0.9,   # two sources printing the same sentence
     "attributed_quote":   0.7,   # Te Aka citing 'W 1971:54'
     "gloss_overlap":      0.5,
+    "gloss_overlap_weak": 0.3,
 }
 
 EVIDENCE_CONFIDENCE = {
@@ -58,6 +59,16 @@ EVIDENCE_CONFIDENCE = {
     "shared_example":     "certain",
     "attributed_quote":   "probable",
     "gloss_overlap":      "probable",
+    # gloss_overlap resting on exactly one shared content word is the
+    # corpus's weakest signal, not an ordinary case of it: measured at
+    # 94% of all cross-source attachment (69,268 memberships) with 74%
+    # of THAT (51,318) resting on a single shared word — himoemoe-style
+    # terse glosses ('Acidic' / 'Acid, sour.') that agree by coincidence
+    # as often as by genuine correspondence. A distinct kind, not a size
+    # check inside confidence_for, so it shows up by name in the sweep
+    # batch instead of forcing a reviewer to infer why a membership is
+    # weak. Two or more shared words stays ordinary gloss_overlap.
+    "gloss_overlap_weak": "uncertain",
 }
 
 _STOPWORDS = frozenset({
@@ -134,7 +145,14 @@ def positive_evidence(a, b):
     # display use, but it is deliberately not consulted here.
 
     overlap = _content_words(a["gloss_en"]) & _content_words(b["gloss_en"])
-    if len(overlap) >= GLOSS_OVERLAP_MIN:
+    if len(overlap) == GLOSS_OVERLAP_MIN:
+        # Exactly the floor: one shared content word, the corpus's weakest
+        # signal (see the comment on EVIDENCE_CONFIDENCE). Its own kind, so
+        # a reviewer sees why the membership is weak instead of a plain
+        # gloss_overlap that looks the same as a two-or-more-word match.
+        found.append(("gloss_overlap_weak",
+                      "glosses share only " + ", ".join(sorted(overlap)[:4])))
+    elif len(overlap) > GLOSS_OVERLAP_MIN:
         found.append(("gloss_overlap",
                       "glosses share " + ", ".join(sorted(overlap)[:4])))
 
