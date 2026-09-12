@@ -60,9 +60,15 @@ _STOPWORDS = frozenset({
 })
 
 # The one tuning parameter in the design. Set by measuring against the judged
-# calibration clusters (Task 14); two shared content words is the floor that
-# keeps 'ridge of a hill' while rejecting 'of a the'.
-GLOSS_OVERLAP_MIN = 2
+# calibration clusters (Task 10, first real build against the full corpus).
+# 2 was too tight: himoemoe's six sources gloss the same word as terse single
+# words ('Acidic', 'Acid, sour.') that only ever share ONE content word with
+# each other, so a floor of 2 fragmented it into four unconnected concepts
+# instead of the one it is. Lowered to 1 unifies himoemoe (hepatakakupu,
+# te_aka, te_matatiki, williams all reachable via a single shared word) while
+# still passing hiwi, which stays split on its own stronger signals (block
+# rules, cites/cognate evidence) rather than on gloss overlap.
+GLOSS_OVERLAP_MIN = 1
 
 
 def _content_words(text):
