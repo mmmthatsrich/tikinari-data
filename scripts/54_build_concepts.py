@@ -20,7 +20,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
-from concept_evidence import lexeme_key
+from concept_evidence import SEED_CONFIDENCE, blocks, confidence_for, lexeme_key, positive_evidence
 
 
 def _norm(text):
@@ -91,3 +91,68 @@ def load_senses(con, keys=None):
             "cites": frozenset(cites.get(eid, ())),
         })
     return dict(out)
+
+
+def _seed_groups(views):
+    """Single-source lexemes, in a stable order — the concepts' starting points.
+
+    Each source groups its own senses into words and that grouping is STATED,
+    not inferred, which is why these are trusted where cross-source attachment
+    is not.
+    """
+    groups = defaultdict(list)
+    for v in views:
+        groups[v["lexeme"]].append(v)
+    return [groups[k] for k in sorted(groups, key=lambda k: (str(k),))]
+
+
+def form_concepts(views):
+    """Group one headword key's sense-views into concepts.
+
+    Seeds attach to a concept only on positive evidence linking them to it, and
+    only when no block holds against ANY existing member. That second clause is
+    the anti-chaining rule: if two words are separated by their own source's
+    numbering, no third source compatible with each can later join them.
+    """
+    concepts = []
+    for seed in _seed_groups(views):
+        placed = False
+        for concept in concepts:
+            existing = [m["view"] for m in concept["members"]]
+
+            # A block against any current member rules the whole concept out.
+            if any(blocks(s, e) for s in seed for e in existing):
+                continue
+
+            evidence = []
+            for s in seed:
+                for e in existing:
+                    found = positive_evidence(s, e)
+                    if found:
+                        evidence.extend(found)
+            if not evidence:
+                continue
+
+            seed_conf = min(
+                (SEED_CONFIDENCE.get(s["source_id"], "certain") for s in seed),
+                key=("uncertain", "probable", "certain").index)
+            conf = confidence_for(evidence, [])
+            conf = min((conf, seed_conf),
+                       key=("uncertain", "probable", "certain").index)
+            for s in seed:
+                concept["members"].append(
+                    {"view": s, "evidence": evidence, "confidence": conf})
+            placed = True
+            break
+
+        if not placed:
+            conf = min(
+                (SEED_CONFIDENCE.get(s["source_id"], "certain") for s in seed),
+                key=("uncertain", "probable", "certain").index)
+            concepts.append({"members": [{"view": s, "evidence": [],
+                                          "confidence": conf} for s in seed]})
+
+    for c in concepts:
+        c["confidence"] = min((m["confidence"] for m in c["members"]),
+                              key=("uncertain", "probable", "certain").index)
+    return concepts

@@ -141,5 +141,67 @@ class LoadSenses(unittest.TestCase):
         self.assertEqual(views[("te_aka", "1284", 1)]["pos"], "Modifier")
 
 
+class FormConcepts(unittest.TestCase):
+    def setUp(self):
+        self.mod = importlib.import_module("54_build_concepts")
+
+    def _concepts(self, con=None):
+        views = self.mod.load_senses(con or _fixture_db())
+        return self.mod.form_concepts(views["hiwi"])
+
+    def test_williams_two_entries_never_share_a_concept(self):
+        # Williams files 1250 and 1251 apart: that IS Williams saying these
+        # are different words, and nothing may override it here.
+        for c in self._concepts():
+            entries = {m["view"]["source_entry_id"] for m in c["members"]
+                       if m["view"]["source_id"] == "williams"}
+            self.assertLessEqual(len(entries), 1, entries)
+
+    def test_the_ridge_sources_come_together(self):
+        concepts = self._concepts()
+        ridge = [c for c in concepts
+                 if any(m["view"]["member_key"] == ("williams", "1251", 1)
+                        for m in c["members"])]
+        self.assertEqual(len(ridge), 1)
+        sources = {m["view"]["source_id"] for m in ridge[0]["members"]}
+        self.assertEqual(sources, {"williams", "te_aka", "papakupu"})
+
+    def test_the_jerk_sense_stays_on_its_own(self):
+        concepts = self._concepts()
+        jerk = [c for c in concepts
+                if any(m["view"]["member_key"] == ("williams", "1250", 1)
+                       for m in c["members"])]
+        self.assertEqual(len(jerk), 1)
+        self.assertEqual(len(jerk[0]["members"]), 1)
+
+    def test_every_sense_lands_in_exactly_one_concept(self):
+        views = self.mod.load_senses(_fixture_db())["hiwi"]
+        concepts = self.mod.form_concepts(views)
+        placed = [m["view"]["member_key"] for c in concepts for m in c["members"]]
+        self.assertEqual(len(placed), len(set(placed)))
+        self.assertEqual(set(placed), {v["member_key"] for v in views})
+
+    def test_a_membership_records_its_evidence(self):
+        concepts = self._concepts()
+        attached = [m for c in concepts for m in c["members"]
+                    if m["view"]["source_id"] != "williams" and m["evidence"]]
+        self.assertTrue(attached)
+        self.assertIn("kind", attached[0]["evidence"][0])
+
+    def test_attachment_is_not_transitive(self):
+        # A and C are blocked from each other; B is compatible with both.
+        # B may join one of them, but that must never place A with C.
+        con = _fixture_db()
+        con.execute("INSERT INTO entry (id, source_id, source_entry_id, headword,"
+                    " headword_search, part_of_speech) VALUES"
+                    " (5,'taikupu','t1','hīwi','hiwi',NULL)")
+        con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en)"
+                    " VALUES (15,5,1,'ridge of a hill')")
+        con.commit()
+        for c in self.mod.form_concepts(self.mod.load_senses(con)["hiwi"]):
+            hws = {m["view"]["headword"].lower() for m in c["members"]}
+            self.assertFalse({"hiwi", "hīwi"} <= hws, hws)
+
+
 if __name__ == "__main__":
     unittest.main()
