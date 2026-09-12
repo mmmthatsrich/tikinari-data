@@ -116,30 +116,18 @@ class PositiveEvidence(unittest.TestCase):
     def test_a_single_shared_word_is_weak_evidence(self):
         # 51,318 of 69,268 gloss overlaps rest on one word. Rating those
         # 'probable' would ship the corpus's weakest signal to users as
-        # though it were well attested.
+        # though it were well attested. This corpus makes 'ridge' common
+        # (df > DISTINCT_CEILING) as well as low-coverage, so neither axis
+        # can rescue it — self.idx's small four-gloss corpus is too rare on
+        # 'ridge' (df 3) to make that point under the coverage/distinctiveness
+        # rule, so this test builds its own.
+        idx = GlossIndex(["ridge of a hill", "ridge of a mountain"]
+                         + ["some ridge nearby"] * 25)
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
         b = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
-        kinds = [e["kind"] for e in positive_evidence(a, b, self.idx)]
+        kinds = [e["kind"] for e in positive_evidence(a, b, idx)]
         self.assertIn("gloss_overlap_weak", kinds)
         self.assertNotIn("gloss_overlap", kinds)
-
-    def test_two_shared_words_are_ordinary_evidence(self):
-        # Both sides of the boundary in one test. Asserting only that two
-        # shared words yield 'gloss_overlap' passes against a build with no
-        # weak kind at all, which pins nothing: what has to hold is that the
-        # two cases differ — in kind, in weight and in the confidence a
-        # membership earns from them.
-        a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
-        two = _sense(source_id="papakupu", gloss_en="the hill ridge")
-        one = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
-
-        ordinary = positive_evidence(a, two, self.idx)
-        weak = positive_evidence(a, one, self.idx)
-        self.assertEqual(["gloss_overlap"], [e["kind"] for e in ordinary])
-        self.assertEqual(["gloss_overlap_weak"], [e["kind"] for e in weak])
-        self.assertGreater(ordinary[0]["weight"], weak[0]["weight"])
-        self.assertEqual("probable", confidence_for(ordinary, []))
-        self.assertEqual("uncertain", confidence_for(weak, []))
 
     def test_stopwords_alone_are_not_overlap(self):
         # 'of a the' must never link two senses.
@@ -176,6 +164,76 @@ class PositiveEvidence(unittest.TestCase):
         b = _sense(source_id="papakupu", gloss_en="ridge of a hill")
         detail = positive_evidence(a, b, self.idx)[0]["detail"]
         self.assertIn("ridge", detail)
+
+
+class GlossGrading(unittest.TestCase):
+    """Both sides of the boundary, on both axes.
+
+    Asserting only that a strong pair yields 'gloss_overlap' would pass
+    against a build with no weak kind at all, which pins nothing. What has to
+    hold is that the two cases DIFFER — in kind, in weight, and in the
+    confidence a membership earns.
+    """
+
+    def _pair(self, ga, gb, corpus):
+        idx = GlossIndex(corpus)
+        a = _sense(source_id="te_aka", gloss_en=ga)
+        b = _sense(source_id="papakupu", gloss_en=gb)
+        return positive_evidence(a, b, idx)
+
+    def test_identical_terse_glosses_are_ordinary_evidence(self):
+        # The defect: one shared word, but it is the WHOLE of both glosses.
+        # 'spoon' is deliberately common in this corpus (df 21 > ceiling), so
+        # only coverage can rescue it.
+        corpus = ["Spoon", "spoon."] + ["a spoon of sorts"] * 19
+        got = self._pair("Spoon", "spoon.", corpus)
+        self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
+        self.assertEqual("probable", confidence_for(got, []))
+
+    def test_a_rare_shared_word_is_ordinary_evidence(self):
+        # The other axis: coverage is LOW (one word out of six), but the
+        # shared word is decisive. Only distinctiveness can rescue this.
+        long_gloss = "narcissism, vanity, pride, conceit, self-regard"
+        corpus = [long_gloss, "narcissism", "narcissism of a sort"]
+        got = self._pair(long_gloss, "narcissism", corpus)
+        self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
+        self.assertLess(got[0]["coverage"], 0.5)      # coverage did not save it
+        self.assertLessEqual(got[0]["distinctiveness"], 20)
+
+    def test_one_common_word_in_two_long_glosses_is_weak(self):
+        # Weak on BOTH axes: the 'a'/'form' noise case.
+        corpus = (["used to form the passive of a verb",
+                   "particle indicating a plural form"]
+                  + ["some other form of thing"] * 40)
+        got = self._pair("used to form the passive of a verb",
+                         "particle indicating a plural form", corpus)
+        self.assertEqual(["gloss_overlap_weak"], [e["kind"] for e in got])
+        self.assertEqual("uncertain", confidence_for(got, []))
+
+    def test_the_weak_kind_weighs_less_than_the_ordinary_one(self):
+        strong = self._pair("Spoon", "spoon.", ["Spoon", "spoon."])
+        weak = self._pair("used to form the passive of a verb",
+                          "particle indicating a plural form",
+                          ["form"] * 40)
+        self.assertGreater(strong[0]["weight"], weak[0]["weight"])
+
+    def test_no_shared_words_is_no_evidence_at_all(self):
+        self.assertEqual([], self._pair("spoon", "battle", ["spoon", "battle"]))
+
+    def test_both_measurements_are_carried_on_the_evidence(self):
+        # Task 5 stores these; a later re-tune reads them back. If they are
+        # not carried here, re-fitting thresholds means recomputing the corpus.
+        got = self._pair("Spoon", "spoon.", ["Spoon", "spoon."])[0]
+        self.assertEqual(1.0, got["coverage"])
+        self.assertEqual(2, got["distinctiveness"])
+
+    def test_a_non_gloss_kind_carries_no_measurements(self):
+        a = _sense(source_id="te_matatiki", entry_id=10, cites=frozenset({99}))
+        b = _sense(source_id="williams", entry_id=99)
+        got = positive_evidence(a, b, GlossIndex([]))[0]
+        self.assertEqual("cites_source", got["kind"])
+        self.assertIsNone(got["coverage"])
+        self.assertIsNone(got["distinctiveness"])
 
 
 class Blocks(unittest.TestCase):

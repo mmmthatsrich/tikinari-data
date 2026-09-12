@@ -77,6 +77,10 @@ _STOPWORDS = frozenset({
     "one", "used", "esp", "etc", "see", "also", "n", "v", "adj", "vt", "vi",
 })
 
+# SUPERSEDED by COVERAGE_FLOOR / DISTINCT_CEILING below. Kept because its
+# findings are why this design exists: the himoemoe and huripari cases
+# recorded here are the ones a single count threshold cannot hold together.
+#
 # The one tuning parameter in the design. Set by measuring against the judged
 # calibration clusters (Task 10, first real build against the full corpus).
 #
@@ -103,7 +107,13 @@ _STOPWORDS = frozenset({
 # — a coincidence, not a fix; hiwi's real remaining errors (williams' entries
 # 1251 and 1252 each bundle 2-4 of the judged eight words under one entry
 # number) are a source-structure limit neither value touches.
-GLOSS_OVERLAP_MIN = 1
+
+# Set by grid search against the recorded calibration answers — see
+# docs/superpowers/specs/2026-09-13-gloss-evidence-design.md §5 and
+# scripts/tune_gloss_thresholds.py. A pair earns ordinary gloss_overlap when
+# it is strong on EITHER axis; weak on both makes it gloss_overlap_weak.
+COVERAGE_FLOOR = 0.5
+DISTINCT_CEILING = 20
 
 
 def _content_words(text):
@@ -195,36 +205,43 @@ def positive_evidence(a, b, index):
 
     if b["entry_id"] in a["cites"] or a["entry_id"] in b["cites"]:
         found.append(("cites_source",
-                      f"{a['source_id']} cites the {b['source_id']} entry"))
+                      f"{a['source_id']} cites the {b['source_id']} entry",
+                      None, None))
 
     shared_ex = a["examples"] & b["examples"]
     if shared_ex:
         found.append(("shared_example",
-                      f"both print {sorted(shared_ex)[0][:60]!r}"))
+                      f"both print {sorted(shared_ex)[0][:60]!r}",
+                      None, None))
 
     shared_cit = a["citations"] & b["citations"]
     if shared_cit:
         found.append(("attributed_quote",
-                      f"both cite {sorted(shared_cit)[0][:40]!r}"))
+                      f"both cite {sorted(shared_cit)[0][:40]!r}",
+                      None, None))
 
     # No shared_cognate_set check: see the comment above EVIDENCE_WEIGHT.
     # cognate_sets is still carried on the sense-view for possible later
     # display use, but it is deliberately not consulted here.
 
-    overlap = _content_words(a["gloss_en"]) & _content_words(b["gloss_en"])
-    if len(overlap) == GLOSS_OVERLAP_MIN:
-        # Exactly the floor: one shared content word, the corpus's weakest
-        # signal (see the comment on EVIDENCE_CONFIDENCE). Its own kind, so
-        # a reviewer sees why the membership is weak instead of a plain
-        # gloss_overlap that looks the same as a two-or-more-word match.
-        found.append(("gloss_overlap_weak",
-                      "glosses share only " + ", ".join(sorted(overlap)[:4])))
-    elif len(overlap) > GLOSS_OVERLAP_MIN:
-        found.append(("gloss_overlap",
-                      "glosses share " + ", ".join(sorted(overlap)[:4])))
+    a_words, b_words = _content_words(a["gloss_en"]), _content_words(b["gloss_en"])
+    overlap = a_words & b_words
+    if overlap:
+        coverage = gloss_coverage(a_words, b_words)
+        distinct = index.df(overlap)
+        shown = ", ".join(sorted(overlap)[:4])
+        if coverage >= COVERAGE_FLOOR or distinct <= DISTINCT_CEILING:
+            found.append(("gloss_overlap", f"glosses share {shown}",
+                          coverage, distinct))
+        else:
+            # Weak on both axes: a common word incidental to two long
+            # glosses. Its own kind so a reviewer sees WHY it is weak.
+            found.append(("gloss_overlap_weak",
+                          f"glosses share only {shown}", coverage, distinct))
 
-    return [{"kind": k, "detail": d, "weight": EVIDENCE_WEIGHT[k]}
-            for k, d in found]
+    return [{"kind": k, "detail": d, "weight": EVIDENCE_WEIGHT[k],
+             "coverage": c, "distinctiveness": n}
+            for k, d, c, n in found]
 
 
 _MACRONS = str.maketrans("āēīōūĀĒĪŌŪ", "aeiouAEIOU")
