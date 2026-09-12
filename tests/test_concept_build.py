@@ -363,6 +363,18 @@ class Persist(unittest.TestCase):
 
     def test_a_non_gloss_kind_stores_no_measurements(self):
         con = _fixture_db()
+        # The fixture alone yields only gloss_overlap evidence, so this test
+        # needs a non-gloss row to have anything to assert against. Give the
+        # williams (sense 10) and te_aka (sense 13) "ridge" senses — already
+        # in the same concept via gloss_overlap — an identical example
+        # sentence, which yields a shared_example row. Inserted on this
+        # test's own connection only, so no other test's fixture or expected
+        # counts move.
+        example = "Kei te hiwi ia e noho ana i te taha o te awa nui atu."
+        con.executemany(
+            "INSERT INTO example (entry_id, sense_id, text_mi) "
+            " VALUES (?, ?, ?)", [(1, 10, example), (3, 13, example)])
+        con.commit()
         views = self.mod.load_senses(con)
         idx = _fixture_index(con)
         allc = []
@@ -372,6 +384,7 @@ class Persist(unittest.TestCase):
         rows = con.execute(
             "SELECT coverage, distinctiveness FROM concept_member_evidence "
             " WHERE kind NOT LIKE 'gloss_overlap%'").fetchall()
+        self.assertTrue(rows, "no non-gloss evidence in the fixture")
         for coverage, distinct in rows:
             self.assertIsNone(coverage)
             self.assertIsNone(distinct)
