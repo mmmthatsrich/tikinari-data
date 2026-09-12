@@ -341,6 +341,41 @@ class Persist(unittest.TestCase):
             "  ON m.concept_id = c.id "
             " WHERE m.source_id='williams' AND m.source_entry_id='1250'")})
 
+    def test_it_stores_both_gloss_measurements(self):
+        # Stored so a later re-tune is a re-tier, not a recomputation of the
+        # whole corpus. See the spec, §6.
+        con = _fixture_db()
+        views = self.mod.load_senses(con)
+        idx = _fixture_index(con)
+        allc = []
+        for key in sorted(views):
+            allc.extend(self.mod.form_concepts(views[key], idx))
+        self.mod.persist(con, allc)
+        rows = con.execute(
+            "SELECT coverage, distinctiveness FROM concept_member_evidence "
+            " WHERE kind LIKE 'gloss_overlap%'").fetchall()
+        self.assertTrue(rows, "no gloss evidence in the fixture")
+        for coverage, distinct in rows:
+            self.assertIsNotNone(coverage)
+            self.assertIsNotNone(distinct)
+            self.assertGreaterEqual(coverage, 0.0)
+            self.assertLessEqual(coverage, 1.0)
+
+    def test_a_non_gloss_kind_stores_no_measurements(self):
+        con = _fixture_db()
+        views = self.mod.load_senses(con)
+        idx = _fixture_index(con)
+        allc = []
+        for key in sorted(views):
+            allc.extend(self.mod.form_concepts(views[key], idx))
+        self.mod.persist(con, allc)
+        rows = con.execute(
+            "SELECT coverage, distinctiveness FROM concept_member_evidence "
+            " WHERE kind NOT LIKE 'gloss_overlap%'").fetchall()
+        for coverage, distinct in rows:
+            self.assertIsNone(coverage)
+            self.assertIsNone(distinct)
+
 
 class AllMembersRejected(unittest.TestCase):
     """Rejecting EVERY member of one grouping must not revive the judgements.

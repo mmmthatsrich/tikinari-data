@@ -1095,7 +1095,12 @@ def create_tables(conn: sqlite3.Connection) -> None:
             member_id         INTEGER NOT NULL REFERENCES concept_member(id),
             kind              TEXT NOT NULL,
             detail            TEXT NOT NULL,
-            weight            REAL NOT NULL
+            weight            REAL NOT NULL,
+            -- Measured, not derived: stored so re-fitting COVERAGE_FLOOR and
+            -- DISTINCT_CEILING against sweep judgements is a re-tier rather
+            -- than a recomputation. NULL on non-gloss kinds.
+            coverage          REAL,
+            distinctiveness   INTEGER
         );
         CREATE INDEX IF NOT EXISTS idx_concept_member_concept
             ON concept_member(concept_id);

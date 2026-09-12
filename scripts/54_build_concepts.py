@@ -279,8 +279,10 @@ def persist(con, concepts):
             for e in m["evidence"]:
                 con.execute(
                     "INSERT INTO concept_member_evidence (member_id, kind, "
-                    " detail, weight) VALUES (?,?,?,?)",
-                    (mid, e["kind"], e["detail"], e["weight"]))
+                    " detail, weight, coverage, distinctiveness) "
+                    " VALUES (?,?,?,?,?,?)",
+                    (mid, e["kind"], e["detail"], e["weight"],
+                     e["coverage"], e["distinctiveness"]))
 
         # A rejected member stays attached to the concept it was excluded
         # from — that is what the judgement records — but every rebuild mints
