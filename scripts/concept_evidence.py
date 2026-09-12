@@ -174,7 +174,7 @@ def gloss_coverage(a_words, b_words):
     return len(a_words & b_words) / len(a_words | b_words)
 
 
-def positive_evidence(a, b):
+def positive_evidence(a, b, index):
     """[{kind, detail, weight}] linking two senses, strongest first.
 
     Cross-source only. Within-source grouping is the seeding step's job, and
@@ -183,6 +183,10 @@ def positive_evidence(a, b):
 
     Same headword_search is deliberately absent: it generates candidates, and
     is never itself evidence.
+
+    `index` is a GlossIndex over the corpus the two senses came from. It is
+    required rather than optional: a default would silently give two
+    different grading rules depending on the call site.
     """
     if a["source_id"] == b["source_id"]:
         return []

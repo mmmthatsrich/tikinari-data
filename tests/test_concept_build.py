@@ -92,6 +92,14 @@ def _fixture_db():
     return con
 
 
+def _fixture_index(con):
+    """A GlossIndex over the fixture's own glosses, as 54 builds one."""
+    mod = importlib.import_module("concept_evidence")
+    return mod.GlossIndex(
+        g for (g,) in con.execute(
+            "SELECT gloss_en FROM sense WHERE gloss_en IS NOT NULL"))
+
+
 class LoadSenses(unittest.TestCase):
     def setUp(self):
         self.mod = importlib.import_module("54_build_concepts")
@@ -152,8 +160,9 @@ class FormConcepts(unittest.TestCase):
         self.mod = importlib.import_module("54_build_concepts")
 
     def _concepts(self, con=None):
-        views = self.mod.load_senses(con or _fixture_db())
-        return self.mod.form_concepts(views["hiwi"])
+        con = con or _fixture_db()
+        views = self.mod.load_senses(con)
+        return self.mod.form_concepts(views["hiwi"], _fixture_index(con))
 
     def test_williams_two_entries_never_share_a_concept(self):
         # Williams files 1250 and 1251 apart: that IS Williams saying these
@@ -181,8 +190,9 @@ class FormConcepts(unittest.TestCase):
         self.assertEqual(len(jerk[0]["members"]), 1)
 
     def test_every_sense_lands_in_exactly_one_concept(self):
-        views = self.mod.load_senses(_fixture_db())["hiwi"]
-        concepts = self.mod.form_concepts(views)
+        con = _fixture_db()
+        views = self.mod.load_senses(con)["hiwi"]
+        concepts = self.mod.form_concepts(views, _fixture_index(con))
         placed = [m["view"]["member_key"] for c in concepts for m in c["members"]]
         self.assertEqual(len(placed), len(set(placed)))
         self.assertEqual(set(placed), {v["member_key"] for v in views})
@@ -204,7 +214,8 @@ class FormConcepts(unittest.TestCase):
         con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en)"
                     " VALUES (15,5,1,'ridge of a hill')")
         con.commit()
-        for c in self.mod.form_concepts(self.mod.load_senses(con)["hiwi"]):
+        for c in self.mod.form_concepts(self.mod.load_senses(con)["hiwi"],
+                                         _fixture_index(con)):
             hws = {m["view"]["headword"].lower() for m in c["members"]}
             self.assertFalse({"hiwi", "hīwi"} <= hws, hws)
 
@@ -215,9 +226,10 @@ class Persist(unittest.TestCase):
 
     def _build(self, con):
         views = self.mod.load_senses(con)
+        index = _fixture_index(con)
         allc = []
         for key in sorted(views):
-            allc.extend(self.mod.form_concepts(views[key]))
+            allc.extend(self.mod.form_concepts(views[key], index))
         return self.mod.persist(con, allc)
 
     def test_it_writes_concepts_members_and_evidence(self):
@@ -346,9 +358,10 @@ class AllMembersRejected(unittest.TestCase):
 
     def _build(self):
         views = self.mod.load_senses(self.con)
+        index = _fixture_index(self.con)
         allc = []
         for key in sorted(views):
-            allc.extend(self.mod.form_concepts(views[key]))
+            allc.extend(self.mod.form_concepts(views[key], index))
         return self.mod.persist(self.con, allc)
 
     def _members_of(self, concept_id):
@@ -570,9 +583,10 @@ class RebuildSurvival(unittest.TestCase):
 
     def _run_54(self, con, mod):
         views = mod.load_senses(con)
+        index = _fixture_index(con)
         allc = []
         for key in sorted(views):
-            allc.extend(mod.form_concepts(views[key]))
+            allc.extend(mod.form_concepts(views[key], index))
         return mod.persist(con, allc)
 
     def test_the_window_preserves_a_confirmation(self):

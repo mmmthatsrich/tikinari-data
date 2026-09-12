@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 from concept_election import elect_gloss, elect_headword
-from concept_evidence import SEED_CONFIDENCE, blocks, confidence_for, lexeme_key, positive_evidence
+from concept_evidence import GlossIndex, SEED_CONFIDENCE, blocks, confidence_for, lexeme_key, positive_evidence
 
 
 def _norm(text):
@@ -108,7 +108,7 @@ def _seed_groups(views):
     return [groups[k] for k in sorted(groups, key=lambda k: (str(k),))]
 
 
-def form_concepts(views):
+def form_concepts(views, index):
     """Group one headword key's sense-views into concepts.
 
     Seeds attach to a concept only on positive evidence linking them to it, and
@@ -129,7 +129,7 @@ def form_concepts(views):
             evidence = []
             for s in seed:
                 for e in existing:
-                    found = positive_evidence(s, e)
+                    found = positive_evidence(s, e, index)
                     if found:
                         evidence.extend(found)
             if not evidence:
@@ -382,9 +382,16 @@ def persist(con, concepts):
 def run(write: bool) -> None:
     con = sqlite3.connect(DB_PATH)
     views = load_senses(con)
+    # Once per run, not once per pair: 0.6s over 150,037 glosses against
+    # ~1.15M pair comparisons. Built here rather than in concept_evidence so
+    # that module stays free of DB code.
+    index = GlossIndex(
+        g for (g,) in con.execute(
+            "SELECT gloss_en FROM sense WHERE gloss_en IS NOT NULL"))
+    print(f"gloss index: {len(index):,} glosses")
     concepts = []
     for key in sorted(views):
-        concepts.extend(form_concepts(views[key]))
+        concepts.extend(form_concepts(views[key], index))
 
     sizes = defaultdict(int)
     for c in concepts:

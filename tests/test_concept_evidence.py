@@ -72,10 +72,17 @@ def _sense(**kw):
 
 
 class PositiveEvidence(unittest.TestCase):
+    def setUp(self):
+        # Task 3 is a pure refactor: the index is accepted but the grading
+        # rule still counts shared words, so its contents cannot yet change
+        # any outcome. Task 4 is where it starts to matter.
+        self.idx = GlossIndex(["ridge of a hill", "the hill ridge",
+                               "ridge of a mountain", "of a the"])
+
     def test_a_citation_of_the_other_entry_is_the_strongest_evidence(self):
         a = _sense(source_id="te_matatiki", entry_id=10, cites=frozenset({99}))
         b = _sense(source_id="williams", entry_id=99)
-        kinds = [e["kind"] for e in positive_evidence(a, b)]
+        kinds = [e["kind"] for e in positive_evidence(a, b, self.idx)]
         self.assertIn("cites_source", kinds)
 
     def test_a_shared_example_sentence(self):
@@ -83,13 +90,13 @@ class PositiveEvidence(unittest.TestCase):
         a = _sense(source_id="ngata", examples=frozenset({s}))
         b = _sense(source_id="williams", examples=frozenset({s}))
         self.assertIn("shared_example",
-                      [e["kind"] for e in positive_evidence(a, b)])
+                      [e["kind"] for e in positive_evidence(a, b, self.idx)])
 
     def test_a_shared_citation(self):
         a = _sense(source_id="te_aka", citations=frozenset({"w 1971:54"}))
         b = _sense(source_id="williams", citations=frozenset({"w 1971:54"}))
         self.assertIn("attributed_quote",
-                      [e["kind"] for e in positive_evidence(a, b)])
+                      [e["kind"] for e in positive_evidence(a, b, self.idx)])
 
     def test_a_shared_cognate_set_is_NOT_evidence(self):
         # Every entry-to-cognate link in this corpus is match_method
@@ -98,13 +105,13 @@ class PositiveEvidence(unittest.TestCase):
         # would launder the one thing that is never evidence.
         a = _sense(source_id="te_aka", cognate_sets=frozenset({7}))
         b = _sense(source_id="williams", cognate_sets=frozenset({7, 9}))
-        self.assertEqual([], positive_evidence(a, b))
+        self.assertEqual([], positive_evidence(a, b, self.idx))
 
     def test_gloss_overlap_on_content_words(self):
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
         b = _sense(source_id="papakupu", gloss_en="ridge of a hill")
         self.assertIn("gloss_overlap",
-                      [e["kind"] for e in positive_evidence(a, b)])
+                      [e["kind"] for e in positive_evidence(a, b, self.idx)])
 
     def test_a_single_shared_word_is_weak_evidence(self):
         # 51,318 of 69,268 gloss overlaps rest on one word. Rating those
@@ -112,7 +119,7 @@ class PositiveEvidence(unittest.TestCase):
         # though it were well attested.
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
         b = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
-        kinds = [e["kind"] for e in positive_evidence(a, b)]
+        kinds = [e["kind"] for e in positive_evidence(a, b, self.idx)]
         self.assertIn("gloss_overlap_weak", kinds)
         self.assertNotIn("gloss_overlap", kinds)
 
@@ -126,8 +133,8 @@ class PositiveEvidence(unittest.TestCase):
         two = _sense(source_id="papakupu", gloss_en="the hill ridge")
         one = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
 
-        ordinary = positive_evidence(a, two)
-        weak = positive_evidence(a, one)
+        ordinary = positive_evidence(a, two, self.idx)
+        weak = positive_evidence(a, one, self.idx)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in ordinary])
         self.assertEqual(["gloss_overlap_weak"], [e["kind"] for e in weak])
         self.assertGreater(ordinary[0]["weight"], weak[0]["weight"])
@@ -138,12 +145,12 @@ class PositiveEvidence(unittest.TestCase):
         # 'of a the' must never link two senses.
         a = _sense(source_id="te_aka", gloss_en="of a the")
         b = _sense(source_id="papakupu", gloss_en="of a the")
-        self.assertEqual([], positive_evidence(a, b))
+        self.assertEqual([], positive_evidence(a, b, self.idx))
 
     def test_the_same_headword_alone_is_never_evidence(self):
         a = _sense(source_id="te_aka")
         b = _sense(source_id="williams")
-        self.assertEqual([], positive_evidence(a, b))
+        self.assertEqual([], positive_evidence(a, b, self.idx))
 
     def test_evidence_within_one_source_is_not_counted(self):
         # Seeding already handles within-source grouping; counting it again
@@ -151,7 +158,7 @@ class PositiveEvidence(unittest.TestCase):
         s = "kua pau katoa nga kai"
         a = _sense(source_id="ngata", examples=frozenset({s}))
         b = _sense(source_id="ngata", examples=frozenset({s}))
-        self.assertEqual([], positive_evidence(a, b))
+        self.assertEqual([], positive_evidence(a, b, self.idx))
 
     def test_every_kind_has_a_weight(self):
         for kind in ("cites_source", "shared_example", "attributed_quote",
@@ -167,7 +174,7 @@ class PositiveEvidence(unittest.TestCase):
     def test_detail_says_what_the_evidence_actually_was(self):
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
         b = _sense(source_id="papakupu", gloss_en="ridge of a hill")
-        detail = positive_evidence(a, b)[0]["detail"]
+        detail = positive_evidence(a, b, self.idx)[0]["detail"]
         self.assertIn("ridge", detail)
 
 
