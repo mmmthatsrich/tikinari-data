@@ -564,6 +564,154 @@ class RebuildSurvival(unittest.TestCase):
             "SELECT entry_id, sense_id FROM concept_member "
             " WHERE source_id='te_aka'").fetchone())
 
+    # -- the premature-54 window: delete_source_slice() has run, the source's
+    # re-import has not, and 54 runs anyway (an interrupted import, or
+    # 59_rebuild_derived.py landing between the two). --------------------
+
+    def _run_54(self, con, mod):
+        views = mod.load_senses(con)
+        allc = []
+        for key in sorted(views):
+            allc.extend(mod.form_concepts(views[key]))
+        return mod.persist(con, allc)
+
+    def test_the_window_preserves_a_confirmation(self):
+        # A source with zero entries is not evidence its senses left the
+        # corpus -- it is evidence this build ran mid-rebuild. The
+        # confirmation must survive a 54 run in that window.
+        bu = importlib.import_module("50_build_unified")
+        mod = importlib.import_module("54_build_concepts")
+        con = _fixture_db()
+        self._run_54(con, mod)
+        key = ("williams", "1251", 1)
+        con.execute(
+            "UPDATE concept_member SET status='confirmed' WHERE source_id=? "
+            " AND source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        bu.delete_source_slice(con, "williams")
+        con.commit()
+
+        self._run_54(con, mod)          # the premature 54
+
+        row = con.execute(
+            "SELECT status FROM concept_member WHERE source_id=? AND "
+            " source_entry_id=? AND sense_number IS ?", key).fetchone()
+        self.assertEqual(("confirmed",), row)
+
+    def test_the_window_preserves_a_rejection(self):
+        # Same shape, a rejected row. This one fails against the code that
+        # predates this guard AND against the code 9553fae shipped: the
+        # cleanup loop has never checked whether a judged key's source was
+        # still live, only whether this build re-proposed the address.
+        bu = importlib.import_module("50_build_unified")
+        mod = importlib.import_module("54_build_concepts")
+        con = _fixture_db()
+        self._run_54(con, mod)
+        key = ("williams", "1251", 1)
+        con.execute(
+            "UPDATE concept_member SET status='rejected' WHERE source_id=? "
+            " AND source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        bu.delete_source_slice(con, "williams")
+        con.commit()
+
+        self._run_54(con, mod)          # the premature 54
+
+        row = con.execute(
+            "SELECT status FROM concept_member WHERE source_id=? AND "
+            " source_entry_id=? AND sense_number IS ?", key).fetchone()
+        self.assertEqual(("rejected",), row)
+
+    def test_reimport_reresolves_the_preserved_judgement(self):
+        # After the window closes and the source's rows come back, the
+        # judgement must re-resolve onto a real concept with its entry_id/
+        # sense_id cache pointed at the restored rows, not left NULL.
+        bu = importlib.import_module("50_build_unified")
+        mod = importlib.import_module("54_build_concepts")
+        con = _fixture_db()
+        self._run_54(con, mod)
+        key = ("williams", "1251", 1)
+        con.execute(
+            "UPDATE concept_member SET status='confirmed' WHERE source_id=? "
+            " AND source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        # Snapshot williams' rows before the delete so they can be restored
+        # -- this stands in for the source's re-import.
+        entry_rows = con.execute(
+            "SELECT id, source_id, source_entry_id, headword, "
+            " headword_search, part_of_speech, part_of_speech_en, locator "
+            " FROM entry WHERE source_id='williams'").fetchall()
+        sense_rows = con.execute(
+            "SELECT id, entry_id, sense_number, gloss_en, gloss_mi, "
+            " part_of_speech, part_of_speech_en FROM sense WHERE entry_id IN "
+            " (SELECT id FROM entry WHERE source_id='williams')").fetchall()
+
+        bu.delete_source_slice(con, "williams")
+        con.commit()
+        self._run_54(con, mod)          # the premature 54
+
+        con.executemany(
+            "INSERT INTO entry (id, source_id, source_entry_id, headword, "
+            " headword_search, part_of_speech, part_of_speech_en, locator) "
+            " VALUES (?,?,?,?,?,?,?,?)", entry_rows)
+        con.executemany(
+            "INSERT INTO sense (id, entry_id, sense_number, gloss_en, "
+            " gloss_mi, part_of_speech, part_of_speech_en) "
+            " VALUES (?,?,?,?,?,?,?)", sense_rows)
+        con.commit()
+
+        self._run_54(con, mod)          # the re-import's rebuild
+
+        concept_id, status, entry_id, sense_id = con.execute(
+            "SELECT concept_id, status, entry_id, sense_id FROM "
+            " concept_member WHERE source_id=? AND source_entry_id=? "
+            " AND sense_number IS ?", key).fetchone()
+        self.assertEqual("confirmed", status)
+        self.assertIsNotNone(entry_id)
+        self.assertIsNotNone(sense_id)
+        self.assertEqual(1, con.execute(
+            "SELECT COUNT(*) FROM concept WHERE id=?",
+            (concept_id,)).fetchone()[0])
+
+    def test_a_permanently_retired_source_keeps_its_judged_row_forever(self):
+        # RECORDED TRADE, not a bug -- see the comment above the discard
+        # loop in persist(). 54 cannot tell "this source has zero entries
+        # because the import is mid-flight" from "this source is gone for
+        # good": both look identical at build time. The guard that saves
+        # the interrupted-import case (the two tests above) therefore also
+        # protects a genuine permanent retirement, and this is the cost:
+        # a retired source's judged row, and the concept it keeps alive,
+        # now survive every rebuild for as long as the source stays absent.
+        # Undoing this needs a deliberate cleanup pass; nothing in 54 can
+        # decide it on its own.
+        bu = importlib.import_module("50_build_unified")
+        mod = importlib.import_module("54_build_concepts")
+        con = _fixture_db()
+        self._run_54(con, mod)
+        key = ("williams", "1251", 1)
+        con.execute(
+            "UPDATE concept_member SET status='confirmed' WHERE source_id=? "
+            " AND source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        bu.delete_source_slice(con, "williams")
+        con.commit()
+
+        self._run_54(con, mod)
+        self._run_54(con, mod)          # a second rebuild; still never re-imported
+
+        concept_id, status = con.execute(
+            "SELECT concept_id, status FROM concept_member WHERE "
+            " source_id=? AND source_entry_id=? AND sense_number IS ?",
+            key).fetchone()
+        self.assertEqual("confirmed", status)
+        self.assertEqual(1, con.execute(
+            "SELECT COUNT(*) FROM concept WHERE id=?",
+            (concept_id,)).fetchone()[0])
+
 
 if __name__ == "__main__":
     unittest.main()
