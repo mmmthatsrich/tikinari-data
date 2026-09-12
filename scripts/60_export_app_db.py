@@ -75,6 +75,11 @@ APP_TABLES = [
     # Both reference entry(id) and sense(id), so they follow those.
     "derivation",
     "loan_origin",
+    # Concepts: one word as eleven dictionaries record it. Filtered below —
+    # an uncertain grouping must not reach users even by accident. The
+    # evidence table stays in staging; it is sweep-facing detail.
+    "concept",
+    "concept_member",
 ]
 
 # FTS5 virtual tables rebuilt from their content tables after the copy.
@@ -127,6 +132,22 @@ def export():
         out.execute(f'INSERT INTO main."{t}" SELECT * FROM stg."{t}"')
         cnt = out.execute(f'SELECT COUNT(*) FROM main."{t}"').fetchone()[0]
         print(f"  table  {t:<22} {cnt:>8,} rows")
+
+    # 1b. concepts: filter to the threshold the evidence supports. An
+    # uncertain grouping must not reach users even by accident — delete the
+    # concepts that fail first, then the members whose concept is now gone
+    # (concept_member.concept_id references concept; the other order would
+    # leave orphaned members behind).
+    out.execute(
+        "DELETE FROM concept WHERE confidence = 'uncertain' "
+        "  AND status <> 'confirmed'")
+    out.execute(
+        "DELETE FROM concept_member WHERE concept_id NOT IN "
+        "  (SELECT id FROM concept)")
+    out.commit()
+    kept_c = out.execute("SELECT COUNT(*) FROM concept").fetchone()[0]
+    kept_m = out.execute("SELECT COUNT(*) FROM concept_member").fetchone()[0]
+    print(f"  filter concept/concept_member kept {kept_c:,} / {kept_m:,}")
 
     # 2. FTS virtual tables — create then rebuild from content
     for f in APP_FTS:

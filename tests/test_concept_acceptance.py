@@ -107,5 +107,31 @@ class Invariants(unittest.TestCase):
             "  ON m.id = c.gloss_en_from WHERE m.source_id = 'ngata'"), 0)
 
 
+class AppExport(unittest.TestCase):
+    """An uncertain grouping must not reach users, even by accident."""
+
+    APP = Path(__file__).parent.parent / "data" / "maori_dict.db"
+
+    def test_the_app_has_the_concept_tables(self):
+        if not self.APP.exists():
+            self.skipTest("app DB not built")
+        con = sqlite3.connect(self.APP)
+        names = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        con.close()
+        self.assertTrue({"concept", "concept_member"} <= names)
+
+    def test_no_uncertain_concept_reaches_the_app(self):
+        if not self.APP.exists():
+            self.skipTest("app DB not built")
+        con = sqlite3.connect(self.APP)
+        n = con.execute(
+            "SELECT COUNT(*) FROM concept "
+            " WHERE confidence = 'uncertain' AND status <> 'confirmed'"
+        ).fetchone()[0]
+        con.close()
+        self.assertEqual(n, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
