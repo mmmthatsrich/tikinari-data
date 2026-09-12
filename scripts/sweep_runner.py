@@ -22,6 +22,7 @@ Driven either as a library or from the command line:
 """
 import argparse
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -33,6 +34,13 @@ from sweep_findings import ACTIONS, KINDS, record_finding
 from sweep_patch import PATCHABLE, apply_patches, record_patch
 from sweep_queue import claim_next, complete, progress, release_stale
 from sweep_rubric import VERSION
+
+# A membership is a judgement, so it changes only through a recorded finding.
+# The spec also lists split and merge. They are deliberately NOT here: both are
+# expressible as confirm/reject on the memberships involved, and a first-class
+# split needs a rule for which concept keeps the id that nothing yet depends on.
+CONCEPT_ACTIONS = {"confirm_member", "reject_member"}
+_MEMBER_RE = re.compile(r"^([^:]+):([^#]+)(?:#(\d+))?$")
 
 
 def claim(con, session_id: str, tier: int | None = None):
@@ -81,7 +89,31 @@ def _validate(payload) -> dict:
             for req in ("source_id", "source_entry_id", "reason"):
                 if not (str(p.get(req) or "")).strip():
                     raise ValueError(f"{at}: {req} is required")
+        for j, a in enumerate(f.get("concept_actions") or []):
+            at = f"{where}.concept_actions[{j}]"
+            if a.get("action") not in CONCEPT_ACTIONS:
+                raise ValueError(f"{at}: unknown action {a.get('action')!r}")
+            if not (a.get("member") or "").strip():
+                raise ValueError(f"{at}: member is required")
     return payload
+
+
+def _apply_concept_actions(con, finding):
+    """Mark a membership confirmed or rejected. Raises if it does not exist."""
+    for a in finding.get("concept_actions") or []:
+        m = _MEMBER_RE.match(a["member"].strip())
+        if not m:
+            raise ValueError(f"unparseable member {a['member']!r}")
+        src, seid, sn = m.group(1), m.group(2), m.group(3)
+        sn = int(sn) if sn else None
+        status = ("confirmed" if a["action"] == "confirm_member"
+                  else "rejected")
+        cur = con.execute(
+            "UPDATE concept_member SET status = ? WHERE source_id = ? "
+            "  AND source_entry_id = ? AND sense_number IS ?",
+            (status, src, seid, sn))
+        if cur.rowcount == 0:
+            raise ValueError(f"no concept membership for {a['member']!r}")
 
 
 def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> dict:
@@ -122,6 +154,14 @@ def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> d
                     session_id=session_id, cluster_key=key,
                     rubric_version=rubric_version)
                 n_patches += 1
+        # Concept membership changes are applied only after every finding and
+        # patch in the payload is safely recorded (each of those calls commits
+        # as it goes). Nothing here has committed yet, so if any membership
+        # turns out not to exist, `except` below can roll this part back
+        # cleanly without touching the findings/patches already on disk —
+        # those are unwound by the compensating deletes instead.
+        for f in payload.get("findings") or []:
+            _apply_concept_actions(con, f)
         applied = apply_patches(con) if n_patches else {"applied": 0, "stale": 0,
                                                        "missing": 0}
         complete(con, key, rubric_version=rubric_version,
@@ -133,6 +173,14 @@ def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> d
         # independent: cleanup that can itself fail would strand the cluster
         # in_progress until the stale-release, which is the one outcome worse
         # than the original error.
+        #
+        # Discard first: any concept_member update above is still uncommitted
+        # (record_finding/record_patch already committed themselves as they
+        # went), so this undoes it without touching a single committed row.
+        try:
+            con.rollback()
+        except Exception:
+            pass
         for stmt, params in (
             ("DELETE FROM sweep_patch WHERE cluster_key = ? AND session_id = ?",
              (key, session_id)),

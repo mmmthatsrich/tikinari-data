@@ -251,6 +251,98 @@ class Atomicity(unittest.TestCase):
             record(con, "S2", _payload())
 
 
+class ConceptActions(unittest.TestCase):
+    """Concept decisions nest inside findings, exactly as patches do: a
+    membership cannot change without a recorded reason."""
+
+    def test_a_confirm_marks_the_membership(self):
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "te_aka:79#1",
+            "summary": "same word as williams:54",
+            "action": "applied",
+            "concept_actions": [{"action": "confirm_member",
+                                 "member": "te_aka:79#1"}]}])
+        record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=1").fetchone()[0],
+            "confirmed")
+
+    def test_a_reject_marks_the_membership(self):
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "homograph", "subject": "te_aka:79#1",
+            "summary": "not actually the same word",
+            "action": "applied",
+            "concept_actions": [{"action": "reject_member",
+                                 "member": "te_aka:79#1"}]}])
+        record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=1").fetchone()[0],
+            "rejected")
+
+    def test_a_member_with_no_sense_number_matches_null(self):
+        con = _db()
+        con.execute("INSERT INTO concept_member (id, concept_id, source_id, "
+                    " source_entry_id, sense_number, status, confidence) "
+                    " VALUES (2,1,'paekupu','himoemoe',NULL,'proposed','probable')")
+        con.commit()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "paekupu:himoemoe",
+            "summary": "matches this cluster",
+            "action": "applied",
+            "concept_actions": [{"action": "confirm_member",
+                                 "member": "paekupu:himoemoe"}]}])
+        record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=2").fetchone()[0],
+            "confirmed")
+
+    def test_an_unknown_action_is_refused(self):
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "te_aka:79#1", "summary": "y",
+            "concept_actions": [{"action": "explode",
+                                 "member": "te_aka:79#1"}]}])
+        with self.assertRaises(ValueError):
+            record(con, "S1", p)
+
+    def test_an_unknown_member_is_refused(self):
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "te_aka:79#1", "summary": "y",
+            "concept_actions": [{"action": "confirm_member",
+                                 "member": "nosuch:9#9"}]}])
+        with self.assertRaises(ValueError):
+            record(con, "S1", p)
+
+    def test_a_bad_concept_action_leaves_the_membership_untouched(self):
+        # All-or-nothing: the payload's earlier patch must not survive a
+        # later concept_action that fails validation or application.
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "te_aka:79#1", "summary": "y",
+            "action": "applied",
+            "concept_actions": [{"action": "confirm_member",
+                                 "member": "nosuch:9#9"}]}])
+        with self.assertRaises(ValueError):
+            record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=1").fetchone()[0],
+            "proposed")
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM sweep_finding")
+                         .fetchone()[0], 0)
+        self.assertEqual(
+            con.execute("SELECT gloss_en FROM sense WHERE id=10").fetchone()[0],
+            "weft, woof")
+
+
 class PayloadValidation(unittest.TestCase):
     def test_a_payload_must_name_its_cluster(self):
         con = _db()
