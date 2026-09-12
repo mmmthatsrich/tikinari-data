@@ -275,8 +275,8 @@ class Persist(unittest.TestCase):
     def test_a_rejected_member_does_not_keep_its_old_concept_alive(self):
         # A rejected membership says this sense does NOT belong. Counting it
         # as a live member kept the pre-rebuild concept row alive: stale
-        # elected forms, dangling headword_from, no evidence rows — and it
-        # passed the export filter, so it shipped.
+        # elected forms, a headword_from with no entry behind it, no
+        # evidence rows — and it passed the export filter, so it shipped.
         con = _fixture_db()
         self._reject_papakupu_and_rebuild(con)
         stale = con.execute(

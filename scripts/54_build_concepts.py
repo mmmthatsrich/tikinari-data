@@ -192,7 +192,11 @@ def _derived_long(con):
 
 def persist(con, concepts):
     """Write concepts, preserving anything a human or the sweep has judged —
-    except a judgement whose grouping has left the corpus, which is discarded with it."""
+    except a judgement whose (source_id, source_entry_id, sense_number) this
+    build no longer proposes, which is discarded with it. The address is the
+    test, not the grouping: a judgement follows its sense across a headword
+    edit that moves it to a different concept, and is dropped when the sense
+    is renumbered or leaves the corpus."""
     judged = {}
     for cid, src, seid, sn, status, conf in con.execute(
             "SELECT concept_id, source_id, source_entry_id, sense_number, "
@@ -305,11 +309,12 @@ def persist(con, concepts):
     #
     # Every member of every grouping — live or rejected — has been repointed
     # onto its rebuilt concept, so a judged row still naming an old concept is
-    # one this build never saw: its grouping has left the corpus. The
-    # exclusion is moot (the thing it was kept out of no longer exists) and
-    # leaving it would hold the dead concept alive below as a carcass with
-    # stale elected forms and a dangling headword_from — which is how one
-    # passed the export filter and shipped, once.
+    # one this build never proposed: its address has left the corpus. The
+    # judgement is moot (a rejection's concept no longer exists; a
+    # confirmation has nothing left to confirm) and leaving it would hold the
+    # dead concept alive below as a carcass with stale elected forms and a
+    # headword_from pointing at a member with no entry behind it — which is
+    # how one passed the export filter and shipped, once.
     for key in [k for k in judged if k not in rebuilt]:
         con.execute("DELETE FROM concept_member WHERE source_id=? AND "
                     " source_entry_id=? AND sense_number IS ?", key)
