@@ -91,11 +91,14 @@ class PositiveEvidence(unittest.TestCase):
         self.assertIn("attributed_quote",
                       [e["kind"] for e in positive_evidence(a, b)])
 
-    def test_a_shared_cognate_set(self):
+    def test_a_shared_cognate_set_is_NOT_evidence(self):
+        # Every entry-to-cognate link in this corpus is match_method
+        # 'headword_exact' — matched on spelling, never on meaning. So two
+        # senses share a set BECAUSE they share a headword, and counting it
+        # would launder the one thing that is never evidence.
         a = _sense(source_id="te_aka", cognate_sets=frozenset({7}))
         b = _sense(source_id="williams", cognate_sets=frozenset({7, 9}))
-        self.assertIn("shared_cognate_set",
-                      [e["kind"] for e in positive_evidence(a, b)])
+        self.assertEqual([], positive_evidence(a, b))
 
     def test_gloss_overlap_on_content_words(self):
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
@@ -124,8 +127,14 @@ class PositiveEvidence(unittest.TestCase):
 
     def test_every_kind_has_a_weight(self):
         for kind in ("cites_source", "shared_example", "attributed_quote",
-                     "shared_cognate_set", "gloss_overlap"):
+                     "gloss_overlap"):
             self.assertIn(kind, EVIDENCE_WEIGHT)
+
+    def test_shared_cognate_set_is_not_a_kind(self):
+        # See the comment above EVIDENCE_WEIGHT in concept_evidence.py: every
+        # cognate link in this corpus is match_method 'headword_exact', so
+        # this kind would only ever launder same-headword into evidence.
+        self.assertNotIn("shared_cognate_set", EVIDENCE_WEIGHT)
 
     def test_detail_says_what_the_evidence_actually_was(self):
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")

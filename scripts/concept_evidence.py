@@ -37,11 +37,19 @@ def lexeme_key(source_id, source_entry_id, headword_search, locator):
 
 # Ordered strongest first. The confidence a membership earns is the strongest
 # kind present, so these are tiers rather than a sum.
+#
+# There is no 'shared_cognate_set' kind. Every row in pollex_entry_links (and
+# every ETY_entry_link row that reached a sense) carries match_method
+# 'headword_exact' — matched on spelling, never on meaning. So two senses
+# 'share a cognate set' precisely because they share a headword_search, which
+# would launder same-headword into a 'probable' evidence kind when
+# same-headword is the one thing this design says is NEVER evidence (see
+# positive_evidence's docstring). Removed after the Task 10 fix-round audit
+# found it merging ten distinct 'hoi' words into one concept.
 EVIDENCE_WEIGHT = {
     "cites_source":       1.0,   # Te Matatiki citing 'himoemoe W.50'
     "shared_example":     0.9,   # two sources printing the same sentence
     "attributed_quote":   0.7,   # Te Aka citing 'W 1971:54'
-    "shared_cognate_set": 0.6,
     "gloss_overlap":      0.5,
 }
 
@@ -49,7 +57,6 @@ EVIDENCE_CONFIDENCE = {
     "cites_source":       "certain",
     "shared_example":     "certain",
     "attributed_quote":   "probable",
-    "shared_cognate_set": "probable",
     "gloss_overlap":      "probable",
 }
 
@@ -61,13 +68,30 @@ _STOPWORDS = frozenset({
 
 # The one tuning parameter in the design. Set by measuring against the judged
 # calibration clusters (Task 10, first real build against the full corpus).
+#
 # 2 was too tight: himoemoe's six sources gloss the same word as terse single
 # words ('Acidic', 'Acid, sour.') that only ever share ONE content word with
 # each other, so a floor of 2 fragmented it into four unconnected concepts
-# instead of the one it is. Lowered to 1 unifies himoemoe (hepatakakupu,
-# te_aka, te_matatiki, williams all reachable via a single shared word) while
-# still passing hiwi, which stays split on its own stronger signals (block
-# rules, cites/cognate evidence) rather than on gloss overlap.
+# instead of the one it is. Lowered to 1.
+#
+# Re-checked at 1 vs 2 after shared_cognate_set was removed (see
+# EVIDENCE_WEIGHT), against a wider set of hand-judged clusters (hiwi, hoi,
+# huatea, himoemoe, huripari, hoatu, itinga): 1 matches or beats 2 on every
+# one of them. Raising to 2 buys nothing on the cluster that motivated the
+# audit (hoi's mis-merge was shared_cognate_set, not gloss_overlap — at
+# either threshold te_aka's own entry 1331 still bundles 'ear lobe' together
+# with 'far off, distant' under one lexeme, because te_aka encodes them as
+# one entry and the design trusts a source's own entry-per-lexeme structure)
+# and it actively breaks two correct unifications: huripari (ngata + paekupu
+# + te_aka + williams, one word, only ever sharing ONE content word like
+# 'tornado' or 'wind' per pair) and hoatu (same pattern with 'give'/'hand
+# over'), both of which fragment into 3-4 pieces at threshold 2 for no
+# corresponding gain elsewhere. hiwi's raw count happens to hit its judged
+# total (10) at threshold 2, but only because it splits an evidently correct
+# merge (te_aka 'to pull back, jerk' + williams 'jerk a fishing line') apart
+# — a coincidence, not a fix; hiwi's real remaining errors (williams' entries
+# 1251 and 1252 each bundle 2-4 of the judged eight words under one entry
+# number) are a source-structure limit neither value touches.
 GLOSS_OVERLAP_MIN = 1
 
 
@@ -105,10 +129,9 @@ def positive_evidence(a, b):
         found.append(("attributed_quote",
                       f"both cite {sorted(shared_cit)[0][:40]!r}"))
 
-    shared_sets = a["cognate_sets"] & b["cognate_sets"]
-    if shared_sets:
-        found.append(("shared_cognate_set",
-                      f"{len(shared_sets)} shared cognate set(s)"))
+    # No shared_cognate_set check: see the comment above EVIDENCE_WEIGHT.
+    # cognate_sets is still carried on the sense-view for possible later
+    # display use, but it is deliberately not consulted here.
 
     overlap = _content_words(a["gloss_en"]) & _content_words(b["gloss_en"])
     if len(overlap) >= GLOSS_OVERLAP_MIN:
