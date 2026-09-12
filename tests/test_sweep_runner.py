@@ -14,10 +14,12 @@ import sqlite3
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
+import sweep_runner
 from sweep_findings import FINDING_DDL, findings_for
 from sweep_patch import PATCH_DDL
 from sweep_queue import QUEUE_DDL, seed_clusters
@@ -341,6 +343,92 @@ class ConceptActions(unittest.TestCase):
         self.assertEqual(
             con.execute("SELECT gloss_en FROM sense WHERE id=10").fetchone()[0],
             "weft, woof")
+
+    def test_a_later_findings_bad_member_undoes_an_earlier_ones_confirm(self):
+        # Two findings: the first confirms a real membership, the second
+        # names one that does not exist. Nothing in the payload may survive:
+        # not the first membership change, not either finding. This is the
+        # scenario that only proved itself by hand in round 1 — the earlier
+        # single-finding version of this test passed even with no rollback
+        # at all, because the bad member never touched a row to begin with.
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[
+            {"kind": "duplicate", "subject": "te_aka:79#1", "summary": "a",
+             "concept_actions": [{"action": "confirm_member",
+                                  "member": "te_aka:79#1"}]},
+            {"kind": "duplicate", "subject": "x", "summary": "b",
+             "concept_actions": [{"action": "confirm_member",
+                                  "member": "nosuch:9#9"}]},
+        ])
+        with self.assertRaises(ValueError):
+            record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=1").fetchone()[0],
+            "proposed")
+        self.assertEqual(con.execute("SELECT COUNT(*) FROM sweep_finding")
+                         .fetchone()[0], 0)
+
+    def test_a_member_with_the_wrong_sense_number_is_refused(self):
+        # williams:1251#9 is well-formed and williams:1251 exists, but only
+        # at sense #1 -- the address must be rejected outright at
+        # validation, not treated as a no-op that quietly does nothing.
+        con = _db()
+        con.execute("INSERT INTO concept_member (id, concept_id, source_id, "
+                    " source_entry_id, sense_number, status, confidence) "
+                    " VALUES (2,1,'williams','1251',1,'proposed','probable')")
+        con.commit()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "williams:1251#9", "summary": "y",
+            "concept_actions": [{"action": "confirm_member",
+                                 "member": "williams:1251#9"}]}])
+        with self.assertRaises(ValueError):
+            record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=2").fetchone()[0],
+            "proposed")
+
+    def test_the_rollback_undoes_a_membership_the_row_race_would_otherwise_commit(self):
+        # Defense in depth: _validate resolves every member up front, so in
+        # ordinary use _apply_concept_actions cannot fail. But it is not the
+        # only thing that could fail after a membership is already applied
+        # and before the payload finishes, so record()'s rollback has to
+        # still work for that case. This simulates it: the first finding's
+        # confirm succeeds and is (deliberately) left uncommitted, then the
+        # second finding's apply is made to raise -- standing in for
+        # anything going wrong after a successful membership change and
+        # before record()'s own final commit.
+        con = _db()
+        con.execute("INSERT INTO concept_member (id, concept_id, source_id, "
+                    " source_entry_id, sense_number, status, confidence) "
+                    " VALUES (2,1,'williams','54',1,'proposed','probable')")
+        con.commit()
+        claim(con, "S1")
+        p = _payload(findings=[
+            {"kind": "duplicate", "subject": "te_aka:79#1", "summary": "a",
+             "concept_actions": [{"action": "confirm_member",
+                                  "member": "te_aka:79#1"}]},
+            {"kind": "duplicate", "subject": "williams:54#1", "summary": "b",
+             "concept_actions": [{"action": "confirm_member",
+                                  "member": "williams:54#1"}]},
+        ])
+        real_apply = sweep_runner._apply_concept_actions
+        calls = []
+
+        def flaky_apply(con, finding):
+            calls.append(finding)
+            if len(calls) == 2:
+                raise RuntimeError("something else went wrong right here")
+            real_apply(con, finding)
+
+        with mock.patch.object(sweep_runner, "_apply_concept_actions",
+                               side_effect=flaky_apply):
+            with self.assertRaises(RuntimeError):
+                record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE id=1").fetchone()[0],
+            "proposed")
 
 
 class PayloadValidation(unittest.TestCase):

@@ -52,8 +52,29 @@ def claim(con, session_id: str, tier: int | None = None):
     return key, batch, render(batch)
 
 
-def _validate(payload) -> dict:
-    """Check the whole payload before a single row is written."""
+def _parse_member(addr: str):
+    """(source_id, source_entry_id, sense_number) from 'source:entry#sense'.
+
+    sense_number is None when the address has no '#sense' — a NULL
+    sense_number, matched with `IS`, never `=`, since SQLite's `=` never
+    matches NULL.
+    """
+    m = _MEMBER_RE.match(addr.strip())
+    if not m:
+        raise ValueError(f"unparseable member {addr!r}")
+    src, seid, sn = m.group(1), m.group(2), m.group(3)
+    return src, seid, (int(sn) if sn else None)
+
+
+def _validate(con, payload) -> dict:
+    """Check the whole payload before a single row is written.
+
+    This includes resolving every concept_action's member address against
+    concept_member: a membership that does not exist is caught here, before
+    the findings loop begins, rather than discovered mid-apply. That is what
+    lets the apply pass run without a real prospect of failing partway
+    through a payload that already validated.
+    """
     if isinstance(payload, (str, bytes)):
         payload = json.loads(payload)
     if not isinstance(payload, dict):
@@ -93,19 +114,29 @@ def _validate(payload) -> dict:
             at = f"{where}.concept_actions[{j}]"
             if a.get("action") not in CONCEPT_ACTIONS:
                 raise ValueError(f"{at}: unknown action {a.get('action')!r}")
-            if not (a.get("member") or "").strip():
+            member = (a.get("member") or "").strip()
+            if not member:
                 raise ValueError(f"{at}: member is required")
+            src, seid, sn = _parse_member(member)
+            row = con.execute(
+                "SELECT 1 FROM concept_member WHERE source_id = ? "
+                "  AND source_entry_id = ? AND sense_number IS ?",
+                (src, seid, sn)).fetchone()
+            if row is None:
+                raise ValueError(f"{at}: no concept membership for {member!r}")
     return payload
 
 
 def _apply_concept_actions(con, finding):
-    """Mark a membership confirmed or rejected. Raises if it does not exist."""
+    """Mark a membership confirmed or rejected.
+
+    `_validate` already resolved every member address against concept_member,
+    so the rowcount == 0 case below should not occur in practice. It stays as
+    defence in depth — belt, not the buckle — for the unlikely case of a row
+    disappearing between validation and here.
+    """
     for a in finding.get("concept_actions") or []:
-        m = _MEMBER_RE.match(a["member"].strip())
-        if not m:
-            raise ValueError(f"unparseable member {a['member']!r}")
-        src, seid, sn = m.group(1), m.group(2), m.group(3)
-        sn = int(sn) if sn else None
+        src, seid, sn = _parse_member(a["member"])
         status = ("confirmed" if a["action"] == "confirm_member"
                   else "rejected")
         cur = con.execute(
@@ -118,7 +149,7 @@ def _apply_concept_actions(con, finding):
 
 def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> dict:
     """Write a cluster's findings and patches and close it, all or nothing."""
-    payload = _validate(payload)
+    payload = _validate(con, payload)
     key = payload["cluster_key"]
 
     held = con.execute(
@@ -154,12 +185,21 @@ def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> d
                     session_id=session_id, cluster_key=key,
                     rubric_version=rubric_version)
                 n_patches += 1
-        # Concept membership changes are applied only after every finding and
-        # patch in the payload is safely recorded (each of those calls commits
-        # as it goes). Nothing here has committed yet, so if any membership
-        # turns out not to exist, `except` below can roll this part back
-        # cleanly without touching the findings/patches already on disk —
-        # those are unwound by the compensating deletes instead.
+        # Concept membership changes are applied after every finding and patch
+        # in the payload is recorded. `_validate` already resolved every
+        # member address, so this loop is not expected to raise — the real
+        # guarantee is the pre-flight check, not what follows here.
+        #
+        # The `con.rollback()` in `except` below is defence in depth, not the
+        # primary mechanism, and its safety window is narrower than it looks:
+        # apply_patches() and complete() each call con.commit() themselves,
+        # and SQLite's commit flushes the *entire* pending transaction on the
+        # connection, not just the caller's own statements. So the instant
+        # apply_patches() runs (whenever n_patches > 0), any concept_member
+        # update made here is committed right along with it — rollback can
+        # only undo this loop's work if something raises before that point.
+        # That is fine today because nothing downstream of a successful pass
+        # here is expected to fail, but it holds by call ordering, not design.
         for f in payload.get("findings") or []:
             _apply_concept_actions(con, f)
         applied = apply_patches(con) if n_patches else {"applied": 0, "stale": 0,
@@ -174,9 +214,11 @@ def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> d
         # in_progress until the stale-release, which is the one outcome worse
         # than the original error.
         #
-        # Discard first: any concept_member update above is still uncommitted
-        # (record_finding/record_patch already committed themselves as they
-        # went), so this undoes it without touching a single committed row.
+        # Discard first: if _apply_concept_actions raised (the only case this
+        # rollback is meant for), nothing past it has run — apply_patches()
+        # and complete() have not committed yet — so any concept_member
+        # update made above is still uncommitted and this undoes it without
+        # touching a single row record_finding/record_patch already committed.
         try:
             con.rollback()
         except Exception:
