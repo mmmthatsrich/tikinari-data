@@ -676,6 +676,60 @@ class RebuildSurvival(unittest.TestCase):
             "SELECT COUNT(*) FROM concept WHERE id=?",
             (concept_id,)).fetchone()[0])
 
+    def test_a_source_with_entries_but_no_senses_keeps_its_judged_row(self):
+        # E1 — a source builder that emits entries but drops every sense.
+        # load_senses() JOINs sense to entry, so a senseless source proposes
+        # nothing at all this build; its entry rows are still there, and a
+        # guard keyed on "does entry have rows for this source" reads that as
+        # live and destroys the judgement anyway.
+        mod = importlib.import_module("54_build_concepts")
+        con = _fixture_db()
+        self._run_54(con, mod)
+        key = ("papakupu", "442", 1)
+        con.execute(
+            "UPDATE concept_member SET status='confirmed' WHERE source_id=? "
+            " AND source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        con.execute(
+            "DELETE FROM sense WHERE entry_id IN "
+            " (SELECT id FROM entry WHERE source_id='papakupu')")
+        con.commit()
+
+        self._run_54(con, mod)
+
+        row = con.execute(
+            "SELECT status FROM concept_member WHERE source_id=? AND "
+            " source_entry_id=? AND sense_number IS ?", key).fetchone()
+        self.assertEqual(("confirmed",), row)
+
+    def test_a_source_with_entries_but_null_headword_search_keeps_its_judged_row(self):
+        # E2 — a source builder that stops populating headword_search.
+        # Entries and senses both still exist, but load_senses()'s query
+        # requires headword_search IS NOT NULL, so this source proposes
+        # nothing either -- same failure mode as E1, a different column.
+        # This is the brief's own named trigger: "a source builder that
+        # emits nothing" is reachable through this door.
+        mod = importlib.import_module("54_build_concepts")
+        con = _fixture_db()
+        self._run_54(con, mod)
+        key = ("papakupu", "442", 1)
+        con.execute(
+            "UPDATE concept_member SET status='confirmed' WHERE source_id=? "
+            " AND source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        con.execute(
+            "UPDATE entry SET headword_search=NULL WHERE source_id='papakupu'")
+        con.commit()
+
+        self._run_54(con, mod)
+
+        row = con.execute(
+            "SELECT status FROM concept_member WHERE source_id=? AND "
+            " source_entry_id=? AND sense_number IS ?", key).fetchone()
+        self.assertEqual(("confirmed",), row)
+
     def test_a_permanently_retired_source_keeps_its_judged_row_forever(self):
         # RECORDED TRADE, not a bug -- see the comment above the discard
         # loop in persist(). 54 cannot tell "this source has zero entries
@@ -711,6 +765,31 @@ class RebuildSurvival(unittest.TestCase):
         self.assertEqual(1, con.execute(
             "SELECT COUNT(*) FROM concept WHERE id=?",
             (concept_id,)).fetchone()[0])
+
+        # The trade, pinned properly: it is not enough that the row and its
+        # concept survive -- a half-fix that nulled the carcass's elected
+        # forms would still pass the two assertions above. The recorded cost
+        # (see the comment above the discard loop in persist()) is that the
+        # carcass keeps its STALE elected headword and ships through
+        # filter_concepts() alongside the live concept for the same word.
+        self.assertIsNotNone(con.execute(
+            "SELECT headword FROM concept WHERE id=?",
+            (concept_id,)).fetchone()[0])
+        # ... which is exactly what trips the acceptance invariant at
+        # tests/test_concept_acceptance.py:91
+        # (test_an_elected_headword_was_written_by_a_member), reproduced here
+        # fixture-scoped the way
+        # test_a_grouping_that_leaves_the_corpus_takes_its_confirmation_with_it
+        # already does. This assertion is the recorded cost, not desired
+        # behaviour: that acceptance test going red against the real DB is
+        # the signal the deliberate cleanup pass is due.
+        self.assertGreater(con.execute(
+            "SELECT COUNT(*) FROM concept c WHERE c.headword IS NOT NULL AND "
+            " NOT EXISTS (SELECT 1 FROM concept_member cm "
+            "   JOIN entry e ON e.source_id=cm.source_id "
+            "    AND e.source_entry_id=cm.source_entry_id "
+            "  WHERE cm.concept_id=c.id AND e.headword=c.headword)"
+        ).fetchone()[0], 0)
 
 
 if __name__ == "__main__":

@@ -193,14 +193,16 @@ def _derived_long(con):
 def persist(con, concepts):
     """Write concepts, preserving anything a human or the sweep has judged —
     except a judgement whose (source_id, source_entry_id, sense_number) this
-    build no longer proposes AND whose source still has entries, which is
-    discarded with it. A source with zero entries is not evidence its senses
-    left the corpus — it may just mean this build ran in the window between
-    delete_source_slice() and the source's re-import — so a judgement on an
-    absent source is left alone rather than destroyed. The address is the
-    test, not the grouping: a judgement follows its sense across a headword
-    edit that moves it to a different concept, and is dropped when the sense
-    is renumbered or leaves the corpus while its source stays live."""
+    build no longer proposes AND whose source this build proposed something
+    else for, which is discarded with it. A source this build proposed
+    nothing at all for is not evidence its senses left the corpus — it may be
+    a source retired for good, an interrupted or half-built import, or a
+    source builder that emitted entries but dropped every sense or its
+    headword_search — so a judgement on such a source is left alone rather
+    than destroyed. The address is the test, not the grouping: a judgement
+    follows its sense across a headword edit that moves it to a different
+    concept, and is dropped when the sense is renumbered or leaves the corpus
+    while its source stays live."""
     judged = {}
     for cid, src, seid, sn, status, conf in con.execute(
             "SELECT concept_id, source_id, source_entry_id, sense_number, "
@@ -320,13 +322,29 @@ def persist(con, concepts):
     # headword_from pointing at a member with no entry behind it — which is
     # how one passed the export filter and shipped, once.
     #
-    # A judged key whose source has NO entries at all is not proof its sense
-    # left the corpus — it is proof this build ran mid-rebuild, in the window
-    # between delete_source_slice() and the source's re-import. The trade:
-    # a source retired for good looks identical (zero entries either way), so
-    # a permanent retirement's judged rows — and the concepts they keep
-    # alive — now survive every rebuild unless someone deletes them on purpose.
-    _live = {r[0] for r in con.execute("SELECT DISTINCT source_id FROM entry")}
+    # A judged key whose source this build proposed NOTHING for is not proof
+    # its sense left the corpus. It is proof of one of three things, and they
+    # are indistinguishable at 54's runtime: a source retired for good; an
+    # interrupted or half-built import (this build ran mid-rebuild, in the
+    # window between delete_source_slice() and the source's re-import); or a
+    # source builder that emitted entries but dropped every sense, or stopped
+    # populating headword_search, so load_senses() had nothing to propose for
+    # it. All three are handled the same way, deliberately: the judgement is
+    # left alone rather than destroyed.
+    #
+    # The trade: a permanent retirement looks identical to the other two, so
+    # its judged rows — and the concepts they keep alive — now survive every
+    # rebuild unless someone deletes them on purpose. Those surviving
+    # concepts keep their stale elected forms and ship through
+    # filter_concepts() right alongside the live concept for the same
+    # headword — the 9553fae failure mode, accepted here because a lost
+    # judgement is unrecoverable and this is not. The alarm is
+    # tests/test_concept_acceptance.py:91
+    # test_an_elected_headword_was_written_by_a_member, which runs against
+    # the real database and will start failing the day a source's
+    # contribution disappears — that is the signal the deliberate cleanup is
+    # due, not a regression to chase in 54.
+    _live = {k[0] for k in rebuilt}
     for key in [k for k in judged if k not in rebuilt and k[0] in _live]:
         con.execute("DELETE FROM concept_member WHERE source_id=? AND "
                     " source_entry_id=? AND sense_number IS ?", key)
