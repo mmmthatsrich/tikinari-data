@@ -129,6 +129,14 @@ def _pos_atoms(pos):
                      for p in re.split(r"[,/|]", pos or "") if p.strip())
 
 
+def _extract_base(atom):
+    """Extract the base word from a PoS atom before parenthetical qualifiers.
+
+    'Verb (transitive)' and 'Verb (intransitive)' both extract to 'verb'.
+    """
+    return re.split(r'\s*\(', atom)[0].strip()
+
+
 def blocks(a, b):
     """Reasons these two senses must NOT share a concept.
 
@@ -152,9 +160,15 @@ def blocks(a, b):
             if _macron_shape(ha) != _macron_shape(hb):
                 reasons.append(f"macron disagreement: {ha!r} vs {hb!r}")
 
+    # POS block fires only when BOTH sides are single-valued and their bases differ.
+    # A source listing several parts of speech is describing a word that functions
+    # several ways; that is not a claim excluding another source's single tag.
     atoms_a, atoms_b = _pos_atoms(a["pos"]), _pos_atoms(b["pos"])
-    if atoms_a and atoms_b and not (atoms_a & atoms_b):
-        reasons.append(f"incompatible part of speech: {a['pos']!r} vs {b['pos']!r}")
+    if atoms_a and atoms_b and len(atoms_a) == 1 and len(atoms_b) == 1:
+        base_a = _extract_base(next(iter(atoms_a)))
+        base_b = _extract_base(next(iter(atoms_b)))
+        if base_a and base_b and base_a != base_b:
+            reasons.append(f"incompatible part of speech: {a['pos']!r} vs {b['pos']!r}")
 
     return reasons
 

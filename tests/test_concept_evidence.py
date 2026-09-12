@@ -184,6 +184,20 @@ class Blocks(unittest.TestCase):
         b = _sense(source_id="ngata", headword="hīa")
         self.assertIn("macron", blocks(a, b)[0].lower())
 
+    def test_a_multi_valued_pos_never_blocks(self):
+        # hepatakakupu tags himoemoe 'Stative, Noun, Verb (intransitive)' and
+        # paekupu tags it 'Modifier'. Both are right: a word that functions
+        # several ways is not a claim excluding another source's single tag.
+        a = _sense(source_id="hepatakakupu", pos="Stative, Noun, Verb (intransitive)")
+        b = _sense(source_id="paekupu", pos="Modifier")
+        self.assertEqual([], blocks(a, b))
+
+    def test_transitivity_alone_does_not_block(self):
+        # One source calls a verb transitive, another intransitive. Same verb.
+        a = _sense(source_id="te_aka", pos="Verb (transitive)")
+        b = _sense(source_id="williams", pos="Verb (intransitive)")
+        self.assertEqual([], blocks(a, b))
+
 
 class Confidence(unittest.TestCase):
     def test_the_strongest_kind_wins(self):
