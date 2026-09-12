@@ -4,8 +4,10 @@ Each source groups its own senses into words differently, and that grouping is
 STATED structure rather than inference — which is why seeds are trusted and
 cross-source attachment is not.
 """
+import string
 import sys
 import unittest
+from fractions import Fraction
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
@@ -231,30 +233,45 @@ class GlossGrading(unittest.TestCase):
         self.assertEqual(2, got["distinctiveness"])
 
     def test_coverage_at_the_floor_is_rescued_even_when_common(self):
-        # The spec's own example (§2): 'Give'/'Give forth.' sits at coverage
-        # exactly COVERAGE_FLOOR, and two judged clusters (hoatu, huripari)
-        # land exactly here too. An off-by-one on '>=' would silently demote
-        # both, so this pins the boundary as inclusive: distinctiveness is
-        # pushed well past the ceiling so only the coverage axis can rescue.
-        corpus = (["Give", "Give forth."]
-                  + ["give it away"] * (DISTINCT_CEILING + 10))
-        got = self._pair("Give", "Give forth.", corpus)
-        self.assertEqual(COVERAGE_FLOOR, got[0]["coverage"])
+        # The spec's own example (§2, 'Give'/'Give forth.') sits at coverage
+        # 0.5 — but a FIXED gloss pair only ever sits at 0.5, so it would
+        # pin exactly that one value of COVERAGE_FLOOR rather than testing
+        # the boundary as a boundary. Build the fixture from the constant
+        # instead: gloss B is the p shared words and gloss A is those same
+        # words plus q-p extras, where COVERAGE_FLOOR == p/q, so B ⊆ A and
+        # coverage = |B|/|A| = p/q exactly, whatever p/q Task 6 lands on.
+        #
+        # Filler words must differ by LETTERS, not by a numeric suffix:
+        # _content_words tokenises on [a-z]+, so 'word1'/'word2' both
+        # collapse to 'word' and would silently yield 0.5 no matter what.
+        frac = Fraction(COVERAGE_FLOOR).limit_denominator(20)
+        p, q = frac.numerator, frac.denominator
+        words = [c * 3 for c in string.ascii_lowercase]
+        shared, extra = words[:p], words[p:q]
+        a_gloss = " ".join(shared + extra)
+        b_gloss = " ".join(shared)
+        # Distinctiveness pushed well past the ceiling so only the coverage
+        # axis's '>=' can rescue this pair.
+        corpus = [a_gloss, b_gloss] + [b_gloss] * (DISTINCT_CEILING + 10)
+        got = self._pair(a_gloss, b_gloss, corpus)
+        self.assertAlmostEqual(COVERAGE_FLOOR, got[0]["coverage"])
         self.assertGreater(got[0]["distinctiveness"], DISTINCT_CEILING)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
 
     def test_distinctiveness_at_the_ceiling_is_rescued_even_at_low_coverage(self):
         # The mirror boundary: distinctiveness sits exactly at
-        # DISTINCT_CEILING (inclusive '<='), while coverage is pushed below
-        # COVERAGE_FLOOR so only the distinctiveness axis can rescue.
-        long_gloss = "narcissism, vanity, pride, conceit, arrogance"
+        # DISTINCT_CEILING (inclusive '<='). Coverage is pushed well below
+        # today's COVERAGE_FLOOR (1/20, not just under 0.5) so sweeping the
+        # floor down as well as up can't rescue this fixture by accident.
+        extras = [c * 3 for c in string.ascii_lowercase if c != "n"][:19]
+        long_gloss = "narcissism " + " ".join(extras)
         short_gloss = "narcissism"
         filler_count = DISTINCT_CEILING - 2   # the pair itself supplies 2
         corpus = ([long_gloss, short_gloss]
-                  + ["narcissism of a sort"] * filler_count)
+                  + ["narcissism"] * filler_count)
         got = self._pair(long_gloss, short_gloss, corpus)
         self.assertEqual(DISTINCT_CEILING, got[0]["distinctiveness"])
-        self.assertLess(got[0]["coverage"], COVERAGE_FLOOR)
+        self.assertLess(got[0]["coverage"], 0.1)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
 
     def test_a_non_gloss_kind_carries_no_measurements(self):
