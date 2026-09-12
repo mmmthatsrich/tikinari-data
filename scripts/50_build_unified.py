@@ -897,6 +897,18 @@ def delete_source_slice(con, source_id):
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
     con.execute("DELETE FROM form WHERE entry_id IN "
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
+    # concept_member is NOT a projection: it holds sweep judgements. entry_id
+    # and sense_id are only a cache of where the sense currently lives, so the
+    # rebuild nulls the cache and 54_build_concepts re-resolves it from the
+    # stable (source_id, source_entry_id, sense_number) address.
+    try:
+        con.execute(
+            "UPDATE concept_member SET entry_id = NULL, sense_id = NULL "
+            " WHERE entry_id IN (SELECT id FROM entry WHERE source_id = ?)",
+            (source_id,))
+    except sqlite3.OperationalError:
+        pass            # table not present in an older DB
+
     # derivation and loan_origin are pure projections of the core, rebuilt in
     # full by 53_build_word_origin, so their rows for this source are dropped
     # rather than released — including ones where this source is the BASE of

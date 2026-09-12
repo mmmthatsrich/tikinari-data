@@ -260,5 +260,33 @@ class Persist(unittest.TestCase):
         ).fetchone()[0], "rejected")
 
 
+class RebuildSurvival(unittest.TestCase):
+    """A membership is a judgement; a rebuild must not destroy it.
+
+    derivation and loan_origin are pure projections and are deleted wholesale.
+    concept_member is not: it holds what the sweep decided, and entry.id is
+    only a cache of where that sense currently lives.
+    """
+
+    def test_the_slice_delete_nulls_the_cache_not_the_membership(self):
+        con = _fixture_db()
+        con.execute("INSERT INTO concept (id, status, confidence) "
+                    "VALUES (1,'proposed','probable')")
+        con.execute("INSERT INTO concept_member (concept_id, source_id, "
+                    " source_entry_id, sense_number, entry_id, sense_id, "
+                    " status, confidence) "
+                    " VALUES (1,'williams','1251',1,1,10,'confirmed','certain')")
+        con.commit()
+
+        con.execute("UPDATE concept_member SET entry_id=NULL, sense_id=NULL "
+                    " WHERE entry_id IN (SELECT id FROM entry "
+                    "                     WHERE source_id='williams')")
+        con.commit()
+
+        row = con.execute("SELECT status, entry_id FROM concept_member "
+                          "WHERE source_id='williams'").fetchone()
+        self.assertEqual(row, ("confirmed", None))
+
+
 if __name__ == "__main__":
     unittest.main()
