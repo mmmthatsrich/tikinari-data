@@ -11,7 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from concept_evidence import EVIDENCE_WEIGHT, SEED_CONFIDENCE, lexeme_key, positive_evidence
+from concept_evidence import (EVIDENCE_WEIGHT, SEED_CONFIDENCE, blocks, confidence_for,
+                             lexeme_key, positive_evidence)
 
 
 class LexemeKey(unittest.TestCase):
@@ -131,6 +132,70 @@ class PositiveEvidence(unittest.TestCase):
         b = _sense(source_id="papakupu", gloss_en="ridge of a hill")
         detail = positive_evidence(a, b)[0]["detail"]
         self.assertIn("ridge", detail)
+
+
+class Blocks(unittest.TestCase):
+    def test_a_sources_own_homograph_numbering_blocks(self):
+        # Williams files Hiwi as 1250 and 1251: that IS Williams saying these
+        # are different words.
+        a = _sense(source_id="williams", lexeme=("williams", "entry", "1250"))
+        b = _sense(source_id="williams", lexeme=("williams", "entry", "1251"))
+        self.assertTrue(blocks(a, b))
+
+    def test_the_same_lexeme_in_one_source_does_not_block(self):
+        a = _sense(source_id="williams", lexeme=("williams", "entry", "1251"))
+        b = _sense(source_id="williams", lexeme=("williams", "entry", "1251"))
+        self.assertEqual([], blocks(a, b))
+
+    def test_macron_disagreement_blocks(self):
+        # hia and hiia share a key only because headword_search strips macrons.
+        a = _sense(source_id="te_aka", headword="hia")
+        b = _sense(source_id="ngata", headword="hīa")
+        self.assertTrue(blocks(a, b))
+
+    def test_identical_spelling_does_not_block(self):
+        a = _sense(source_id="te_aka", headword="hīmoemoe")
+        b = _sense(source_id="ngata", headword="hīmoemoe")
+        self.assertEqual([], blocks(a, b))
+
+    def test_capitalisation_alone_does_not_block(self):
+        # Williams capitalises its main headwords.
+        a = _sense(source_id="williams", headword="Hīmoemoe")
+        b = _sense(source_id="paekupu", headword="hīmoemoe")
+        self.assertEqual([], blocks(a, b))
+
+    def test_incompatible_part_of_speech_blocks(self):
+        a = _sense(source_id="te_aka", pos="Noun")
+        b = _sense(source_id="williams", pos="Verb (transitive)")
+        self.assertTrue(blocks(a, b))
+
+    def test_a_missing_part_of_speech_never_blocks(self):
+        a = _sense(source_id="te_aka", pos=None)
+        b = _sense(source_id="williams", pos="Noun")
+        self.assertEqual([], blocks(a, b))
+
+    def test_a_shared_pos_atom_does_not_block(self):
+        a = _sense(source_id="te_aka", pos="Noun, Modifier")
+        b = _sense(source_id="williams", pos="Modifier")
+        self.assertEqual([], blocks(a, b))
+
+    def test_a_block_says_why(self):
+        a = _sense(source_id="te_aka", headword="hia")
+        b = _sense(source_id="ngata", headword="hīa")
+        self.assertIn("macron", blocks(a, b)[0].lower())
+
+
+class Confidence(unittest.TestCase):
+    def test_the_strongest_kind_wins(self):
+        ev = [{"kind": "gloss_overlap"}, {"kind": "shared_example"}]
+        self.assertEqual(confidence_for(ev, []), "certain")
+
+    def test_a_block_downgrades_to_uncertain(self):
+        ev = [{"kind": "shared_example"}]
+        self.assertEqual(confidence_for(ev, ["macron disagreement"]), "uncertain")
+
+    def test_no_evidence_is_uncertain(self):
+        self.assertEqual(confidence_for([], []), "uncertain")
 
 
 if __name__ == "__main__":

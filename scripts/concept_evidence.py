@@ -111,3 +111,58 @@ def positive_evidence(a, b):
 
     return [{"kind": k, "detail": d, "weight": EVIDENCE_WEIGHT[k]}
             for k, d in found]
+
+
+_MACRONS = str.maketrans("āēīōūĀĒĪŌŪ", "aeiouAEIOU")
+
+_CONFIDENCE_ORDER = ("uncertain", "probable", "certain")
+
+
+def _macron_shape(headword):
+    """Which vowels a spelling marks long — the claim it makes about length."""
+    text = (headword or "").strip().lower()
+    return tuple(ch in "āēīōū" for ch in text)
+
+
+def _pos_atoms(pos):
+    return frozenset(p.strip().lower()
+                     for p in re.split(r"[,/|]", pos or "") if p.strip())
+
+
+def blocks(a, b):
+    """Reasons these two senses must NOT share a concept.
+
+    Negative evidence is first-class and is the safety mechanism of the whole
+    design: it is what stops a third source, compatible with each of two
+    separated words, quietly joining them.
+    """
+    reasons = []
+
+    # A source's own structure separating them outranks any inference.
+    if a["source_id"] == b["source_id"] and a["lexeme"] != b["lexeme"]:
+        reasons.append(
+            f"{a['source_id']} files these as different words "
+            f"({a['lexeme'][-1]} vs {b['lexeme'][-1]})")
+
+    # headword_search strips macrons, so two spellings can share a key while
+    # making opposite claims about vowel length: hia vs hīa.
+    ha, hb = (a["headword"] or "").strip().lower(), (b["headword"] or "").strip().lower()
+    if ha and hb and ha != hb:
+        if ha.translate(_MACRONS) == hb.translate(_MACRONS):
+            if _macron_shape(ha) != _macron_shape(hb):
+                reasons.append(f"macron disagreement: {ha!r} vs {hb!r}")
+
+    atoms_a, atoms_b = _pos_atoms(a["pos"]), _pos_atoms(b["pos"])
+    if atoms_a and atoms_b and not (atoms_a & atoms_b):
+        reasons.append(f"incompatible part of speech: {a['pos']!r} vs {b['pos']!r}")
+
+    return reasons
+
+
+def confidence_for(evidence, blocked):
+    """Strongest positive kind present, downgraded to uncertain by any block."""
+    if blocked or not evidence:
+        return "uncertain"
+    best = max(_CONFIDENCE_ORDER.index(EVIDENCE_CONFIDENCE[e["kind"]])
+               for e in evidence)
+    return _CONFIDENCE_ORDER[best]
