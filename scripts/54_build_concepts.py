@@ -191,7 +191,8 @@ def _derived_long(con):
 
 
 def persist(con, concepts):
-    """Write concepts, preserving anything a human or the sweep has judged."""
+    """Write concepts, preserving anything a human or the sweep has judged —
+    except a judgement whose grouping has left the corpus, which is discarded with it."""
     judged = {}
     for cid, src, seid, sn, status, conf in con.execute(
             "SELECT concept_id, source_id, source_entry_id, sense_number, "
@@ -309,8 +310,7 @@ def persist(con, concepts):
     # leaving it would hold the dead concept alive below as a carcass with
     # stale elected forms and a dangling headword_from — which is how one
     # passed the export filter and shipped, once.
-    for key in [k for k, (_cid, status, _conf) in judged.items()
-                if status == "rejected" and k not in rebuilt]:
+    for key in [k for k in judged if k not in rebuilt]:
         con.execute("DELETE FROM concept_member WHERE source_id=? AND "
                     " source_entry_id=? AND sense_number IS ?", key)
 
@@ -323,8 +323,8 @@ def persist(con, concepts):
     # Safety net, not the main path. After the repointing above nothing in
     # normal operation names a concept that is gone; this stays for a
     # genuinely dangling row.
-    con.execute("DELETE FROM concept_member WHERE status = 'rejected' "
-                "  AND concept_id NOT IN (SELECT id FROM concept)")
+    con.execute("DELETE FROM concept_member WHERE status IN (?,?) "
+                "  AND concept_id NOT IN (SELECT id FROM concept)", _JUDGED)
     con.execute("DELETE FROM concept_member_evidence WHERE member_id NOT IN "
                 "(SELECT id FROM concept_member)")
     con.commit()

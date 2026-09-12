@@ -363,6 +363,12 @@ class AllMembersRejected(unittest.TestCase):
             "  AND source_entry_id=? AND sense_number IS ?", key)
         self.con.commit()
 
+    def _confirm(self, key):
+        self.con.execute(
+            "UPDATE concept_member SET status='confirmed' WHERE source_id=? "
+            "  AND source_entry_id=? AND sense_number IS ?", key)
+        self.con.commit()
+
     def _rows(self, keys):
         """{key: [status, ...]} — [] means the row was deleted outright."""
         return {k: [r[0] for r in self.con.execute(
@@ -470,6 +476,40 @@ class AllMembersRejected(unittest.TestCase):
         self.assertEqual([], self.con.execute(
             "SELECT id FROM concept_member WHERE concept_id NOT IN "
             "  (SELECT id FROM concept)").fetchall())
+
+    def test_a_grouping_that_leaves_the_corpus_takes_its_confirmation_with_it(self):
+        # The same defect by the other door: the cleanup loop only ever
+        # looked at status == 'rejected', so a CONFIRMED row whose grouping
+        # has left the corpus survived pointing at a pre-rebuild concept.
+        # The orphan sweep judges liveness on any surviving member, so that
+        # stale row alone kept a dead concept alive: stale elected headword,
+        # a headword_from naming a member that no longer exists, and zero
+        # evidence rows.
+        self._build()
+        key = ("williams", "1250", 1)
+        self._confirm(key)
+        self._build()
+        self.con.execute("DELETE FROM sense WHERE entry_id=2")
+        self.con.execute("DELETE FROM entry WHERE id=2")
+        self.con.commit()
+        self._build()
+        self.assertEqual({key: []}, self._rows([key]))
+        self.assertEqual([], self.con.execute(
+            "SELECT id FROM concept_member WHERE concept_id NOT IN "
+            "  (SELECT id FROM concept)").fetchall())
+        # The acceptance invariant (test_concept_acceptance.py:91),
+        # reproduced here so the zombie is caught in this fixture rather
+        # than only in the whole-DB acceptance suite.
+        self.assertEqual(0, self.con.execute(
+            "SELECT COUNT(*) FROM concept c WHERE c.headword IS NOT NULL AND "
+            " NOT EXISTS (SELECT 1 FROM concept_member cm "
+            "   JOIN entry e ON e.source_id=cm.source_id "
+            "    AND e.source_entry_id=cm.source_entry_id "
+            "  WHERE cm.concept_id=c.id AND e.headword=c.headword)"
+        ).fetchone()[0])
+        self.assertEqual([], self.con.execute(
+            "SELECT id FROM concept_member_evidence WHERE member_id NOT IN "
+            "  (SELECT id FROM concept_member)").fetchall())
 
 
 class RebuildSurvival(unittest.TestCase):
