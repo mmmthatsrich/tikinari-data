@@ -11,8 +11,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from concept_evidence import (EVIDENCE_WEIGHT, SEED_CONFIDENCE, blocks, confidence_for,
-                             lexeme_key, positive_evidence)
+from concept_evidence import (EVIDENCE_WEIGHT, SEED_CONFIDENCE, GlossIndex, blocks,
+                             confidence_for, lexeme_key, positive_evidence)
 
 
 class LexemeKey(unittest.TestCase):
@@ -247,6 +247,66 @@ class Confidence(unittest.TestCase):
 
     def test_no_evidence_is_uncertain(self):
         self.assertEqual(confidence_for([], []), "uncertain")
+
+
+class GlossIndexDf(unittest.TestCase):
+    """Document frequency of a word SET, not of its individual words."""
+
+    CORPUS = [
+        "throw away, reject",
+        "Throw away.",
+        "throw a spear",
+        "cast away from shore",
+        "narcissism",
+    ]
+
+    def setUp(self):
+        self.idx = GlossIndex(self.CORPUS)
+
+    def test_it_counts_the_glosses_it_indexed(self):
+        self.assertEqual(5, len(self.idx))
+
+    def test_one_word_is_counted_in_every_gloss_holding_it(self):
+        self.assertEqual(3, self.idx.df({"throw"}))
+        self.assertEqual(3, self.idx.df({"away"}))
+
+    def test_a_set_is_rarer_than_either_of_its_words(self):
+        # The whole point: 'throw' is in 3 and 'away' is in 3, but only 2
+        # glosses hold BOTH. A per-word measure cannot see this.
+        self.assertEqual(2, self.idx.df({"throw", "away"}))
+
+    def test_a_rare_word_is_rare(self):
+        self.assertEqual(1, self.idx.df({"narcissism"}))
+
+    def test_a_word_absent_from_the_corpus_is_in_no_gloss(self):
+        self.assertEqual(0, self.idx.df({"supersonic"}))
+
+    def test_a_set_with_an_absent_word_is_in_no_gloss(self):
+        self.assertEqual(0, self.idx.df({"throw", "supersonic"}))
+
+    def test_the_empty_set_is_not_evidence_of_anything(self):
+        self.assertEqual(0, self.idx.df(set()))
+
+    def test_stopwords_are_not_indexed(self):
+        # 'a' is a stopword and 'of' is a stopword; neither may be a key.
+        self.assertEqual(0, self.idx.df({"a"}))
+
+    def test_a_none_gloss_is_tolerated(self):
+        # sense.gloss_en is nullable; the index is built straight off it.
+        idx = GlossIndex(["throw away", None, "throw"])
+        self.assertEqual(3, len(idx))
+        self.assertEqual(2, idx.df({"throw"}))
+
+    def test_building_the_index_is_cheap_enough_to_do_once_per_run(self):
+        # The guard against an accidental rebuild inside the pair loop: 54
+        # does ~1.15M pair comparisons, so an index built per pair would be
+        # catastrophic rather than merely slow. 2,000 glosses stands in for
+        # the corpus's 150,037, which measures at 0.6s.
+        import time
+        corpus = [f"gloss number {i} of the corpus" for i in range(2000)]
+        started = time.time()
+        GlossIndex(corpus)
+        self.assertLess(time.time() - started, 1.0)
 
 
 if __name__ == "__main__":

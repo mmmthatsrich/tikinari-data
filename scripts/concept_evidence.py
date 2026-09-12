@@ -111,6 +111,54 @@ def _content_words(text):
                      if w not in _STOPWORDS and len(w) > 2)
 
 
+class GlossIndex:
+    """How many glosses contain EVERY word of a set.
+
+    Built from an iterable of gloss strings, never from a connection: this
+    module holds no DB code (see the module docstring) and 54_build_concepts
+    does the query.
+
+    The measure is deliberately the document frequency of the SET, not of its
+    words. 'throw' is in 214 glosses and 'away' in 371, but {throw, away} is
+    in 15 — a per-word measure would call that pair common when it is
+    specific. See the spec, §2.
+    """
+
+    def __init__(self, glosses):
+        self._postings = {}
+        self._n = 0
+        for gloss in glosses:
+            i = self._n
+            self._n += 1
+            for word in _content_words(gloss):
+                self._postings.setdefault(word, set()).add(i)
+
+    def __len__(self):
+        return self._n
+
+    def df(self, words):
+        """Glosses containing every word. 0 for an empty or unknown set.
+
+        A word absent from the index is in no gloss, so the answer is 0 — an
+        honest reading, and unreachable in production, where the index is
+        built from the same sense.gloss_en column the compared glosses came
+        from. It is reachable in tests using a small inline corpus.
+        """
+        try:
+            postings = [self._postings[w] for w in words]
+        except KeyError:
+            return 0
+        if not postings:
+            return 0
+        postings.sort(key=len)          # intersect the smallest first
+        hits = postings[0]
+        for other in postings[1:]:
+            hits = hits & other
+            if not hits:
+                return 0
+        return len(hits)
+
+
 def positive_evidence(a, b):
     """[{kind, detail, weight}] linking two senses, strongest first.
 
