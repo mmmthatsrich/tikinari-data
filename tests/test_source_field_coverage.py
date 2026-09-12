@@ -77,10 +77,20 @@ class ParsedFieldsReachTheDatabase(unittest.TestCase):
 
 
 class AppDbIsNotStale(unittest.TestCase):
-    """The derived chain has been got wrong twice by hand. Assert the result.
+    """The derived chain has been got wrong by hand. Assert one slice of it.
 
-    52 -> 08b -> 53 -> 54 -> 60, and skipping any step leaves the app DB
-    disagreeing with staging in a way no other test catches.
+    The chain is 52 -> 08b -> 53 -> 54 -> 60. Only 60_export_app_db writes
+    entry/sense/relation into the app DB — it copies them straight out of
+    staging at export time. So this test catches exactly one failure mode:
+    staging moved on (a source was rebuilt by 50_build_unified) and 60 was
+    never rerun, leaving the app DB's snapshot behind.
+
+    It does NOT catch a skipped 52, 08b, 53 or 54. Those steps corrupt or
+    empty *staging*'s own derived tables (ETY_*, pollex_entry_links,
+    derivation, loan_origin, concept, concept_member) without touching
+    entry/sense/relation — 60 then faithfully copies the same (broken)
+    numbers into the app DB and this comparison finds the two sides in
+    perfect agreement. See DerivedTablesArePopulated below for that case.
     """
 
     APP = Path(__file__).parent.parent / "data" / "maori_dict.db"
@@ -98,6 +108,43 @@ class AppDbIsNotStale(unittest.TestCase):
                     f"{table}: app DB is stale — run 59_rebuild_derived.py")
         stg.close()
         app.close()
+
+
+class DerivedTablesArePopulated(unittest.TestCase):
+    """Catch a skipped 52 / 08b / 53 / 54, which AppDbIsNotStale cannot see.
+
+    50_build_unified empties ETY_entry_link, pollex_entry_links, derivation,
+    loan_origin, concept and concept_member whenever it rewrites a source's
+    slice; only running the full 59_rebuild_derived.py chain refills them.
+    Skipping one of those four steps leaves staging's own derived tables
+    stale or empty, but 60_export_app_db then copies that same (broken)
+    state into the app DB, so app and staging agree and AppDbIsNotStale
+    passes anyway. This test instead asserts each table in staging clears a
+    floor well below its current count, so ordinary drift stays quiet and a
+    step-skip that empties or guts a table is loud.
+    """
+
+    FLOORS = {
+        "ETY_entry_link":     100_000,   # currently 160,712 — needs step 52
+        "pollex_entry_links":  40_000,   # currently  57,189 — needs step 08b
+        "derivation":           5_000,   # currently   6,778 — needs step 53
+        "loan_origin":             50,   # currently     109 — needs step 53
+        "concept":              50_000,  # currently  95,116 — needs step 54
+        "concept_member":      100_000,  # currently 175,101 — needs step 54
+    }
+
+    def test_derived_tables_clear_their_floor(self):
+        con = sqlite3.connect(DB_PATH)
+        for table, floor in self.FLOORS.items():
+            with self.subTest(table=table):
+                count = con.execute(
+                    f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                self.assertGreaterEqual(
+                    count, floor,
+                    f"{table}: only {count} rows (floor {floor}) — "
+                    "staging's derived tables look stale or emptied by "
+                    "50_build_unified; run 59_rebuild_derived.py")
+        con.close()
 
 
 if __name__ == "__main__":
