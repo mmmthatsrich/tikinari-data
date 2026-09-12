@@ -271,6 +271,46 @@ class ConceptActions(unittest.TestCase):
             "SELECT status FROM concept_member WHERE id=1").fetchone()[0],
             "confirmed")
 
+    def test_a_confirm_confirms_the_concept_too(self):
+        # Without this the sweep cannot change what ships: nothing else sets
+        # concept.status, so a confirmed membership of an uncertain concept
+        # stayed uncertain, the export dropped it, and the judgement never
+        # reached users. A concept may be confirmed while another member is
+        # still proposed — that is the common case.
+        con = _db()
+        con.execute("UPDATE concept SET confidence='uncertain' WHERE id=1")
+        con.commit()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "duplicate", "subject": "te_aka:79#1",
+            "summary": "same word as williams:54",
+            "action": "applied",
+            "concept_actions": [{"action": "confirm_member",
+                                 "member": "te_aka:79#1"}]}])
+        record(con, "S1", p)
+        row = con.execute("SELECT status, confidence, last_updated "
+                          "FROM concept WHERE id=1").fetchone()
+        self.assertEqual(row["status"], "confirmed")
+        # The confidence is what the evidence earned; the status is the
+        # judgement. The export threshold reads either, so status alone is
+        # enough to carry a confirmed grouping through.
+        self.assertEqual(row["confidence"], "uncertain")
+        self.assertIsNotNone(row["last_updated"])
+
+    def test_a_reject_leaves_the_concept_alone(self):
+        # Rejecting one member says nothing about the rest of the grouping.
+        con = _db()
+        claim(con, "S1")
+        p = _payload(findings=[{
+            "kind": "homograph", "subject": "te_aka:79#1",
+            "summary": "not actually the same word",
+            "action": "applied",
+            "concept_actions": [{"action": "reject_member",
+                                 "member": "te_aka:79#1"}]}])
+        record(con, "S1", p)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept WHERE id=1").fetchone()[0], "proposed")
+
     def test_a_reject_marks_the_membership(self):
         con = _db()
         claim(con, "S1")

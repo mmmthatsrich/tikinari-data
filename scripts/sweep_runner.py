@@ -25,6 +25,7 @@ import json
 import re
 import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -130,21 +131,40 @@ def _validate(con, payload) -> dict:
 def _apply_concept_actions(con, finding):
     """Mark a membership confirmed or rejected.
 
+    A confirm also confirms the member's CONCEPT. Nothing else in the codebase
+    sets concept.status, so without this the sweep could not change what ships:
+    the export keeps `status = 'confirmed' OR confidence IN (certain,
+    probable)`, and confirming a member of an uncertain concept left the
+    concept uncertain, the export dropped it, and the judgement never reached
+    users. The spec allows exactly this — "a concept can be confirmed while one
+    of its members is still proposed. That's the common case: five witnesses
+    obviously the same word, a sixth uncertain."
+
+    A reject does NOT touch the concept: excluding one witness says nothing
+    about whether the rest of the grouping is right.
+
     `_validate` already resolved every member address against concept_member,
     so the rowcount == 0 case below should not occur in practice. It stays as
     defence in depth — belt, not the buckle — for the unlikely case of a row
     disappearing between validation and here.
     """
+    now = datetime.now(timezone.utc).isoformat()
     for a in finding.get("concept_actions") or []:
         src, seid, sn = _parse_member(a["member"])
-        status = ("confirmed" if a["action"] == "confirm_member"
-                  else "rejected")
+        confirming = a["action"] == "confirm_member"
         cur = con.execute(
             "UPDATE concept_member SET status = ? WHERE source_id = ? "
             "  AND source_entry_id = ? AND sense_number IS ?",
-            (status, src, seid, sn))
+            ("confirmed" if confirming else "rejected", src, seid, sn))
         if cur.rowcount == 0:
             raise ValueError(f"no concept membership for {a['member']!r}")
+        if confirming:
+            con.execute(
+                "UPDATE concept SET status = 'confirmed', last_updated = ? "
+                "  WHERE id IN (SELECT concept_id FROM concept_member "
+                "                WHERE source_id = ? AND source_entry_id = ? "
+                "                  AND sense_number IS ?)",
+                (now, src, seid, sn))
 
 
 def record(con, session_id: str, payload, *, rubric_version: str = VERSION) -> dict:
