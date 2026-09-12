@@ -1055,6 +1055,55 @@ def create_tables(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_loan_origin_entry ON loan_origin(entry_id);
 
+        -- ── concept: one word, as eleven dictionaries record it ──────────────
+        -- docs/superpowers/specs/2026-09-12-concept-layer-design.md
+        -- Groups witnesses; never merges, rewrites or deletes a source entry.
+        CREATE TABLE IF NOT EXISTS concept (
+            id                INTEGER PRIMARY KEY,
+            status            TEXT NOT NULL,   -- proposed | confirmed | rejected
+            confidence        TEXT NOT NULL,   -- certain | probable | uncertain
+            -- Elected, never written. Each value names the member it came from.
+            headword          TEXT,
+            headword_from     INTEGER,
+            gloss_en          TEXT,
+            gloss_en_from     INTEGER,
+            gloss_mi          TEXT,
+            gloss_mi_from     INTEGER,
+            created_at        TEXT,
+            last_updated      TEXT
+        );
+
+        -- entry_id / sense_id are a CACHE. entry.id is volatile across rebuilds,
+        -- so the stable address is (source_id, source_entry_id, sense_number) --
+        -- the same keying sweep_patch uses.
+        CREATE TABLE IF NOT EXISTS concept_member (
+            id                INTEGER PRIMARY KEY,
+            concept_id        INTEGER NOT NULL REFERENCES concept(id),
+            source_id         TEXT NOT NULL,
+            source_entry_id   TEXT NOT NULL,
+            sense_number      INTEGER,
+            entry_id          INTEGER,
+            sense_id          INTEGER,
+            status            TEXT NOT NULL,   -- proposed | confirmed | rejected
+            confidence        TEXT NOT NULL,
+            created_at        TEXT,
+            UNIQUE (concept_id, source_id, source_entry_id, sense_number)
+        );
+
+        CREATE TABLE IF NOT EXISTS concept_member_evidence (
+            id                INTEGER PRIMARY KEY,
+            member_id         INTEGER NOT NULL REFERENCES concept_member(id),
+            kind              TEXT NOT NULL,
+            detail            TEXT NOT NULL,
+            weight            REAL NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_concept_member_concept
+            ON concept_member(concept_id);
+        CREATE INDEX IF NOT EXISTS idx_concept_member_evidence
+            ON concept_member_evidence(member_id);
+        CREATE INDEX IF NOT EXISTS idx_concept_member_lookup
+            ON concept_member(source_id, source_entry_id, sense_number);
+
         -- ── entry_domain: subject / semantic-domain tags ─────────────────────
         CREATE TABLE IF NOT EXISTS entry_domain (
             id          INTEGER PRIMARY KEY,
