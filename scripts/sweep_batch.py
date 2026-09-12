@@ -19,6 +19,7 @@ Size is not a concern: the largest cluster in the corpus (`mata`, 117 entries
 across 9 sources) is about 32k characters all in, and none exceeds that, so a
 batch is never truncated. Nothing is hidden from the judgement.
 """
+import sqlite3
 
 _ENTRY_SQL = """
 SELECT id, source_id, source_entry_id, headword, headword_en, part_of_speech,
@@ -84,8 +85,18 @@ _CONCEPT_MEMBER_EVIDENCE_SQL = ("SELECT kind, detail FROM concept_member_evidenc
 
 
 def _concepts_for(con, cluster_key):
-    """The proposed concepts covering this cluster, with their evidence."""
-    rows = con.execute(_CONCEPT_IDS_SQL, (cluster_key,)).fetchall()
+    """The proposed concepts covering this cluster, with their evidence.
+
+    concept/concept_member/concept_member_evidence postdate the concept layer,
+    so this is guarded the same way 50_build_unified.delete_source_slice and
+    54_build_concepts._derived_long guard optional tables: a DB built before
+    they existed renders the rest of the batch normally and simply carries no
+    CONCEPTS section, rather than the whole batch view dying on every cluster.
+    """
+    try:
+        rows = con.execute(_CONCEPT_IDS_SQL, (cluster_key,)).fetchall()
+    except sqlite3.OperationalError:
+        return []            # table not present in an older DB
     out = []
     for (cid,) in rows:
         c = con.execute(_CONCEPT_SQL, (cid,)).fetchone()
