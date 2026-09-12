@@ -107,11 +107,18 @@ def filter_concepts(out):
     grouping the sweep ruled out. It stays in staging, where it is what keeps
     54_build_concepts from re-attaching that sense on the next rebuild.
 
+    Dropping those can empty a concept outright. Staging keeps a wholly
+    rejected grouping on purpose — it is the anchor its rejections name — but
+    an empty concept is nothing to show a user, so it goes here.
+
     Order matters: concepts before their orphaned members
     (concept_member.concept_id references concept, so the other way round
     would leave members behind pointing at nothing).
     """
     out.execute("DELETE FROM concept_member WHERE status = 'rejected'")
+    out.execute(
+        "DELETE FROM concept WHERE id NOT IN "
+        "  (SELECT concept_id FROM concept_member)")
     out.execute(
         "DELETE FROM concept WHERE confidence = 'uncertain' "
         "  AND status <> 'confirmed'")

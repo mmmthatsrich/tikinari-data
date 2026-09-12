@@ -204,17 +204,26 @@ def persist(con, concepts):
 
     long_bases = _derived_long(con)
     counts = {"concepts": 0, "members": 0, "kept": 0, "excluded": 0}
+    rebuilt = set()
 
     for concept in concepts:
         members, rejected = [], []
         for m in concept["members"]:
+            rebuilt.add(m["view"]["member_key"])
             if judged.get(m["view"]["member_key"],
                           (None, None, None))[1] == "rejected":
                 rejected.append(m)
             else:
                 members.append(m)
-        if not members:
-            continue
+
+        # A grouping whose every member has been rejected still gets its
+        # concept row. It has no live members, elects nothing and ships
+        # nothing — but it is the thing those rejections name, and without it
+        # they have nowhere to point: the orphan sweep would take the old
+        # concept, the rejected rows would go with it, and the next rebuild
+        # would re-propose the very senses the sweep ruled out. Reachable:
+        # most concepts are single-member, and a multi-source one can be
+        # whittled to nothing one sweep session at a time.
 
         # A confirmed membership confirms its concept, and that must survive
         # the rebuild: inserting the literal 'proposed' here would throw the
@@ -293,16 +302,27 @@ def persist(con, concepts):
     # Only now: a judged member still pointed at its OLD concept during the
     # loop above, so its concept could not be dropped before it was moved.
     #
-    # Liveness is judged on members that are not rejected. A rejected row
-    # records that a sense does NOT belong, so counting it would keep the
-    # pre-rebuild concept alive — stale elected forms, dangling
-    # headword_from, no evidence — and that carcass passed the export filter
-    # and shipped. Rejected rows whose concept is gone anyway (the grouping
-    # itself dissolved) go with it: the thing they were excluded from no
-    # longer exists, so the exclusion is moot.
+    # Every member of every grouping — live or rejected — has been repointed
+    # onto its rebuilt concept, so a judged row still naming an old concept is
+    # one this build never saw: its grouping has left the corpus. The
+    # exclusion is moot (the thing it was kept out of no longer exists) and
+    # leaving it would hold the dead concept alive below as a carcass with
+    # stale elected forms and a dangling headword_from — which is how one
+    # passed the export filter and shipped, once.
+    for key in [k for k, (_cid, status, _conf) in judged.items()
+                if status == "rejected" and k not in rebuilt]:
+        con.execute("DELETE FROM concept_member WHERE source_id=? AND "
+                    " source_entry_id=? AND sense_number IS ?", key)
+
+    # Liveness on ANY member, a rejected one included. That is safe only
+    # because repointing is now unconditional: a rejected row always names the
+    # concept this build just minted for its grouping, never a pre-rebuild
+    # one, so it can no longer keep a stale concept alive.
     con.execute("DELETE FROM concept WHERE id NOT IN "
-                "(SELECT concept_id FROM concept_member "
-                "  WHERE status <> 'rejected')")
+                "(SELECT concept_id FROM concept_member)")
+    # Safety net, not the main path. After the repointing above nothing in
+    # normal operation names a concept that is gone; this stays for a
+    # genuinely dangling row.
     con.execute("DELETE FROM concept_member WHERE status = 'rejected' "
                 "  AND concept_id NOT IN (SELECT id FROM concept)")
     con.execute("DELETE FROM concept_member_evidence WHERE member_id NOT IN "

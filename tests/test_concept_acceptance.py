@@ -154,14 +154,16 @@ class ExportFilter(unittest.TestCase):
             "INSERT INTO concept (id, status, confidence) VALUES (?,?,?)",
             [(1, "proposed", "certain"),      # ships
              (2, "proposed", "uncertain"),    # withheld
-             (3, "confirmed", "uncertain")])  # ships: the sweep judged it
+             (3, "confirmed", "uncertain"),   # ships: the sweep judged it
+             (4, "proposed", "certain")])     # withheld: every member rejected
         self.con.executemany(
             "INSERT INTO concept_member (id, concept_id, source_id, status) "
             "VALUES (?,?,?,?)",
             [(10, 1, "te_aka", "proposed"),
              (11, 1, "papakupu", "rejected"),   # excluded from concept 1
              (12, 2, "te_aka", "proposed"),
-             (13, 3, "te_aka", "confirmed")])
+             (13, 3, "te_aka", "confirmed"),
+             (14, 4, "te_aka", "rejected")])   # the only member of concept 4
         self.con.commit()
         self.mod.filter_concepts(self.con)
 
@@ -177,6 +179,13 @@ class ExportFilter(unittest.TestCase):
 
     def test_a_withheld_concepts_members_go_with_it(self):
         self.assertNotIn(12, self._ids("concept_member"))
+
+    def test_a_concept_left_with_no_members_is_withheld(self):
+        # 54_build_concepts keeps a wholly rejected grouping in staging as the
+        # anchor its rejections name. Dropping the rejected rows here empties
+        # it, and an empty concept is nothing to show a user.
+        self.assertNotIn(4, self._ids("concept"))
+        self.assertNotIn(14, self._ids("concept_member"))
 
     def test_a_rejected_membership_never_ships(self):
         # It is a record that the sense does NOT belong; shipping it would

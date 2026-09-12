@@ -330,6 +330,148 @@ class Persist(unittest.TestCase):
             " WHERE m.source_id='williams' AND m.source_entry_id='1250'")})
 
 
+class AllMembersRejected(unittest.TestCase):
+    """Rejecting EVERY member of one grouping must not revive the judgements.
+
+    The rebuild re-proposes any membership it does not find already judged, so
+    a rejection whose row is lost comes back as a fresh 'proposed' one and the
+    sweep session's work is undone in silence. A grouping whittled down to
+    nothing is reachable: most concepts are single-member, and a multi-source
+    one can lose its members one sweep session at a time.
+    """
+
+    def setUp(self):
+        self.mod = importlib.import_module("54_build_concepts")
+        self.con = _fixture_db()
+
+    def _build(self):
+        views = self.mod.load_senses(self.con)
+        allc = []
+        for key in sorted(views):
+            allc.extend(self.mod.form_concepts(views[key]))
+        return self.mod.persist(self.con, allc)
+
+    def _members_of(self, concept_id):
+        return [tuple(r) for r in self.con.execute(
+            "SELECT source_id, source_entry_id, sense_number FROM concept_member"
+            "  WHERE concept_id = ? ORDER BY source_id, source_entry_id,"
+            "        sense_number", (concept_id,))]
+
+    def _reject(self, key):
+        self.con.execute(
+            "UPDATE concept_member SET status='rejected' WHERE source_id=? "
+            "  AND source_entry_id=? AND sense_number IS ?", key)
+        self.con.commit()
+
+    def _rows(self, keys):
+        """{key: [status, ...]} — [] means the row was deleted outright."""
+        return {k: [r[0] for r in self.con.execute(
+            "SELECT status FROM concept_member WHERE source_id=? AND "
+            "  source_entry_id=? AND sense_number IS ?", k)] for k in keys}
+
+    def _concept_of(self, key):
+        return self.con.execute(
+            "SELECT concept_id FROM concept_member WHERE source_id=? AND "
+            "  source_entry_id=? AND sense_number IS ?", key).fetchone()[0]
+
+    def test_a_wholly_rejected_grouping_survives_two_more_rebuilds(self):
+        self._build()
+        ridge = self._concept_of(("papakupu", "442", 1))
+        keys = self._members_of(ridge)
+        self.assertEqual(4, len(keys))          # williams x2, te_aka, papakupu
+        for key in keys:
+            self._reject(key)
+
+        self._build()
+        self.assertEqual({k: ["rejected"] for k in keys}, self._rows(keys))
+        # The reviewer's reproduction needed a second pass: the first rebuild
+        # can leave the rows behind for the orphan sweep to take.
+        self._build()
+        self.assertEqual({k: ["rejected"] for k in keys}, self._rows(keys))
+
+    def test_rejecting_a_grouping_one_member_at_a_time_across_rebuilds(self):
+        self._build()
+        ridge = self._concept_of(("papakupu", "442", 1))
+        keys = self._members_of(ridge)
+        for key in keys:
+            self._reject(key)
+            self._build()
+        self.assertEqual({k: ["rejected"] for k in keys}, self._rows(keys))
+        self._build()
+        self.assertEqual({k: ["rejected"] for k in keys}, self._rows(keys))
+
+    def test_a_rejected_single_member_concept_survives(self):
+        # williams 1250 'jerk a fishing line' is alone on its key, which is
+        # the shape most of the corpus's concepts have.
+        self._build()
+        key = ("williams", "1250", 1)
+        self._reject(key)
+        self._build()
+        self._build()
+        self.assertEqual({key: ["rejected"]}, self._rows([key]))
+
+    def test_the_rejection_still_names_a_concept_that_exists(self):
+        # A rejection is 'this sense does not belong HERE'. It needs the
+        # concept it was excluded from to still be there to mean anything.
+        self._build()
+        ridge = self._concept_of(("papakupu", "442", 1))
+        keys = self._members_of(ridge)
+        for key in keys:
+            self._reject(key)
+        self._build()
+        self._build()
+        self.assertEqual({k: ["rejected"] for k in keys}, self._rows(keys))
+        cids = {self._concept_of(k) for k in keys}
+        self.assertEqual(1, len(cids))
+        cid = cids.pop()
+        self.assertEqual(1, self.con.execute(
+            "SELECT COUNT(*) FROM concept WHERE id=?", (cid,)).fetchone()[0])
+
+    def test_an_all_rejected_concept_elects_nothing(self):
+        # There are no live views to elect from, and no member may be named
+        # as the source of a value it did not supply.
+        self._build()
+        ridge = self._concept_of(("papakupu", "442", 1))
+        for key in self._members_of(ridge):
+            self._reject(key)
+        self._build()
+        cid = self._concept_of(("papakupu", "442", 1))
+        self.assertEqual(
+            (None, None, None, None, None, None),
+            self.con.execute(
+                "SELECT headword, headword_from, gloss_en, gloss_en_from, "
+                "       gloss_mi, gloss_mi_from FROM concept WHERE id=?",
+                (cid,)).fetchone())
+
+    def test_the_other_concept_on_the_key_is_untouched(self):
+        self._build()
+        ridge = self._concept_of(("papakupu", "442", 1))
+        for key in self._members_of(ridge):
+            self._reject(key)
+        self._build()
+        jerk = self._concept_of(("williams", "1250", 1))
+        self.assertNotEqual(jerk, self._concept_of(("papakupu", "442", 1)))
+        self.assertEqual("Hiwi", self.con.execute(
+            "SELECT headword FROM concept WHERE id=?", (jerk,)).fetchone()[0])
+
+    def test_a_grouping_that_leaves_the_corpus_takes_its_rejection_with_it(self):
+        # The safety net, exercised: the sense itself is gone from the
+        # corpus, so the concept it was excluded from is gone too and the
+        # exclusion is moot. Nothing may be left pointing at a dead concept.
+        self._build()
+        key = ("williams", "1250", 1)
+        self._reject(key)
+        self._build()
+        self.con.execute("DELETE FROM sense WHERE entry_id=2")
+        self.con.execute("DELETE FROM entry WHERE id=2")
+        self.con.commit()
+        self._build()
+        self.assertEqual({key: []}, self._rows([key]))
+        self.assertEqual([], self.con.execute(
+            "SELECT id FROM concept_member WHERE concept_id NOT IN "
+            "  (SELECT id FROM concept)").fetchall())
+
+
 class RebuildSurvival(unittest.TestCase):
     """A membership is a judgement; a rebuild must not destroy it.
 
