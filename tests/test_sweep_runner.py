@@ -54,6 +54,19 @@ def _db() -> sqlite3.Connection:
         CREATE TABLE ETY_entry_link (
             id INTEGER PRIMARY KEY, cognateset_id INTEGER, entry_id INTEGER,
             sense_id INTEGER, source TEXT, match_method TEXT);
+        CREATE TABLE concept (
+            id INTEGER PRIMARY KEY, status TEXT NOT NULL, confidence TEXT NOT NULL,
+            headword TEXT, headword_from INTEGER, gloss_en TEXT,
+            gloss_en_from INTEGER, gloss_mi TEXT, gloss_mi_from INTEGER,
+            created_at TEXT, last_updated TEXT);
+        CREATE TABLE concept_member (
+            id INTEGER PRIMARY KEY, concept_id INTEGER NOT NULL,
+            source_id TEXT NOT NULL, source_entry_id TEXT NOT NULL,
+            sense_number INTEGER, entry_id INTEGER, sense_id INTEGER,
+            status TEXT NOT NULL, confidence TEXT NOT NULL, created_at TEXT);
+        CREATE TABLE concept_member_evidence (
+            id INTEGER PRIMARY KEY, member_id INTEGER NOT NULL,
+            kind TEXT NOT NULL, detail TEXT NOT NULL, weight REAL NOT NULL);
     """)
     for ddl in (PATCH_DDL, QUEUE_DDL, FINDING_DDL):
         con.executescript(ddl)
@@ -65,6 +78,13 @@ def _db() -> sqlite3.Connection:
                 "VALUES (10,1,1,'weft, woof')")
     con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
                 "VALUES (11,2,1,'A fishing-line.')")
+    con.execute("INSERT INTO concept (id, status, confidence, headword, gloss_en) "
+                "VALUES (1,'proposed','medium','aho','cord, string')")
+    con.execute("INSERT INTO concept_member (id, concept_id, source_id, "
+                "source_entry_id, sense_number, status, confidence) "
+                "VALUES (1,1,'te_aka','79',1,'proposed','medium')")
+    con.execute("INSERT INTO concept_member_evidence (member_id, kind, detail, weight) "
+                "VALUES (1,'shared_gloss','matches williams:54 gloss \"weft, woof\"',1.0)")
     con.commit()
     seed_clusters(con)
     return con

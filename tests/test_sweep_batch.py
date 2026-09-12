@@ -112,5 +112,42 @@ class Render(unittest.TestCase):
         self.assertIsInstance(render(assemble(self.con, "zzzznotacluster")), str)
 
 
+class ConceptsInTheBatch(unittest.TestCase):
+    """The sweep judges memberships, which is a far better unit than a cluster.
+
+    A membership is a specific claim with a reason, answerable yes or no; a
+    headword cluster is eighteen entries and eight words.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.con = sqlite3.connect(DB_PATH)
+        cls.con.row_factory = sqlite3.Row
+        cls.hiwi = assemble(cls.con, "hiwi")
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.con.close()
+
+    def test_the_batch_carries_the_clusters_concepts(self):
+        self.assertIn("concepts", self.hiwi)
+
+    def test_a_concept_lists_its_members_and_their_evidence(self):
+        if not self.hiwi["concepts"]:
+            self.skipTest("fixture has no concepts")
+        c = self.hiwi["concepts"][0]
+        self.assertIn("members", c)
+        self.assertIn("evidence", c["members"][0])
+
+    def test_the_render_has_a_concepts_section(self):
+        text = render(self.hiwi)
+        self.assertIn("CONCEPTS", text)
+
+    def test_an_empty_cluster_has_no_concepts_and_does_not_blow_up(self):
+        b = assemble(self.con, "zzzznotacluster")
+        self.assertEqual(b.get("concepts", []), [])
+        self.assertIsInstance(render(b), str)
+
+
 if __name__ == "__main__":
     unittest.main()

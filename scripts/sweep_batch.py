@@ -63,6 +63,47 @@ def _ph(n: int) -> str:
     return ",".join("?" * n) if n else "NULL"
 
 
+_CONCEPT_IDS_SQL = """
+SELECT DISTINCT cm.concept_id FROM concept_member cm
+  JOIN entry e ON e.source_id = cm.source_id
+   AND e.source_entry_id = cm.source_entry_id
+ WHERE e.headword_search = ? ORDER BY cm.concept_id
+"""
+
+_CONCEPT_SQL = ("SELECT status, confidence, headword, gloss_en, gloss_mi "
+                "  FROM concept WHERE id = ?")
+
+_CONCEPT_MEMBER_SQL = """
+SELECT id, source_id, source_entry_id, sense_number, status, confidence
+  FROM concept_member WHERE concept_id = ?
+ ORDER BY source_id, source_entry_id
+"""
+
+_CONCEPT_MEMBER_EVIDENCE_SQL = ("SELECT kind, detail FROM concept_member_evidence "
+                                 " WHERE member_id = ?")
+
+
+def _concepts_for(con, cluster_key):
+    """The proposed concepts covering this cluster, with their evidence."""
+    rows = con.execute(_CONCEPT_IDS_SQL, (cluster_key,)).fetchall()
+    out = []
+    for (cid,) in rows:
+        c = con.execute(_CONCEPT_SQL, (cid,)).fetchone()
+        members = []
+        for mid, src, seid, sn, status, conf in con.execute(
+                _CONCEPT_MEMBER_SQL, (cid,)):
+            evidence = [dict(zip(("kind", "detail"), r)) for r in con.execute(
+                _CONCEPT_MEMBER_EVIDENCE_SQL, (mid,))]
+            members.append({"address": f"{src}:{seid}"
+                                       + (f"#{sn}" if sn else ""),
+                            "status": status, "confidence": conf,
+                            "evidence": evidence})
+        out.append({"id": cid, "status": c["status"], "confidence": c["confidence"],
+                    "headword": c["headword"], "gloss_en": c["gloss_en"],
+                    "gloss_mi": c["gloss_mi"], "members": members})
+    return out
+
+
 def assemble(con, cluster_key: str) -> dict:
     """Everything the sweep needs to judge one cluster."""
     entries = [dict(r) for r in con.execute(_ENTRY_SQL, (cluster_key,))]
@@ -71,6 +112,7 @@ def assemble(con, cluster_key: str) -> dict:
         "entry_count": len(entries),
         "source_count": len({e["source_id"] for e in entries}),
         "entries": [],
+        "concepts": _concepts_for(con, cluster_key),
         "etymology": [],
     }
     if not entries:
@@ -189,6 +231,26 @@ def render(batch: dict) -> str:
                        f"[{tgt}{sense}]{note}")
         for d in e["domains"]:
             out.append(f"      domain {d['domain']!r} ({d['domain_lang']})")
+
+    if batch.get("concepts"):
+        out.append(f"\n── CONCEPTS ──────────────────────────────────────────────")
+        out.append("   (proposed groupings. Judge each MEMBERSHIP on its own — ")
+        out.append("    yes or no — not the concept as a whole. Evidence is pooled")
+        out.append("    per source word and attached to every sense that word")
+        out.append("    contributed: it is the reason that word joined the concept,")
+        out.append("    not a claim about this one sense.)")
+        for c in batch["concepts"]:
+            out.append(f"   concept {c['id']}  [{c['status']}/{c['confidence']}]"
+                       f"  {c['headword']!r}")
+            if c["gloss_en"]:
+                out.append(f"       en {_trim(c['gloss_en'], 70)!r}")
+            if c["gloss_mi"]:
+                out.append(f"       mi {_trim(c['gloss_mi'], 70)!r}")
+            for m in c["members"]:
+                out.append(f"       {m['address']:<34} "
+                           f"{m['status']}/{m['confidence']}")
+                for e in m["evidence"]:
+                    out.append(f"           {e['kind']}: {_trim(e['detail'], 60)}")
 
     if batch["etymology"]:
         out.append(f"\n── ETYMOLOGY ─────────────────────────────────────────────")
