@@ -76,5 +76,29 @@ class ParsedFieldsReachTheDatabase(unittest.TestCase):
             3900)
 
 
+class AppDbIsNotStale(unittest.TestCase):
+    """The derived chain has been got wrong twice by hand. Assert the result.
+
+    52 -> 08b -> 53 -> 54 -> 60, and skipping any step leaves the app DB
+    disagreeing with staging in a way no other test catches.
+    """
+
+    APP = Path(__file__).parent.parent / "data" / "maori_dict.db"
+
+    def test_the_app_entry_count_matches_staging(self):
+        if not self.APP.exists():
+            self.skipTest("app DB not built")
+        stg = sqlite3.connect(DB_PATH)
+        app = sqlite3.connect(self.APP)
+        for table in ("entry", "sense", "relation"):
+            with self.subTest(table=table):
+                self.assertEqual(
+                    app.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                    stg.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                    f"{table}: app DB is stale — run 59_rebuild_derived.py")
+        stg.close()
+        app.close()
+
+
 if __name__ == "__main__":
     unittest.main()
