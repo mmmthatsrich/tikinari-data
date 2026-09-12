@@ -338,12 +338,25 @@ def persist(con, concepts):
     # concepts keep their stale elected forms and ship through
     # filter_concepts() right alongside the live concept for the same
     # headword — the 9553fae failure mode, accepted here because a lost
-    # judgement is unrecoverable and this is not. The alarm is
-    # tests/test_concept_acceptance.py:91
-    # test_an_elected_headword_was_written_by_a_member, which runs against
-    # the real database and will start failing the day a source's
-    # contribution disappears — that is the signal the deliberate cleanup is
-    # due, not a regression to chase in 54.
+    # judgement is unrecoverable and this is not.
+    #
+    # There is an alarm, but it covers only the first of the three cases.
+    # tests/test_concept_acceptance.py test_an_elected_headword_was_written_
+    # by_a_member runs against the real database and goes red when a source's
+    # ENTRY rows go — a retirement or a slice delete — because the carcass's
+    # elected headword then has no entry behind it. That is the signal the
+    # deliberate cleanup is due, not a regression to chase in 54. It does NOT
+    # fire for a builder that emitted entries but dropped every sense or its
+    # headword_search: the entry rows are still there with their headwords
+    # intact, so the invariant matches and the carcass ships a duplicate
+    # concept in silence. Nothing else in the suite catches that either.
+    # Watch that source's own import — the suite will not do it for you.
+    #
+    # One thing this keying buys that is easy to miss: when a build collapses
+    # entirely and proposes nothing at all, `rebuilt` is empty, so nothing is
+    # discarded and every judgement in the database survives. Keyed on `entry`
+    # instead, a catastrophic build annihilated all of them — every source
+    # still had entry rows, so every judged key looked like a departed sense.
     _live = {k[0] for k in rebuilt}
     for key in [k for k in judged if k not in rebuilt and k[0] in _live]:
         con.execute("DELETE FROM concept_member WHERE source_id=? AND "

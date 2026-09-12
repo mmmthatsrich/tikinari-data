@@ -497,7 +497,7 @@ class AllMembersRejected(unittest.TestCase):
         self.assertEqual([], self.con.execute(
             "SELECT id FROM concept_member WHERE concept_id NOT IN "
             "  (SELECT id FROM concept)").fetchall())
-        # The acceptance invariant (test_concept_acceptance.py:91),
+        # The acceptance invariant (test_concept_acceptance.py),
         # reproduced here so the zombie is caught in this fixture rather
         # than only in the whole-DB acceptance suite.
         self.assertEqual(0, self.con.execute(
@@ -732,15 +732,15 @@ class RebuildSurvival(unittest.TestCase):
 
     def test_a_permanently_retired_source_keeps_its_judged_row_forever(self):
         # RECORDED TRADE, not a bug -- see the comment above the discard
-        # loop in persist(). 54 cannot tell "this source has zero entries
-        # because the import is mid-flight" from "this source is gone for
-        # good": both look identical at build time. The guard that saves
-        # the interrupted-import case (the two tests above) therefore also
-        # protects a genuine permanent retirement, and this is the cost:
-        # a retired source's judged row, and the concept it keeps alive,
-        # now survive every rebuild for as long as the source stays absent.
-        # Undoing this needs a deliberate cleanup pass; nothing in 54 can
-        # decide it on its own.
+        # loop in persist(). 54 cannot tell "this build proposed nothing for
+        # this source because the import is mid-flight", "...because its
+        # builder emitted no usable senses", and "...because the source is
+        # gone for good" apart: all three look identical at build time. The
+        # guard that saves the first two therefore also protects a genuine
+        # permanent retirement, and this is the cost: a retired source's
+        # judged row, and the concept it keeps alive, now survive every
+        # rebuild for as long as the source stays absent. Undoing this needs
+        # a deliberate cleanup pass; nothing in 54 can decide it on its own.
         bu = importlib.import_module("50_build_unified")
         mod = importlib.import_module("54_build_concepts")
         con = _fixture_db()
@@ -776,7 +776,7 @@ class RebuildSurvival(unittest.TestCase):
             "SELECT headword FROM concept WHERE id=?",
             (concept_id,)).fetchone()[0])
         # ... which is exactly what trips the acceptance invariant at
-        # tests/test_concept_acceptance.py:91
+        # tests/test_concept_acceptance.py
         # (test_an_elected_headword_was_written_by_a_member), reproduced here
         # fixture-scoped the way
         # test_a_grouping_that_leaves_the_corpus_takes_its_confirmation_with_it
