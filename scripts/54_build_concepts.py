@@ -15,11 +15,13 @@ import re
 import sqlite3
 import sys
 from collections import defaultdict
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
+from concept_election import elect_gloss, elect_headword
 from concept_evidence import SEED_CONFIDENCE, blocks, confidence_for, lexeme_key, positive_evidence
 
 
@@ -156,3 +158,143 @@ def form_concepts(views):
         c["confidence"] = min((m["confidence"] for m in c["members"]),
                               key=("uncertain", "probable", "certain").index)
     return concepts
+
+
+NOW = datetime.now(timezone.utc).isoformat()
+
+_JUDGED = ("confirmed", "rejected")
+
+
+def _derived_long(con):
+    """Member keys whose word is formed on a base carrying a long vowel.
+
+    derivation (D38) is attested word formation, so where it says hōmai is
+    hō + mai the macron is settled by morphology rather than by a vote.
+
+    The test fixture (_fixture_db in tests/test_concept_build.py) has no
+    derivation table, so this query is guarded the same way utils._has_table
+    and 50_build_unified.delete_source_slice guard optional tables. The
+    morphology path itself is unit-tested directly in
+    tests/test_concept_election.py.
+    """
+    out = set()
+    try:
+        rows = con.execute(
+            "SELECT e.source_id, e.source_entry_id, d.base_form "
+            "  FROM derivation d JOIN entry e ON e.id = d.entry_id")
+    except sqlite3.OperationalError:
+        return out
+    for src, seid, base in rows:
+        if any(ch in "āēīōū" for ch in (base or "").lower()):
+            out.add((src, str(seid)))
+    return out
+
+
+def persist(con, concepts):
+    """Write concepts, preserving anything a human or the sweep has judged."""
+    judged = {}
+    for cid, src, seid, sn, status, conf in con.execute(
+            "SELECT concept_id, source_id, source_entry_id, sense_number, "
+            "       status, confidence FROM concept_member "
+            " WHERE status IN (?,?)", _JUDGED):
+        judged[(src, str(seid), sn)] = (cid, status, conf)
+
+    con.execute("DELETE FROM concept_member_evidence")
+    con.execute("DELETE FROM concept_member WHERE status NOT IN (?,?)", _JUDGED)
+
+    long_bases = _derived_long(con)
+    counts = {"concepts": 0, "members": 0, "kept": 0}
+
+    for concept in concepts:
+        members = [m for m in concept["members"]
+                   if judged.get(m["view"]["member_key"], (None, None, None))[1]
+                   != "rejected"]
+        if not members:
+            continue
+
+        cur = con.execute(
+            "INSERT INTO concept (status, confidence, created_at, last_updated)"
+            " VALUES ('proposed', ?, ?, ?)", (concept["confidence"], NOW, NOW))
+        concept_id = cur.lastrowid
+        counts["concepts"] += 1
+
+        member_ids = {}
+        for m in members:
+            v = m["view"]
+            key = v["member_key"]
+            if key in judged:
+                counts["kept"] += 1
+                con.execute(
+                    "UPDATE concept_member SET concept_id=?, entry_id=?, "
+                    " sense_id=? WHERE source_id=? AND source_entry_id=? "
+                    " AND sense_number IS ?",
+                    (concept_id, v["entry_id"], v["sense_id"],
+                     key[0], key[1], key[2]))
+                mid = con.execute(
+                    "SELECT id FROM concept_member WHERE source_id=? AND "
+                    " source_entry_id=? AND sense_number IS ?", key).fetchone()[0]
+            else:
+                mid = con.execute(
+                    "INSERT INTO concept_member (concept_id, source_id, "
+                    " source_entry_id, sense_number, entry_id, sense_id, "
+                    " status, confidence, created_at) "
+                    " VALUES (?,?,?,?,?,?, 'proposed', ?, ?)",
+                    (concept_id, key[0], key[1], key[2], v["entry_id"],
+                     v["sense_id"], m["confidence"], NOW)).lastrowid
+                counts["members"] += 1
+            member_ids[key] = mid
+            for e in m["evidence"]:
+                con.execute(
+                    "INSERT INTO concept_member_evidence (member_id, kind, "
+                    " detail, weight) VALUES (?,?,?,?)",
+                    (mid, e["kind"], e["detail"], e["weight"]))
+
+        views = [m["view"] for m in members]
+        derived = any((v["source_id"], v["source_entry_id"]) in long_bases
+                      for v in views)
+        hw, hw_key, _reason = elect_headword(views, derived)
+        gen, gen_key = elect_gloss(views, "en")
+        gmi, gmi_key = elect_gloss(views, "mi")
+        con.execute(
+            "UPDATE concept SET headword=?, headword_from=?, gloss_en=?, "
+            " gloss_en_from=?, gloss_mi=?, gloss_mi_from=?, last_updated=? "
+            " WHERE id=?",
+            (hw, member_ids.get(hw_key), gen, member_ids.get(gen_key),
+             gmi, member_ids.get(gmi_key), NOW, concept_id))
+
+    # Only now: a judged member still pointed at its OLD concept during the
+    # loop above, so its concept could not be dropped before it was moved.
+    con.execute("DELETE FROM concept_member_evidence WHERE member_id NOT IN "
+                "(SELECT id FROM concept_member)")
+    con.execute("DELETE FROM concept WHERE id NOT IN "
+                "(SELECT concept_id FROM concept_member)")
+    con.commit()
+    return counts
+
+
+def run(write: bool) -> None:
+    con = sqlite3.connect(DB_PATH)
+    views = load_senses(con)
+    concepts = []
+    for key in sorted(views):
+        concepts.extend(form_concepts(views[key]))
+
+    sizes = defaultdict(int)
+    for c in concepts:
+        sizes[len({m["view"]["source_id"] for m in c["members"]})] += 1
+    print(f"concepts: {len(concepts):,}")
+    for n in sorted(sizes):
+        print(f"    spanning {n} source(s): {sizes[n]:,}")
+
+    if not write:
+        print("\n(dry run — pass --write to persist)")
+        con.close()
+        return
+    print("\n" + repr(persist(con, concepts)))
+    con.close()
+
+
+if __name__ == "__main__":
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--write", action="store_true", help="persist to the DB")
+    run(ap.parse_args().write)

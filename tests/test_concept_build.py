@@ -203,5 +203,62 @@ class FormConcepts(unittest.TestCase):
             self.assertFalse({"hiwi", "hīwi"} <= hws, hws)
 
 
+class Persist(unittest.TestCase):
+    def setUp(self):
+        self.mod = importlib.import_module("54_build_concepts")
+
+    def _build(self, con):
+        views = self.mod.load_senses(con)
+        allc = []
+        for key in sorted(views):
+            allc.extend(self.mod.form_concepts(views[key]))
+        return self.mod.persist(con, allc)
+
+    def test_it_writes_concepts_members_and_evidence(self):
+        con = _fixture_db()
+        self._build(con)
+        self.assertGreater(con.execute(
+            "SELECT COUNT(*) FROM concept").fetchone()[0], 0)
+        self.assertEqual(con.execute(
+            "SELECT COUNT(*) FROM concept_member").fetchone()[0], 5)
+
+    def test_it_elects_a_headword_some_member_wrote(self):
+        con = _fixture_db()
+        self._build(con)
+        for hw, in con.execute(
+                "SELECT headword FROM concept WHERE headword IS NOT NULL"):
+            self.assertIn(hw, ("Hiwi", "hiwi"))
+
+    def test_running_twice_does_not_duplicate(self):
+        con = _fixture_db()
+        self._build(con)
+        first = con.execute("SELECT COUNT(*) FROM concept_member").fetchone()[0]
+        self._build(con)
+        self.assertEqual(con.execute(
+            "SELECT COUNT(*) FROM concept_member").fetchone()[0], first)
+
+    def test_a_confirmed_membership_is_never_overwritten(self):
+        con = _fixture_db()
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='confirmed', "
+                    "confidence='certain' WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+        row = con.execute("SELECT status, confidence FROM concept_member "
+                          "WHERE source_id='papakupu'").fetchone()
+        self.assertEqual(row, ("confirmed", "certain"))
+
+    def test_a_rejected_membership_is_never_revived(self):
+        con = _fixture_db()
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='rejected' "
+                    "WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+        self.assertEqual(con.execute(
+            "SELECT status FROM concept_member WHERE source_id='papakupu'"
+        ).fetchone()[0], "rejected")
+
+
 if __name__ == "__main__":
     unittest.main()
