@@ -92,27 +92,30 @@ def _concepts_for(con, cluster_key):
     54_build_concepts._derived_long guard optional tables: a DB built before
     they existed renders the rest of the batch normally and simply carries no
     CONCEPTS section, rather than the whole batch view dying on every cluster.
+    All three tables are created together by one executescript in
+    00_init_db, so any one of them missing means the layer is not present —
+    the try wraps every query against them, not just the first.
     """
     try:
         rows = con.execute(_CONCEPT_IDS_SQL, (cluster_key,)).fetchall()
+        out = []
+        for (cid,) in rows:
+            c = con.execute(_CONCEPT_SQL, (cid,)).fetchone()
+            members = []
+            for mid, src, seid, sn, status, conf in con.execute(
+                    _CONCEPT_MEMBER_SQL, (cid,)):
+                evidence = [dict(zip(("kind", "detail"), r)) for r in con.execute(
+                    _CONCEPT_MEMBER_EVIDENCE_SQL, (mid,))]
+                members.append({"address": f"{src}:{seid}"
+                                           + (f"#{sn}" if sn else ""),
+                                "status": status, "confidence": conf,
+                                "evidence": evidence})
+            out.append({"id": cid, "status": c["status"], "confidence": c["confidence"],
+                        "headword": c["headword"], "gloss_en": c["gloss_en"],
+                        "gloss_mi": c["gloss_mi"], "members": members})
+        return out
     except sqlite3.OperationalError:
         return []            # table not present in an older DB
-    out = []
-    for (cid,) in rows:
-        c = con.execute(_CONCEPT_SQL, (cid,)).fetchone()
-        members = []
-        for mid, src, seid, sn, status, conf in con.execute(
-                _CONCEPT_MEMBER_SQL, (cid,)):
-            evidence = [dict(zip(("kind", "detail"), r)) for r in con.execute(
-                _CONCEPT_MEMBER_EVIDENCE_SQL, (mid,))]
-            members.append({"address": f"{src}:{seid}"
-                                       + (f"#{sn}" if sn else ""),
-                            "status": status, "confidence": conf,
-                            "evidence": evidence})
-        out.append({"id": cid, "status": c["status"], "confidence": c["confidence"],
-                    "headword": c["headword"], "gloss_en": c["gloss_en"],
-                    "gloss_mi": c["gloss_mi"], "members": members})
-    return out
 
 
 def assemble(con, cluster_key: str) -> dict:
