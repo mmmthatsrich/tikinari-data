@@ -122,14 +122,22 @@ class PositiveEvidence(unittest.TestCase):
         # because coverage is total (see GlossGrading). What is weak is a
         # shared word that is BOTH a small fraction of each gloss AND common
         # across the corpus. self.idx's small four-gloss corpus is too rare
-        # on 'ridge' (df 3) to demonstrate that, so this test builds its
-        # own, and multiplies the filler far past DISTINCT_CEILING (x200,
-        # not just past today's provisional value) so it does not pin the
-        # exact spot Task 6's grid search lands on.
-        idx = GlossIndex(["ridge of a hill", "ridge of a mountain"]
+        # on 'ridge' (df 3) to demonstrate that, so this test builds its own.
+        #
+        # Task 6 grid-searches COVERAGE_FLOOR over 0.3-0.7 and DISTINCT_CEILING
+        # over 5-80, so margins have to clear that WHOLE range, not just
+        # today's provisional defaults: 'ridge of a hill'/'ridge of a
+        # mountain' alone sits at coverage 1/3 (0.333), which a floor of 0.3
+        # would rescue. Extra distinct words on each side push coverage down
+        # to 1/12 (0.083), and the filler multiplier (x200) keeps
+        # distinctiveness at 202, past the top of the ceiling range too.
+        idx = GlossIndex(["ridge of a hill, crest, summit, escarpment, headland",
+                          "ridge along a valley, slope, foothill, moraine, plateau"]
                          + ["some ridge nearby"] * 200)
-        a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
-        b = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
+        a = _sense(source_id="te_aka",
+                  gloss_en="ridge of a hill, crest, summit, escarpment, headland")
+        b = _sense(source_id="papakupu",
+                  gloss_en="ridge along a valley, slope, foothill, moraine, plateau")
         kinds = [e["kind"] for e in positive_evidence(a, b, idx)]
         self.assertIn("gloss_overlap_weak", kinds)
         self.assertNotIn("gloss_overlap", kinds)
@@ -206,20 +214,26 @@ class GlossGrading(unittest.TestCase):
         self.assertLessEqual(got[0]["distinctiveness"], 20)
 
     def test_one_common_word_in_two_long_glosses_is_weak(self):
-        # Weak on BOTH axes: the 'a'/'form' noise case.
+        # Weak on BOTH axes: the 'a'/'form' noise case. Coverage is 1/6
+        # (0.167), safely below the whole 0.3-0.7 COVERAGE_FLOOR grid. The
+        # filler multiplier is x200 (not x40) so distinctiveness clears the
+        # whole 5-80 DISTINCT_CEILING grid too — at x40 it lands at df 42,
+        # which a ceiling of 80 would rescue.
         corpus = (["used to form the passive of a verb",
                    "particle indicating a plural form"]
-                  + ["some other form of thing"] * 40)
+                  + ["some other form of thing"] * 200)
         got = self._pair("used to form the passive of a verb",
                          "particle indicating a plural form", corpus)
         self.assertEqual(["gloss_overlap_weak"], [e["kind"] for e in got])
         self.assertEqual("uncertain", confidence_for(got, []))
 
     def test_the_weak_kind_weighs_less_than_the_ordinary_one(self):
+        # x200 filler (not x40): at x40 the corpus IS the fixture (df 40
+        # exactly), so a ceiling of 40 rescues it and both weights tie.
         strong = self._pair("Spoon", "spoon.", ["Spoon", "spoon."])
         weak = self._pair("used to form the passive of a verb",
                           "particle indicating a plural form",
-                          ["form"] * 40)
+                          ["form"] * 200)
         self.assertGreater(strong[0]["weight"], weak[0]["weight"])
 
     def test_no_shared_words_is_no_evidence_at_all(self):
@@ -271,7 +285,7 @@ class GlossGrading(unittest.TestCase):
                   + ["narcissism"] * filler_count)
         got = self._pair(long_gloss, short_gloss, corpus)
         self.assertEqual(DISTINCT_CEILING, got[0]["distinctiveness"])
-        self.assertLess(got[0]["coverage"], 0.1)
+        self.assertLess(got[0]["coverage"], COVERAGE_FLOOR)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
 
     def test_a_non_gloss_kind_carries_no_measurements(self):

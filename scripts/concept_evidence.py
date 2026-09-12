@@ -194,7 +194,11 @@ def gloss_coverage(a_words, b_words):
 
 
 def positive_evidence(a, b, index):
-    """[{kind, detail, weight}] linking two senses, strongest first.
+    """[{kind, detail, weight, coverage, distinctiveness}] linking two senses,
+    strongest first.
+
+    coverage and distinctiveness are set on gloss kinds (gloss_overlap,
+    gloss_overlap_weak) and None on every other kind — see GlossGrading.
 
     Cross-source only. Within-source grouping is the seeding step's job, and
     counting it here would let one source's internal repetition masquerade as
