@@ -30,6 +30,14 @@ reading them as evidence of *word identity*. They are evidence of *shared
 meaning*, and a sense-set layer built on them would be well-evidenced and cheap
 — but it would not deduplicate the corpus or settle a single macron.
 
+**Not finer-grained than a source's own entry.** Seeds are whole lexemes, so
+every sense of one source entry moves as a block. Te Aka files five senses of
+`hoi` under entry 1331, so those five can never be separated into different
+concepts no matter what evidence arrives. This is a real ceiling on the layer,
+discovered when the first real build reached 7 concepts on a key judged to hold
+10 distinct words; the remainder are not reachable without splitting source
+entries, which the layer does not do.
+
 **Not a sense inventory.** A concept has members; it does not yet model its own
 senses. `williams:1251#1` (ridge) and `#2` (line of descent) both join the
 `hiwi`-ridge concept. Structuring senses *within* a concept is deferred (§9).
@@ -125,13 +133,21 @@ member is still proposed, which is the common case.
 | `cites_source` | Te Matatiki citing `hīmoemoe W.50`, resolved to the Williams entry | certain |
 | `shared_example` | two sources printing the same Māori sentence under one key | certain |
 | `attributed_quote` | Te Aka citing `W 1971:54` / He Pātaka Kupu on one key | probable |
-| `shared_cognate_set` | one key, and both senses carry the same cognate set | probable |
 | `gloss_overlap` | one key, compatible POS, glosses sharing content words | probable |
 
 The `gloss_overlap` threshold is the one tuning parameter here. It is set during
 implementation by measuring against the judged calibration clusters (§8.4) and
 recorded in the builder, not left to taste: too loose merges homographs, too
 tight leaves every cross-source pair a singleton.
+
+**`shared_cognate_set` was listed here and has been removed** (2026-09-12,
+during implementation). Every entry-to-cognate link in this corpus carries
+`match_method = 'headword_exact'` — matched on spelling, never on meaning — so
+two senses share a cognate set *because* they share a headword. Counting it
+laundered the rule below into a kind rated `probable`, and it showed: on the
+`hoi` key it merged 'ear lobe', "that's enough" and 'disobedient' into one
+13-member concept. Removing it also un-merged `huripari` and `hoatu`, which had
+been unified by that same circular evidence — right by accident.
 
 **Same `headword_search` alone is never evidence.** It generates candidates.
 Nothing more. The key is macron-blind and homograph-blind: `hiwi` is eight words
