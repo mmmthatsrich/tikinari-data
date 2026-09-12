@@ -11,8 +11,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
-from concept_evidence import (EVIDENCE_WEIGHT, SEED_CONFIDENCE, GlossIndex, blocks,
-                             confidence_for, gloss_coverage, lexeme_key, positive_evidence)
+from concept_evidence import (COVERAGE_FLOOR, DISTINCT_CEILING, EVIDENCE_WEIGHT,
+                             SEED_CONFIDENCE, GlossIndex, blocks, confidence_for,
+                             gloss_coverage, lexeme_key, positive_evidence)
 
 
 class LexemeKey(unittest.TestCase):
@@ -113,16 +114,18 @@ class PositiveEvidence(unittest.TestCase):
         self.assertIn("gloss_overlap",
                       [e["kind"] for e in positive_evidence(a, b, self.idx)])
 
-    def test_a_single_shared_word_is_weak_evidence(self):
-        # 51,318 of 69,268 gloss overlaps rest on one word. Rating those
-        # 'probable' would ship the corpus's weakest signal to users as
-        # though it were well attested. This corpus makes 'ridge' common
-        # (df > DISTINCT_CEILING) as well as low-coverage, so neither axis
-        # can rescue it — self.idx's small four-gloss corpus is too rare on
-        # 'ridge' (df 3) to make that point under the coverage/distinctiveness
-        # rule, so this test builds its own.
+    def test_a_pair_weak_on_both_axes_is_weak_evidence(self):
+        # A single shared word is NOT automatically weak any more —
+        # 'Spoon'/'spoon.' is exactly that and grades ordinary gloss_overlap
+        # because coverage is total (see GlossGrading). What is weak is a
+        # shared word that is BOTH a small fraction of each gloss AND common
+        # across the corpus. self.idx's small four-gloss corpus is too rare
+        # on 'ridge' (df 3) to demonstrate that, so this test builds its
+        # own, and multiplies the filler far past DISTINCT_CEILING (x200,
+        # not just past today's provisional value) so it does not pin the
+        # exact spot Task 6's grid search lands on.
         idx = GlossIndex(["ridge of a hill", "ridge of a mountain"]
-                         + ["some ridge nearby"] * 25)
+                         + ["some ridge nearby"] * 200)
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
         b = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
         kinds = [e["kind"] for e in positive_evidence(a, b, idx)]
@@ -226,6 +229,33 @@ class GlossGrading(unittest.TestCase):
         got = self._pair("Spoon", "spoon.", ["Spoon", "spoon."])[0]
         self.assertEqual(1.0, got["coverage"])
         self.assertEqual(2, got["distinctiveness"])
+
+    def test_coverage_at_the_floor_is_rescued_even_when_common(self):
+        # The spec's own example (§2): 'Give'/'Give forth.' sits at coverage
+        # exactly COVERAGE_FLOOR, and two judged clusters (hoatu, huripari)
+        # land exactly here too. An off-by-one on '>=' would silently demote
+        # both, so this pins the boundary as inclusive: distinctiveness is
+        # pushed well past the ceiling so only the coverage axis can rescue.
+        corpus = (["Give", "Give forth."]
+                  + ["give it away"] * (DISTINCT_CEILING + 10))
+        got = self._pair("Give", "Give forth.", corpus)
+        self.assertEqual(COVERAGE_FLOOR, got[0]["coverage"])
+        self.assertGreater(got[0]["distinctiveness"], DISTINCT_CEILING)
+        self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
+
+    def test_distinctiveness_at_the_ceiling_is_rescued_even_at_low_coverage(self):
+        # The mirror boundary: distinctiveness sits exactly at
+        # DISTINCT_CEILING (inclusive '<='), while coverage is pushed below
+        # COVERAGE_FLOOR so only the distinctiveness axis can rescue.
+        long_gloss = "narcissism, vanity, pride, conceit, arrogance"
+        short_gloss = "narcissism"
+        filler_count = DISTINCT_CEILING - 2   # the pair itself supplies 2
+        corpus = ([long_gloss, short_gloss]
+                  + ["narcissism of a sort"] * filler_count)
+        got = self._pair(long_gloss, short_gloss, corpus)
+        self.assertEqual(DISTINCT_CEILING, got[0]["distinctiveness"])
+        self.assertLess(got[0]["coverage"], COVERAGE_FLOOR)
+        self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
 
     def test_a_non_gloss_kind_carries_no_measurements(self):
         a = _sense(source_id="te_matatiki", entry_id=10, cites=frozenset({99}))

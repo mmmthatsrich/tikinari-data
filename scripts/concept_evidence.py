@@ -59,15 +59,24 @@ EVIDENCE_CONFIDENCE = {
     "shared_example":     "certain",
     "attributed_quote":   "probable",
     "gloss_overlap":      "probable",
-    # gloss_overlap resting on exactly one shared content word is the
-    # corpus's weakest signal, not an ordinary case of it: measured at
-    # 94% of all cross-source attachment (69,268 memberships) with 74%
-    # of THAT (51,318) resting on a single shared word — himoemoe-style
-    # terse glosses ('Acidic' / 'Acid, sour.') that agree by coincidence
-    # as often as by genuine correspondence. A distinct kind, not a size
-    # check inside confidence_for, so it shows up by name in the sweep
-    # batch instead of forcing a reviewer to infer why a membership is
-    # weak. Two or more shared words stays ordinary gloss_overlap.
+    # A pair is gloss_overlap_weak precisely when it fails BOTH measures
+    # below (gloss_coverage and GlossIndex.df — see COVERAGE_FLOOR /
+    # DISTINCT_CEILING): the shared word(s) are a small fraction of each
+    # gloss AND common across the corpus. Shared-word count alone no longer
+    # decides it: 'Spoon'/'spoon.' is one shared word and grades ordinary
+    # because coverage is total, and a three-word overlap can still grade
+    # weak if it is diluted across two long, common glosses. A distinct
+    # kind, not a size check inside confidence_for, so it shows up by name
+    # in the sweep batch instead of forcing a reviewer to infer why a
+    # membership is weak.
+    #
+    # Motivation (measured before this design, under the old single-count
+    # rule this replaced): gloss_overlap was 94% of all cross-source
+    # attachment (69,268 memberships), with 74% of THAT (51,318) resting on
+    # a single shared word — himoemoe-style terse glosses ('Acidic' /
+    # 'Acid, sour.') that agree by coincidence as often as by genuine
+    # correspondence. That volume is why a distinct weak kind exists at
+    # all; it no longer determines membership in it.
     "gloss_overlap_weak": "uncertain",
 }
 
