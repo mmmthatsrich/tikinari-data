@@ -309,10 +309,18 @@ the check: if a behavioural test changes here, something is wrong.
 - Modify: `scripts/54_build_concepts.py:111` — `form_concepts` signature
 - Modify: `scripts/54_build_concepts.py:132` — the call
 - Modify: `scripts/54_build_concepts.py:382-401` — `run()` builds the index
-- Modify: `tests/test_concept_evidence.py` — 9 `positive_evidence(a, b)` calls
-  at lines 78, 86, 92, 101, 107, 115, 129, 130, 141, 146, 154, 170
-- Modify: `tests/test_concept_build.py` — 6 `form_concepts` calls at lines
-  156, 185, 207, 220, 351, 575
+- Modify: `tests/test_concept_evidence.py` — **every** `positive_evidence(a, b)`
+  call site (12 at the time of writing: lines 78, 86, 92, 101, 107, 115, 129,
+  130, 141, 146, 154, 170). Find them with
+  `grep -n "positive_evidence(" tests/test_concept_evidence.py` rather than
+  trusting the list.
+- Modify: `tests/test_concept_build.py` — **every** `form_concepts` call site
+  (6 at the time of writing: lines 156, 185, 207, 220, 351, 575). Find them
+  with `grep -n "form_concepts(" tests/test_concept_build.py`.
+
+**Line numbers in this plan are approximate** — the first edit to a file shifts
+every number below it. Locate edits by content: function name, test name, or a
+unique string from the snippet.
 
 **Interfaces:**
 - Consumes: `GlossIndex` (Task 1).
@@ -461,11 +469,14 @@ class GlossGrading(unittest.TestCase):
         self.assertEqual("probable", confidence_for(got, []))
 
     def test_a_rare_shared_word_is_ordinary_evidence(self):
-        # The other axis: coverage is low, but the shared word is decisive.
-        got = self._pair("be narcissistic, vain, self-regarding",
-                         "narcissism and conceit of the worst kind",
-                         ["narcissism"] * 3)
+        # The other axis: coverage is LOW (one word out of six), but the
+        # shared word is decisive. Only distinctiveness can rescue this.
+        long_gloss = "narcissism, vanity, pride, conceit, self-regard"
+        corpus = [long_gloss, "narcissism", "narcissism of a sort"]
+        got = self._pair(long_gloss, "narcissism", corpus)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
+        self.assertLess(got[0]["coverage"], 0.5)      # coverage did not save it
+        self.assertLessEqual(got[0]["distinctiveness"], 20)
 
     def test_one_common_word_in_two_long_glosses_is_weak(self):
         # Weak on BOTH axes: the 'a'/'form' noise case.
