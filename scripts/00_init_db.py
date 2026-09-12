@@ -91,6 +91,7 @@ def create_tables(conn: sqlite3.Connection) -> None:
             source_code         TEXT,
             loan_marker         TEXT,
             see_also            TEXT,          -- JSON array
+            sense_number   INTEGER,       -- papakupu numbers its senses; 4,003 rows carry one (D37)
             pdf_page            INTEGER,
             created_at          TEXT DEFAULT (datetime('now')),
             last_updated        TEXT DEFAULT (datetime('now'))

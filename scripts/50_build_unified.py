@@ -580,8 +580,8 @@ def build_paekupu(con, b):
 def build_papakupu(con, b):
     sql = ("SELECT id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, usage_examples, variant_forms, see_also, source_code, "
-           "loan_marker, pdf_page FROM papakupu_entries ORDER BY id")
-    for (id_, hw, hs, hse, pos, d, ux, vf, sa, sc, lm, pg) in con.execute(sql):
+           "loan_marker, sense_number, pdf_page FROM papakupu_entries ORDER BY id")
+    for (id_, hw, hs, hse, pos, d, ux, vf, sa, sc, lm, sn, pg) in con.execute(sql):
         # usage_examples are {text_mi, text_en, source_abbrev} dicts (02_papakupu_extract).
         examples = [e for e in jload(ux) if isinstance(e, dict)]
         eid = b.add_entry(id_, hw, hs, hse, pos=pos, loan_marker=lm,
@@ -592,7 +592,7 @@ def build_papakupu(con, b):
         # is preserved in definition_raw. clean_gloss strips everything from the
         # first example onward so example text never bleeds into the gloss.
         gloss = clean_gloss(d, [e.get("text_mi") for e in examples])
-        sid = b.add_sense(eid, None, gloss, None, d, part_of_speech=pos)
+        sid = b.add_sense(eid, sn, gloss, None, d, part_of_speech=pos)
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)

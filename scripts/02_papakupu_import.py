@@ -36,6 +36,9 @@ def import_papakupu(conn: sqlite3.Connection, entries: list) -> int:
             e.get("source_code") or None,
             e.get("loan_marker") or None,
             json.dumps(e.get("see_also") or [], ensure_ascii=False),
+            # Papakupu numbers its senses and the column did not exist, so every
+            # papakupu sense reached the corpus unnumbered (D37).
+            int(e["sense_number"]) if str(e.get("sense_number") or "").isdigit() else None,
             e.get("pdf_page"),
         ))
 
@@ -43,8 +46,8 @@ def import_papakupu(conn: sqlite3.Connection, entries: list) -> int:
         """INSERT INTO papakupu_entries
                (headword, headword_sort, headword_search, part_of_speech, definition,
                 usage_examples, variant_forms, variant_search_keys, source_code,
-                loan_marker, see_also, pdf_page)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                loan_marker, see_also, sense_number, pdf_page)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         rows,
     )
 
