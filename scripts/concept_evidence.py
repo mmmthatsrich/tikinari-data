@@ -159,6 +159,21 @@ class GlossIndex:
         return len(hits)
 
 
+def gloss_coverage(a_words, b_words):
+    """Jaccard of two content-word sets: |A∩B| / |A∪B|.
+
+    The axis a word count cannot see. Two sources both glossing a word as
+    exactly 'name' agree completely, however common 'name' is elsewhere in
+    the corpus; two long glosses that happen to share 'form' do not.
+
+    0.0 when either side has no content words, so a gloss of nothing but
+    stopwords links to nothing.
+    """
+    if not a_words or not b_words:
+        return 0.0
+    return len(a_words & b_words) / len(a_words | b_words)
+
+
 def positive_evidence(a, b):
     """[{kind, detail, weight}] linking two senses, strongest first.
 

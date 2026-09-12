@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
 from concept_evidence import (EVIDENCE_WEIGHT, SEED_CONFIDENCE, GlossIndex, blocks,
-                             confidence_for, lexeme_key, positive_evidence)
+                             confidence_for, gloss_coverage, lexeme_key, positive_evidence)
 
 
 class LexemeKey(unittest.TestCase):
@@ -307,6 +307,43 @@ class GlossIndexDf(unittest.TestCase):
         started = time.time()
         GlossIndex(corpus)
         self.assertLess(time.time() - started, 1.0)
+
+
+class GlossCoverage(unittest.TestCase):
+    """How much of what the two sources said is the same thing."""
+
+    def _cov(self, a, b):
+        from concept_evidence import _content_words
+        return gloss_coverage(_content_words(a), _content_words(b))
+
+    def test_identical_glosses_are_total_coverage(self):
+        # The defect this whole change exists for: a one-word gloss can never
+        # share more than one word, so a count calls this the weakest signal.
+        self.assertEqual(1.0, self._cov("Spoon", "spoon."))
+
+    def test_punctuation_and_case_do_not_matter(self):
+        self.assertEqual(1.0, self._cov("Throw away.", "throw away"))
+
+    def test_a_shared_word_in_two_long_glosses_is_low_coverage(self):
+        # 'a' glossed two ways, sharing only 'form' — the noise case.
+        cov = self._cov("used to form the passive of a verb",
+                        "particle indicating a plural form")
+        self.assertLess(cov, 0.3)
+
+    def test_partial_agreement_is_partial(self):
+        # {give} shared, {give, forth} union.
+        self.assertAlmostEqual(0.5, self._cov("Give", "Give forth."))
+
+    def test_no_shared_words_is_zero(self):
+        self.assertEqual(0.0, self._cov("spoon", "battle"))
+
+    def test_an_empty_gloss_is_zero_not_an_error(self):
+        self.assertEqual(0.0, self._cov("spoon", ""))
+        self.assertEqual(0.0, self._cov("", ""))
+
+    def test_a_gloss_of_only_stopwords_is_zero(self):
+        # 'of a the' must never link two senses, at any coverage.
+        self.assertEqual(0.0, self._cov("of a the", "of a the"))
 
 
 if __name__ == "__main__":
