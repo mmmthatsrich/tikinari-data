@@ -7,6 +7,20 @@ The four hard constraints are the recorded calibration answers in
 tests/test_concept_acceptance.py. A point failing any one is rejected outright,
 however well it scores elsewhere: those answers were reasoned one cluster at a
 time and they outrank any aggregate.
+
+A fifth criterion joins them, because the first grid run showed the four cannot
+discriminate on their own: the thresholds never change grouping (see
+score_point), so all four answers hold identically at every point. What the
+thresholds change is the TIER, and a recorded-correct grouping tiered
+'uncertain' is withheld by 60_export_app_db — the answer is right in staging
+and denied in practice. So a recorded-correct cluster must also SHIP.
+
+Selection is then for the TIGHTEST point that satisfies everything, not the
+loosest: highest COVERAGE_FLOOR, and on a tie the lowest DISTINCT_CEILING.
+A wrong merge shows two different words as one and misinforms about the
+language; a missed merge shows a user two entries where one would do, which is
+what every existing dictionary already does, and concepts are a pure overlay so
+every sense reaches the app either way.
 """
 import importlib
 import sqlite3
@@ -33,12 +47,56 @@ def constraints_hold(score):
             and score["hoi_soy_sources"] == 1)
 
 
+def clusters_reach_users(score):
+    """The fifth criterion: a recorded-correct grouping must SHIP.
+
+    himoemoe only. The other three recorded answers are answers about
+    SEPARATION — hiwi is eight words and not one, hia is not hīa,
+    paekupu:hoi 'soy' stands alone — and demanding that every fragment of a
+    separation answer also ships would assert something no reviewer ever
+    recorded. himoemoe's answer is the opposite kind: one word, six sources,
+    no disagreement anywhere. Tiering that 'uncertain' means
+    filter_concepts() withholds it and the answer never reaches a user, so
+    the threshold has denied it as surely as fragmenting it would have.
+
+    Keyed on the SHIPPING concepts' source count against the same >=4 the
+    acceptance test records, so the criterion is the recorded answer itself
+    rather than a second, softer version of it.
+
+    Kept apart from constraints_hold deliberately: those four are about
+    grouping and this one is about tiering, and a grid where the first four
+    hold everywhere is exactly when the difference matters.
+    """
+    return score["himoemoe_shipping_sources"] >= 4
+
+
+def point_is_acceptable(score):
+    """Every criterion. Shipping is additional to the four, never instead."""
+    return constraints_hold(score) and clusters_reach_users(score)
+
+
 def _concepts_for(views, index, keys):
     out = {}
     for key in keys:
         if key in views:
             out[key] = build.form_concepts(views[key], index)
     return out
+
+
+def _max_sources(concepts, shipping=False):
+    """Widest source span among these concepts; shipping ones only if asked.
+
+    'Shipping' is filter_concepts()'s rule: anything above 'uncertain'. A
+    freshly built concept is never 'confirmed', so the sweep's half of that
+    rule cannot apply here.
+    """
+    return max((len({m["view"]["source_id"] for m in c["members"]})
+                for c in concepts
+                if not shipping or c["confidence"] != "uncertain"), default=0)
+
+
+def _n_shipping(concepts):
+    return sum(1 for c in concepts if c["confidence"] != "uncertain")
 
 
 def score_point(views, index):
@@ -53,8 +111,8 @@ def score_point(views, index):
         if {"hia", "hīa"} <= hws:
             hia_joined = True
 
-    himoemoe = max((len({m["view"]["source_id"] for m in c["members"]})
-                    for c in got.get("himoemoe", [])), default=0)
+    himoemoe = _max_sources(got.get("himoemoe", []))
+    himoemoe_ships = _max_sources(got.get("himoemoe", []), shipping=True)
 
     soy = 1
     for c in got.get("hoi", []):
@@ -63,7 +121,14 @@ def score_point(views, index):
             soy = len({m["view"]["source_id"] for m in c["members"]})
 
     return {"hiwi_concepts": hiwi, "hia_joined": hia_joined,
-            "himoemoe_sources": himoemoe, "hoi_soy_sources": soy}
+            "himoemoe_sources": himoemoe,
+            "himoemoe_shipping_sources": himoemoe_ships,
+            "hoi_soy_sources": soy,
+            # Reported, not constrained: the separation clusters' shipping
+            # rates, so the judgement above about which clusters the fifth
+            # criterion covers stays visible and can be revisited.
+            "hiwi_shipping": _n_shipping(got.get("hiwi", [])),
+            "hia_shipping": _n_shipping(got.get("hia", []))}
 
 
 def corpus_effects(views, index):
@@ -85,21 +150,46 @@ def main():
             "SELECT gloss_en FROM sense WHERE gloss_en IS NOT NULL"))
     print(f"gloss index: {len(index):,} glosses\n")
 
+    print("grouping: hiwi/hia/himo/soy, the four recorded answers")
+    print("shipping: himo^ is himoemoe's widest SHIPPING source span (>=4 "
+          "required); hiwi^/hia^ are reported only\n")
     print(f"{'cov':>5} {'ceil':>5} {'hiwi':>5} {'hia':>5} {'himo':>5} "
-          f"{'soy':>4} {'ok':>3} {'concepts':>9} {'ships':>8}")
+          f"{'soy':>4} | {'himo^':>5} {'hiwi^':>5} {'hia^':>5} | {'ok':>3} "
+          f"{'concepts':>9} {'ships':>8} {'uncert':>7}")
+    accepted = []
     for cov in COVERAGES:
         for ceil in CEILINGS:
             concept_evidence.COVERAGE_FLOOR = cov
             concept_evidence.DISTINCT_CEILING = ceil
             s = score_point(views, index)
-            ok = constraints_hold(s)
+            ok = point_is_acceptable(s)
             total, tiers = corpus_effects(views, index)
             ships = tiers["certain"] + tiers["probable"]
+            if ok:
+                accepted.append((cov, ceil, ships, tiers["uncertain"]))
             print(f"{cov:>5} {ceil:>5} {s['hiwi_concepts']:>5} "
                   f"{str(s['hia_joined']):>5} {s['himoemoe_sources']:>5} "
-                  f"{s['hoi_soy_sources']:>4} {'OK' if ok else 'no':>3} "
-                  f"{total:>9,} {ships:>8,}")
+                  f"{s['hoi_soy_sources']:>4} | "
+                  f"{s['himoemoe_shipping_sources']:>5} "
+                  f"{s['hiwi_shipping']:>5} {s['hia_shipping']:>5} | "
+                  f"{'OK' if ok else 'no':>3} "
+                  f"{total:>9,} {ships:>8,} {tiers['uncertain']:>7,}")
     con.close()
+
+    # Tightest, not loosest: highest floor, then lowest ceiling. 'ships' is
+    # monotone in both axes, so maximising it can only ever name the loose
+    # corner of whatever grid was run — it is not a measurement. The owner's
+    # recorded preference is that a wrong merge costs more than a missed one,
+    # and the criteria above are what stop 'tightest' being just as mechanical
+    # a corner-pick in the other direction.
+    if not accepted:
+        print("\nNO POINT SATISFIES EVERY CRITERION — report this, do not "
+              "relax one.")
+        return
+    cov, ceil, ships, uncertain = max(accepted, key=lambda p: (p[0], -p[1]))
+    print(f"\ntightest satisfying point: COVERAGE_FLOOR = {cov}, "
+          f"DISTINCT_CEILING = {ceil} "
+          f"({ships:,} concepts ship, {uncertain:,} uncertain)")
 
 
 if __name__ == "__main__":

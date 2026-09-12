@@ -124,55 +124,97 @@ _STOPWORDS = frozenset({
 # ordinary gloss_overlap when it is strong on EITHER axis; weak on both makes
 # it gloss_overlap_weak.
 #
-# The grid: COVERAGE_FLOOR over (0.3, 0.4, 0.5, 0.6, 0.7) x DISTINCT_CEILING
-# over (5, 10, 20, 40, 80) — 25 points, each one form_concepts run in memory
-# over all 55,765 headword keys of the real corpus, nothing persisted.
+# THE ONE THING TO KNOW BEFORE RE-TUNING THESE: they do not decide membership.
+# Across the whole grid — COVERAGE_FLOOR over (0.3, 0.4, 0.5, 0.6, 0.7) x
+# DISTINCT_CEILING over (5, 10, 20, 40, 80), each point a form_concepts run in
+# memory over all 55,765 headword keys — every point yields the same 95,116
+# concepts, and every point satisfies all four recorded calibration answers
+# identically (hiwi 9 concepts, hia never joined to hīa, himoemoe unified over
+# 4 sources, paekupu:hoi single-source). A pair with a non-empty overlap
+# attaches either way, because gloss_overlap and gloss_overlap_weak are BOTH
+# evidence and form_concepts attaches a seed on any evidence at all. These two
+# numbers choose only which KIND, and the kind feeds only confidence_for. So
+# what they set is the confidence a grouping carries and therefore whether
+# 60_export_app_db ships it. They cannot over-merge. They can only withhold.
 #
-# The first thing the grid says is that these two numbers do NOT decide
-# membership. All 25 points yield the same 95,116 concepts, and all 25 satisfy
-# every hard constraint identically (hiwi 9 concepts, hia never joined to hīa,
-# himoemoe unified across 4 sources, paekupu:hoi single-source). A pair with a
-# non-empty overlap attaches either way, because gloss_overlap and
-# gloss_overlap_weak are both evidence; the thresholds only choose WHICH, so
-# what they really set is the confidence a grouping carries and therefore
-# whether 60_export_app_db ships it. They cannot over-merge. They can only
-# withhold. That is why the four recorded answers, decisive everywhere else,
-# cannot pick a point here and the shipping figure has to.
+# That is why the four recorded answers, decisive everywhere else in this
+# design, cannot discriminate between grid points on their own, and why an
+# earlier version of this search — 'satisfy the four, maximise what ships' —
+# was a broken rule rather than a measurement: what ships rises monotonically
+# as either axis loosens, so maximising it can only ever name the loose corner
+# of whatever grid happened to be run.
 #
-# Chosen — 0.3 / 80, the largest 'ships' on the grid, no tie to break:
+# The rule that replaced it, in two parts.
 #
-#       cov  ceil  hiwi   hia  himo  soy  ok  concepts    ships
-#       0.3    80     9 False     4    1  OK    95,116   93,974
+# A fifth criterion, which the recorded answers CAN discriminate on: a
+# recorded-correct grouping must not merely form, it must reach users. Getting
+# himoemoe's six sources into one concept and then tiering it 'uncertain'
+# denies the recorded answer as surely as fragmenting it would — the export
+# withholds it and nobody sees the unification. himoemoe's pairs sit at
+# coverage 0.20-0.25 with df 7, so this binds on the ceiling: at 5 they grade
+# weak and the cluster is withheld; at 10 they grade ordinary and it ships.
+# Applied to himoemoe alone, because the other three recorded answers are
+# answers about SEPARATION and demanding that every fragment of a separation
+# answer also ship would assert something no reviewer recorded.
 #
-# Runner-up — 0.4 / 80 at 93,608, losing by 366 concepts. The only thing
-# separating them is that a floor of 0.4 declines an overlap of coverage
-# exactly 1/3: one source terse, the other verbose, about the same word. 2,736
-# of the pair comparisons the provisional 0.5/20 graded weak sit in that band,
-# and they read 'Blind.' | 'blind, sightless, unseeing.', 'honour, prestige,
-# majesty.' | 'Honour', 'fishing rod.' | 'a rod, or to fish with a rod'. That
-# is the himoemoe shape the GLOSS_OVERLAP_MIN comment above was lowered to 1
-# for — the defect this design exists to fix, not noise. On all eight
-# hand-judged clusters (the four constraints plus huripari, hoatu, huatea,
-# itinga) the two points are indistinguishable, so the 366 is corpus-wide
-# recall with nothing measured against it.
+# Then, among the points satisfying everything, the TIGHTEST: highest floor,
+# and on a tie the lowest ceiling. The owner of this dictionary, asked which
+# error costs more, answered that a wrong merge is worse than a missed one —
+# showing two different words as one misinforms about the language, while a
+# missed merge shows a user two entries where one would do, which is what
+# every existing dictionary already does. Concepts are a pure overlay
+# (§4: all 175,101 senses reach the app regardless, and 27% already belong to
+# no concept), so a withheld concept degrades to separate search results
+# rather than to missing data. Loose is the expensive direction.
 #
-# What the grid rules out is the other direction. At its tightest point,
-# 0.7 / 5, himoemoe ships NOTHING: both its concepts fall to uncertain and the
-# export withholds the six-source unification this design was written to
-# rescue — while the hard constraints still pass, because they count concepts
-# and the grouping never moved.
+# Chosen — 0.7 / 10:
 #
-# The caveat, recorded because the grid cannot settle it: 'ships' rises
-# monotonically as either axis loosens, so the maximum necessarily sits at the
-# loose corner and there is no interior optimum to find. 0.3 / 80 is the
-# loosest point MEASURED, not a measured turning point. What argues it is
-# still clean is the band itself — 6,793 comparisons promoted over 0.5/20,
-# sampled on both axes, all reading as one word described twice. Finding where
-# that stops being true means widening the grid, and §6's stored coverage /
-# distinctiveness columns are what make that a re-tier rather than a
-# recomputation.
-COVERAGE_FLOOR = 0.3
-DISTINCT_CEILING = 80
+#     cov  ceil  hiwi   hia  himo  soy | himo^ | concepts    ships  uncert
+#     0.7     5     9 False     4    1 |     0 |   95,116   87,243   7,873   <- rejected
+#     0.7    10     9 False     4    1 |     4 |   95,116   88,786   6,330   <- chosen
+#     0.7    20     9 False     4    1 |     4 |   95,116   90,478   4,638   <- runner-up
+#
+# (himo^ is himoemoe's widest SHIPPING source span; the fifth criterion wants
+# it at 4 or more.)
+#
+# Runner-up — 0.7 / 20, the next-tightest satisfying point. It ships 1,692
+# more concepts and breaks no criterion; it loses because nothing argues for
+# the extra looseness once the cost asymmetry above is accepted, and because
+# the difference between them is visible and small: over the eight
+# hand-judged clusters the two differ on exactly two concepts (one itinga and
+# one hia grouping that ceiling 20 ships and ceiling 10 withholds), neither of
+# which is a recorded answer. The point below the chosen one, 0.7 / 5, is the
+# one the fifth criterion actually rejects — himoemoe's df-7 pairs grade weak
+# there and the six-source unification this whole design exists to rescue
+# never reaches a user, while all four grouping answers still pass, because
+# they count concepts and the grouping never moved.
+#
+# Two costs, recorded because they are real and were accepted rather than
+# missed:
+#
+# 1. A floor of 0.7 gives up the half-coverage class, and that class includes
+#    one row of this design's own worked table (§2): hoatu 'Give' / 'Give
+#    forth.', coverage 0.50, df 270, marked correct there, grades weak here.
+#    It is the bulk of the tightening — at ceiling 10, moving the floor
+#    0.5 -> 0.6 costs 1,517 concepts (the coverage-exactly-0.5 pairs) while
+#    0.6 -> 0.7 costs only 115. hoatu's own cluster is unaffected: it ships 1
+#    of its 2 concepts at every point on the grid, that second concept being
+#    held back by a block rather than by gloss grading. ingoa 'Name'/'name.'
+#    (coverage 1.00) and huripari (df 2) — the table's other two reconstructible
+#    rows — still grade ordinary here.
+# 2. 35.5% of multi-source concepts are withheld at this point, against 19.5%
+#    at the provisional 0.5 / 20. That is the missed-merge side of the trade
+#    being paid, in full and on purpose.
+#
+# The residual degeneracy, for whoever re-tunes: the CEILING is pinned by a
+# criterion that actually binds (5 fails, 10 passes), but the FLOOR is not —
+# nothing in the criteria stops it above 0.7, which is simply the tight edge
+# of the grid. A wider grid would test 0.8 and above, and §6's stored
+# coverage / distinctiveness columns are what make that a re-tier rather than
+# a recomputation. Above 0.6 the axis is nearly saturated, so expect little to
+# move.
+COVERAGE_FLOOR = 0.7
+DISTINCT_CEILING = 10
 
 
 def _content_words(text):

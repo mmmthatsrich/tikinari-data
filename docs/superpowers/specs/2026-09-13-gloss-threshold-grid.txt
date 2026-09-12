@@ -2,33 +2,44 @@ $ python scripts/tune_gloss_thresholds.py
 # 2026-09-13, against data/staging_dictionary.db (150,037 glosses,
 # 55,765 headword keys, 95,116 concepts). Read-only: form_concepts in
 # memory, nothing persisted. 'ships' = certain + probable, i.e. what
-# 60_export_app_db would let through.
+# 60_export_app_db would let through; 'uncert' is what it withholds,
+# which is also the sweep's review queue.
+#
+# Note every row's 'concepts' column: the grouping is identical at all
+# 25 points, so the four recorded answers cannot discriminate and the
+# selection is on the tier -- the fifth criterion (himo^) plus the
+# tightest satisfying point.
 
 gloss index: 150,037 glosses
 
-  cov  ceil  hiwi   hia  himo  soy  ok  concepts    ships
-  0.3     5     9 False     4    1  OK    95,116   90,864
-  0.3    10     9 False     4    1  OK    95,116   91,706
-  0.3    20     9 False     4    1  OK    95,116   92,603
-  0.3    40     9 False     4    1  OK    95,116   93,374
-  0.3    80     9 False     4    1  OK    95,116   93,974
-  0.4     5     9 False     4    1  OK    95,116   89,431
-  0.4    10     9 False     4    1  OK    95,116   90,482
-  0.4    20     9 False     4    1  OK    95,116   91,663
-  0.4    40     9 False     4    1  OK    95,116   92,771
-  0.4    80     9 False     4    1  OK    95,116   93,608
-  0.5     5     9 False     4    1  OK    95,116   89,311
-  0.5    10     9 False     4    1  OK    95,116   90,418
-  0.5    20     9 False     4    1  OK    95,116   91,635
-  0.5    40     9 False     4    1  OK    95,116   92,757
-  0.5    80     9 False     4    1  OK    95,116   93,606
-  0.6     5     9 False     4    1  OK    95,116   87,495
-  0.6    10     9 False     4    1  OK    95,116   88,901
-  0.6    20     9 False     4    1  OK    95,116   90,531
-  0.6    40     9 False     4    1  OK    95,116   92,058
-  0.6    80     9 False     4    1  OK    95,116   93,233
-  0.7     5     9 False     4    1  OK    95,116   87,243
-  0.7    10     9 False     4    1  OK    95,116   88,786
-  0.7    20     9 False     4    1  OK    95,116   90,478
-  0.7    40     9 False     4    1  OK    95,116   92,041
-  0.7    80     9 False     4    1  OK    95,116   93,224
+grouping: hiwi/hia/himo/soy, the four recorded answers
+shipping: himo^ is himoemoe's widest SHIPPING source span (>=4 required); hiwi^/hia^ are reported only
+
+  cov  ceil  hiwi   hia  himo  soy | himo^ hiwi^  hia^ |  ok  concepts    ships  uncert
+  0.3     5     9 False     4    1 |     0     8     9 |  no    95,116   90,864   4,252
+  0.3    10     9 False     4    1 |     4     8     9 |  OK    95,116   91,706   3,410
+  0.3    20     9 False     4    1 |     4     8    10 |  OK    95,116   92,603   2,513
+  0.3    40     9 False     4    1 |     4     9    10 |  OK    95,116   93,374   1,742
+  0.3    80     9 False     4    1 |     4     9    10 |  OK    95,116   93,974   1,142
+  0.4     5     9 False     4    1 |     0     8     9 |  no    95,116   89,431   5,685
+  0.4    10     9 False     4    1 |     4     8     9 |  OK    95,116   90,482   4,634
+  0.4    20     9 False     4    1 |     4     8    10 |  OK    95,116   91,663   3,453
+  0.4    40     9 False     4    1 |     4     9    10 |  OK    95,116   92,771   2,345
+  0.4    80     9 False     4    1 |     4     9    10 |  OK    95,116   93,608   1,508
+  0.5     5     9 False     4    1 |     0     8     9 |  no    95,116   89,311   5,805
+  0.5    10     9 False     4    1 |     4     8     9 |  OK    95,116   90,418   4,698
+  0.5    20     9 False     4    1 |     4     8    10 |  OK    95,116   91,635   3,481
+  0.5    40     9 False     4    1 |     4     9    10 |  OK    95,116   92,757   2,359
+  0.5    80     9 False     4    1 |     4     9    10 |  OK    95,116   93,606   1,510
+  0.6     5     9 False     4    1 |     0     8     9 |  no    95,116   87,495   7,621
+  0.6    10     9 False     4    1 |     4     8     9 |  OK    95,116   88,901   6,215
+  0.6    20     9 False     4    1 |     4     8    10 |  OK    95,116   90,531   4,585
+  0.6    40     9 False     4    1 |     4     9    10 |  OK    95,116   92,058   3,058
+  0.6    80     9 False     4    1 |     4     9    10 |  OK    95,116   93,233   1,883
+  0.7     5     9 False     4    1 |     0     8     9 |  no    95,116   87,243   7,873
+  0.7    10     9 False     4    1 |     4     8     9 |  OK    95,116   88,786   6,330
+  0.7    20     9 False     4    1 |     4     8    10 |  OK    95,116   90,478   4,638
+  0.7    40     9 False     4    1 |     4     9    10 |  OK    95,116   92,041   3,075
+  0.7    80     9 False     4    1 |     4     9    10 |  OK    95,116   93,224   1,892
+
+tightest satisfying point: COVERAGE_FLOOR = 0.7, DISTINCT_CEILING = 10 (88,786 concepts ship, 6,330 uncertain)

@@ -509,5 +509,58 @@ class ScoreboardConstraints(unittest.TestCase):
              "himoemoe_sources": 6, "hoi_soy_sources": 1}))
 
 
+class ScoreboardShipping(unittest.TestCase):
+    """The fifth criterion: a recorded-correct grouping must reach users.
+
+    Grouping himoemoe's six sources correctly and then tiering the result
+    'uncertain' denies the recorded answer in practice — filter_concepts()
+    withholds it and nobody ever sees the unification. So the four grouping
+    answers of ScoreboardConstraints are necessary but not sufficient, and
+    the two checks are kept apart: constraints_hold stays exactly the four
+    recorded answers, and point_is_acceptable is what the grid selects on.
+    """
+
+    GROUPED_AND_SHIPPED = {"hiwi_concepts": 8, "hia_joined": False,
+                           "himoemoe_sources": 6, "hoi_soy_sources": 1,
+                           "himoemoe_shipping_sources": 6}
+    GROUPED_BUT_WITHHELD = {"hiwi_concepts": 8, "hia_joined": False,
+                            "himoemoe_sources": 6, "hoi_soy_sources": 1,
+                            "himoemoe_shipping_sources": 0}
+
+    def test_a_point_that_withholds_himoemoe_fails_the_criterion(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertFalse(tune.clusters_reach_users(self.GROUPED_BUT_WITHHELD))
+
+    def test_a_point_that_ships_himoemoe_meets_the_criterion(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertTrue(tune.clusters_reach_users(self.GROUPED_AND_SHIPPED))
+
+    def test_shipping_fewer_sources_than_the_recorded_answer_fails(self):
+        # The acceptance test records >=4 sources unified. A concept that
+        # ships but carries only two of them is not that answer.
+        tune = importlib.import_module("tune_gloss_thresholds")
+        score = dict(self.GROUPED_AND_SHIPPED, himoemoe_shipping_sources=2)
+        self.assertFalse(tune.clusters_reach_users(score))
+
+    def test_grouping_alone_no_longer_accepts_a_point(self):
+        # The division of labour, pinned: the four answers still hold on a
+        # point that withholds himoemoe, which is exactly why they cannot be
+        # the whole rule.
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertTrue(tune.constraints_hold(self.GROUPED_BUT_WITHHELD))
+        self.assertFalse(tune.point_is_acceptable(self.GROUPED_BUT_WITHHELD))
+
+    def test_a_point_meeting_every_criterion_is_accepted(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertTrue(tune.point_is_acceptable(self.GROUPED_AND_SHIPPED))
+
+    def test_a_broken_grouping_answer_still_rejects_however_well_it_ships(self):
+        # Shipping is an ADDITIONAL criterion, never a substitute: the four
+        # recorded answers outrank it and cannot be bought back.
+        tune = importlib.import_module("tune_gloss_thresholds")
+        score = dict(self.GROUPED_AND_SHIPPED, hia_joined=True)
+        self.assertFalse(tune.point_is_acceptable(score))
+
+
 if __name__ == "__main__":
     unittest.main()
