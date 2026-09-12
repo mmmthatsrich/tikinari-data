@@ -4,6 +4,7 @@ Each source groups its own senses into words differently, and that grouping is
 STATED structure rather than inference — which is why seeds are trusted and
 cross-source attachment is not.
 """
+import importlib
 import string
 import sys
 import unittest
@@ -470,6 +471,42 @@ class GlossCoverage(unittest.TestCase):
     def test_a_gloss_of_only_stopwords_is_zero(self):
         # 'of a the' must never link two senses, at any coverage.
         self.assertEqual(0.0, self._cov("of a the", "of a the"))
+
+
+class ScoreboardConstraints(unittest.TestCase):
+    """The hard constraints of the spec, §5, as the tuner evaluates them."""
+
+    def test_a_point_that_merges_hiwi_is_rejected(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        # hiwi is eight words plus two loans; anything under 6 concepts on
+        # that key means the thresholds over-merge.
+        self.assertFalse(tune.constraints_hold(
+            {"hiwi_concepts": 3, "hia_joined": False,
+             "himoemoe_sources": 6, "hoi_soy_sources": 1}))
+
+    def test_a_point_that_joins_hia_and_hiia_is_rejected(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertFalse(tune.constraints_hold(
+            {"hiwi_concepts": 8, "hia_joined": True,
+             "himoemoe_sources": 6, "hoi_soy_sources": 1}))
+
+    def test_a_point_that_fragments_himoemoe_is_rejected(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertFalse(tune.constraints_hold(
+            {"hiwi_concepts": 8, "hia_joined": False,
+             "himoemoe_sources": 2, "hoi_soy_sources": 1}))
+
+    def test_a_point_that_merges_paekupu_soy_is_rejected(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertFalse(tune.constraints_hold(
+            {"hiwi_concepts": 8, "hia_joined": False,
+             "himoemoe_sources": 6, "hoi_soy_sources": 3}))
+
+    def test_a_point_satisfying_all_four_is_accepted(self):
+        tune = importlib.import_module("tune_gloss_thresholds")
+        self.assertTrue(tune.constraints_hold(
+            {"hiwi_concepts": 8, "hia_joined": False,
+             "himoemoe_sources": 6, "hoi_soy_sources": 1}))
 
 
 if __name__ == "__main__":

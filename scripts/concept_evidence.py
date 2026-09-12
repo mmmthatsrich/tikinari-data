@@ -118,11 +118,61 @@ _STOPWORDS = frozenset({
 # number) are a source-structure limit neither value touches.
 
 # Set by grid search against the recorded calibration answers — see
-# docs/superpowers/specs/2026-09-13-gloss-evidence-design.md §5 and
-# scripts/tune_gloss_thresholds.py. A pair earns ordinary gloss_overlap when
-# it is strong on EITHER axis; weak on both makes it gloss_overlap_weak.
-COVERAGE_FLOOR = 0.5
-DISTINCT_CEILING = 20
+# docs/superpowers/specs/2026-09-13-gloss-evidence-design.md §5,
+# scripts/tune_gloss_thresholds.py, and the full grid output in
+# docs/superpowers/specs/2026-09-13-gloss-threshold-grid.txt. A pair earns
+# ordinary gloss_overlap when it is strong on EITHER axis; weak on both makes
+# it gloss_overlap_weak.
+#
+# The grid: COVERAGE_FLOOR over (0.3, 0.4, 0.5, 0.6, 0.7) x DISTINCT_CEILING
+# over (5, 10, 20, 40, 80) — 25 points, each one form_concepts run in memory
+# over all 55,765 headword keys of the real corpus, nothing persisted.
+#
+# The first thing the grid says is that these two numbers do NOT decide
+# membership. All 25 points yield the same 95,116 concepts, and all 25 satisfy
+# every hard constraint identically (hiwi 9 concepts, hia never joined to hīa,
+# himoemoe unified across 4 sources, paekupu:hoi single-source). A pair with a
+# non-empty overlap attaches either way, because gloss_overlap and
+# gloss_overlap_weak are both evidence; the thresholds only choose WHICH, so
+# what they really set is the confidence a grouping carries and therefore
+# whether 60_export_app_db ships it. They cannot over-merge. They can only
+# withhold. That is why the four recorded answers, decisive everywhere else,
+# cannot pick a point here and the shipping figure has to.
+#
+# Chosen — 0.3 / 80, the largest 'ships' on the grid, no tie to break:
+#
+#       cov  ceil  hiwi   hia  himo  soy  ok  concepts    ships
+#       0.3    80     9 False     4    1  OK    95,116   93,974
+#
+# Runner-up — 0.4 / 80 at 93,608, losing by 366 concepts. The only thing
+# separating them is that a floor of 0.4 declines an overlap of coverage
+# exactly 1/3: one source terse, the other verbose, about the same word. 2,736
+# of the pair comparisons the provisional 0.5/20 graded weak sit in that band,
+# and they read 'Blind.' | 'blind, sightless, unseeing.', 'honour, prestige,
+# majesty.' | 'Honour', 'fishing rod.' | 'a rod, or to fish with a rod'. That
+# is the himoemoe shape the GLOSS_OVERLAP_MIN comment above was lowered to 1
+# for — the defect this design exists to fix, not noise. On all eight
+# hand-judged clusters (the four constraints plus huripari, hoatu, huatea,
+# itinga) the two points are indistinguishable, so the 366 is corpus-wide
+# recall with nothing measured against it.
+#
+# What the grid rules out is the other direction. At its tightest point,
+# 0.7 / 5, himoemoe ships NOTHING: both its concepts fall to uncertain and the
+# export withholds the six-source unification this design was written to
+# rescue — while the hard constraints still pass, because they count concepts
+# and the grouping never moved.
+#
+# The caveat, recorded because the grid cannot settle it: 'ships' rises
+# monotonically as either axis loosens, so the maximum necessarily sits at the
+# loose corner and there is no interior optimum to find. 0.3 / 80 is the
+# loosest point MEASURED, not a measured turning point. What argues it is
+# still clean is the band itself — 6,793 comparisons promoted over 0.5/20,
+# sampled on both axes, all reading as one word described twice. Finding where
+# that stops being true means widening the grid, and §6's stored coverage /
+# distinctiveness columns are what make that a re-tier rather than a
+# recomputation.
+COVERAGE_FLOOR = 0.3
+DISTINCT_CEILING = 80
 
 
 def _content_words(text):
