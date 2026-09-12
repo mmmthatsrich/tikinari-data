@@ -120,6 +120,26 @@ class LoadSenses(unittest.TestCase):
         te_aka = views[("te_aka", "1284", 1)]
         self.assertEqual(te_aka["lexeme"][1], "entry")
 
+    def test_the_canonical_part_of_speech_wins_over_the_raw_one(self):
+        # Raw POS is not comparable across sources: te_matatiki brackets its
+        # ('[adjective]'), hepatakakupu writes Maori abbreviations
+        # ('ahua, ing, mahp'). A downstream block rule compares these across
+        # sources, so the canonical form is the only usable one.
+        con = _fixture_db()
+        con.execute("UPDATE entry SET part_of_speech='[adjective]', "
+                    " part_of_speech_en='Modifier' WHERE id=3")
+        con.commit()
+        views = {v["member_key"]: v for v in self.mod.load_senses(con)["hiwi"]}
+        self.assertEqual(views[("te_aka", "1284", 1)]["pos"], "Modifier")
+
+    def test_a_sense_level_canonical_outranks_the_entry_level_one(self):
+        con = _fixture_db()
+        con.execute("UPDATE entry SET part_of_speech_en='Noun' WHERE id=3")
+        con.execute("UPDATE sense SET part_of_speech_en='Modifier' WHERE id=13")
+        con.commit()
+        views = {v["member_key"]: v for v in self.mod.load_senses(con)["hiwi"]}
+        self.assertEqual(views[("te_aka", "1284", 1)]["pos"], "Modifier")
+
 
 if __name__ == "__main__":
     unittest.main()
