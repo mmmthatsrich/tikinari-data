@@ -60,6 +60,12 @@ def _fixture_db():
             rel_type TEXT, target_entry_id INTEGER);
         CREATE TABLE ETY_entry_link (id INTEGER PRIMARY KEY, entry_id INTEGER,
             cognateset_id INTEGER, sense_id INTEGER);
+        -- delete_source_slice clears these two unguarded, so the fixture must
+        -- carry them for RebuildSurvival to call the real function.
+        CREATE TABLE entry_domain (id INTEGER PRIMARY KEY, entry_id INTEGER,
+            domain TEXT, domain_lang TEXT);
+        CREATE TABLE form (id INTEGER PRIMARY KEY, entry_id INTEGER,
+            form TEXT, form_type TEXT);
     """)
     con.executescript(concept_ddl())
     con.executemany(
@@ -259,6 +265,70 @@ class Persist(unittest.TestCase):
             "SELECT status FROM concept_member WHERE source_id='papakupu'"
         ).fetchone()[0], "rejected")
 
+    def _reject_papakupu_and_rebuild(self, con):
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='rejected' "
+                    "WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+
+    def test_a_rejected_member_does_not_keep_its_old_concept_alive(self):
+        # A rejected membership says this sense does NOT belong. Counting it
+        # as a live member kept the pre-rebuild concept row alive: stale
+        # elected forms, dangling headword_from, no evidence rows — and it
+        # passed the export filter, so it shipped.
+        con = _fixture_db()
+        self._reject_papakupu_and_rebuild(con)
+        stale = con.execute(
+            "SELECT c.id FROM concept c WHERE NOT EXISTS ("
+            "  SELECT 1 FROM concept_member m WHERE m.concept_id = c.id "
+            "   AND m.status <> 'rejected')").fetchall()
+        self.assertEqual([], stale)
+
+    def test_a_rejected_member_still_names_the_concept_it_was_kept_out_of(self):
+        # The exclusion is only meaningful against a concept that exists.
+        # Every rebuild mints new concept ids, so the rejected row is carried
+        # onto the rebuilt concept it was excluded from rather than left
+        # pointing at the dead one.
+        con = _fixture_db()
+        self._reject_papakupu_and_rebuild(con)
+        cid = con.execute("SELECT concept_id FROM concept_member "
+                          "WHERE source_id='papakupu'").fetchone()[0]
+        self.assertEqual(1, con.execute(
+            "SELECT COUNT(*) FROM concept WHERE id=?", (cid,)).fetchone()[0])
+        self.assertEqual(
+            {"williams", "te_aka"},
+            {r[0] for r in con.execute(
+                "SELECT source_id FROM concept_member WHERE concept_id=? "
+                "  AND status <> 'rejected'", (cid,))})
+
+    def test_a_confirmed_membership_confirms_the_rebuilt_concept(self):
+        # Confirming a member is what makes the sweep able to change what
+        # ships; a rebuild that reset the concept to 'proposed' would throw
+        # that judgement away on the next run of the chain.
+        con = _fixture_db()
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='confirmed' "
+                    "WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+        self.assertEqual("confirmed", con.execute(
+            "SELECT c.status FROM concept c JOIN concept_member m "
+            "  ON m.concept_id = c.id WHERE m.source_id='papakupu'"
+        ).fetchone()[0])
+
+    def test_a_concept_with_nothing_judged_stays_proposed(self):
+        con = _fixture_db()
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='confirmed' "
+                    "WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+        self.assertEqual({"proposed"}, {r[0] for r in con.execute(
+            "SELECT DISTINCT c.status FROM concept c JOIN concept_member m "
+            "  ON m.concept_id = c.id "
+            " WHERE m.source_id='williams' AND m.source_entry_id='1250'")})
+
 
 class RebuildSurvival(unittest.TestCase):
     """A membership is a judgement; a rebuild must not destroy it.
@@ -269,6 +339,10 @@ class RebuildSurvival(unittest.TestCase):
     """
 
     def test_the_slice_delete_nulls_the_cache_not_the_membership(self):
+        # Calls the real delete_source_slice. Copying its UPDATE into the test
+        # would only prove SQLite works: the guard could be deleted from
+        # 50_build_unified and this would still pass.
+        bu = importlib.import_module("50_build_unified")
         con = _fixture_db()
         con.execute("INSERT INTO concept (id, status, confidence) "
                     "VALUES (1,'proposed','probable')")
@@ -278,14 +352,35 @@ class RebuildSurvival(unittest.TestCase):
                     " VALUES (1,'williams','1251',1,1,10,'confirmed','certain')")
         con.commit()
 
-        con.execute("UPDATE concept_member SET entry_id=NULL, sense_id=NULL "
-                    " WHERE entry_id IN (SELECT id FROM entry "
-                    "                     WHERE source_id='williams')")
+        deleted = bu.delete_source_slice(con, "williams")
         con.commit()
 
-        row = con.execute("SELECT status, entry_id FROM concept_member "
+        self.assertEqual(deleted, 2)                      # both williams entries
+        self.assertEqual(0, con.execute(
+            "SELECT COUNT(*) FROM entry WHERE source_id='williams'").fetchone()[0])
+        row = con.execute("SELECT status, entry_id, sense_id FROM concept_member "
                           "WHERE source_id='williams'").fetchone()
-        self.assertEqual(row, ("confirmed", None))
+        self.assertEqual(row, ("confirmed", None, None))
+
+    def test_the_slice_delete_leaves_another_sources_cache_alone(self):
+        # Only the rebuilt source's cache is released; te_aka's stays resolved.
+        bu = importlib.import_module("50_build_unified")
+        con = _fixture_db()
+        con.execute("INSERT INTO concept (id, status, confidence) "
+                    "VALUES (1,'proposed','probable')")
+        con.executemany(
+            "INSERT INTO concept_member (concept_id, source_id, "
+            " source_entry_id, sense_number, entry_id, sense_id, "
+            " status, confidence) VALUES (1,?,?,?,?,?,'proposed','probable')",
+            [("williams", "1251", 1, 1, 10), ("te_aka", "1284", 1, 3, 13)])
+        con.commit()
+
+        bu.delete_source_slice(con, "williams")
+        con.commit()
+
+        self.assertEqual((3, 13), con.execute(
+            "SELECT entry_id, sense_id FROM concept_member "
+            " WHERE source_id='te_aka'").fetchone())
 
 
 if __name__ == "__main__":

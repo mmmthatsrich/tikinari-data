@@ -203,18 +203,31 @@ def persist(con, concepts):
     con.execute("DELETE FROM concept_member WHERE status NOT IN (?,?)", _JUDGED)
 
     long_bases = _derived_long(con)
-    counts = {"concepts": 0, "members": 0, "kept": 0}
+    counts = {"concepts": 0, "members": 0, "kept": 0, "excluded": 0}
 
     for concept in concepts:
-        members = [m for m in concept["members"]
-                   if judged.get(m["view"]["member_key"], (None, None, None))[1]
-                   != "rejected"]
+        members, rejected = [], []
+        for m in concept["members"]:
+            if judged.get(m["view"]["member_key"],
+                          (None, None, None))[1] == "rejected":
+                rejected.append(m)
+            else:
+                members.append(m)
         if not members:
             continue
 
+        # A confirmed membership confirms its concept, and that must survive
+        # the rebuild: inserting the literal 'proposed' here would throw the
+        # sweep's judgement away on the next run of the chain, and the export
+        # would drop the concept again. Rejecting a member says nothing about
+        # the concept — the rest of the grouping may still be right.
+        status = "confirmed" if any(
+            judged.get(m["view"]["member_key"], (None, None, None))[1]
+            == "confirmed" for m in members) else "proposed"
+
         cur = con.execute(
             "INSERT INTO concept (status, confidence, created_at, last_updated)"
-            " VALUES ('proposed', ?, ?, ?)", (concept["confidence"], NOW, NOW))
+            " VALUES (?, ?, ?, ?)", (status, concept["confidence"], NOW, NOW))
         concept_id = cur.lastrowid
         counts["concepts"] += 1
 
@@ -249,6 +262,21 @@ def persist(con, concepts):
                     " detail, weight) VALUES (?,?,?,?)",
                     (mid, e["kind"], e["detail"], e["weight"]))
 
+        # A rejected member stays attached to the concept it was excluded
+        # from — that is what the judgement records — but every rebuild mints
+        # new concept ids, so it is carried onto the rebuilt row rather than
+        # left pointing at the old one. It is NOT counted as a member: it
+        # elects nothing, earns no evidence rows, and does not keep a concept
+        # alive (see the orphan sweep below).
+        for m in rejected:
+            key = m["view"]["member_key"]
+            counts["excluded"] += 1
+            con.execute(
+                "UPDATE concept_member SET concept_id=?, entry_id=?, sense_id=? "
+                " WHERE source_id=? AND source_entry_id=? AND sense_number IS ?",
+                (concept_id, m["view"]["entry_id"], m["view"]["sense_id"],
+                 key[0], key[1], key[2]))
+
         views = [m["view"] for m in members]
         derived = any((v["source_id"], v["source_entry_id"]) in long_bases
                       for v in views)
@@ -264,10 +292,21 @@ def persist(con, concepts):
 
     # Only now: a judged member still pointed at its OLD concept during the
     # loop above, so its concept could not be dropped before it was moved.
+    #
+    # Liveness is judged on members that are not rejected. A rejected row
+    # records that a sense does NOT belong, so counting it would keep the
+    # pre-rebuild concept alive — stale elected forms, dangling
+    # headword_from, no evidence — and that carcass passed the export filter
+    # and shipped. Rejected rows whose concept is gone anyway (the grouping
+    # itself dissolved) go with it: the thing they were excluded from no
+    # longer exists, so the exclusion is moot.
+    con.execute("DELETE FROM concept WHERE id NOT IN "
+                "(SELECT concept_id FROM concept_member "
+                "  WHERE status <> 'rejected')")
+    con.execute("DELETE FROM concept_member WHERE status = 'rejected' "
+                "  AND concept_id NOT IN (SELECT id FROM concept)")
     con.execute("DELETE FROM concept_member_evidence WHERE member_id NOT IN "
                 "(SELECT id FROM concept_member)")
-    con.execute("DELETE FROM concept WHERE id NOT IN "
-                "(SELECT concept_id FROM concept_member)")
     con.commit()
     return counts
 

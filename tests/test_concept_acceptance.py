@@ -4,6 +4,7 @@ These are real answers, reasoned one cluster at a time during the sweep, so
 they are the best check the machinery has. Each assertion names the finding it
 came from.
 """
+import importlib
 import sqlite3
 import sys
 import unittest
@@ -131,6 +132,57 @@ class AppExport(unittest.TestCase):
         ).fetchone()[0]
         con.close()
         self.assertEqual(n, 0)
+
+
+class ExportFilter(unittest.TestCase):
+    """What 60_export_app_db withholds, on a DB small enough to state outright.
+
+    The real export runs against a 210 MB staging DB, so the rule itself is
+    a function and this exercises that function directly.
+    """
+
+    def setUp(self):
+        self.mod = importlib.import_module("60_export_app_db")
+        self.con = sqlite3.connect(":memory:")
+        self.con.executescript("""
+            CREATE TABLE concept (id INTEGER PRIMARY KEY, status TEXT,
+                confidence TEXT);
+            CREATE TABLE concept_member (id INTEGER PRIMARY KEY,
+                concept_id INTEGER, source_id TEXT, status TEXT);
+        """)
+        self.con.executemany(
+            "INSERT INTO concept (id, status, confidence) VALUES (?,?,?)",
+            [(1, "proposed", "certain"),      # ships
+             (2, "proposed", "uncertain"),    # withheld
+             (3, "confirmed", "uncertain")])  # ships: the sweep judged it
+        self.con.executemany(
+            "INSERT INTO concept_member (id, concept_id, source_id, status) "
+            "VALUES (?,?,?,?)",
+            [(10, 1, "te_aka", "proposed"),
+             (11, 1, "papakupu", "rejected"),   # excluded from concept 1
+             (12, 2, "te_aka", "proposed"),
+             (13, 3, "te_aka", "confirmed")])
+        self.con.commit()
+        self.mod.filter_concepts(self.con)
+
+    def _ids(self, table):
+        return {r[0] for r in self.con.execute(f"SELECT id FROM {table}")}
+
+    def test_an_uncertain_grouping_is_withheld(self):
+        self.assertNotIn(2, self._ids("concept"))
+
+    def test_a_confirmed_grouping_ships_however_thin_its_evidence(self):
+        # The dead half of the export rule until the sweep could set this.
+        self.assertIn(3, self._ids("concept"))
+
+    def test_a_withheld_concepts_members_go_with_it(self):
+        self.assertNotIn(12, self._ids("concept_member"))
+
+    def test_a_rejected_membership_never_ships(self):
+        # It is a record that the sense does NOT belong; shipping it would
+        # show users the one grouping the sweep ruled out.
+        self.assertNotIn(11, self._ids("concept_member"))
+        self.assertEqual({10, 13}, self._ids("concept_member"))
 
 
 if __name__ == "__main__":

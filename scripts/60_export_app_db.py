@@ -95,6 +95,31 @@ def _ddl(stg, name):
     return row[0]
 
 
+def filter_concepts(out):
+    """Withhold the groupings the evidence does not support.
+
+    An uncertain grouping must not reach users even by accident, so a concept
+    ships only when `status = 'confirmed' OR confidence IN (certain,
+    probable)` — the sweep's judgement or its evidence, either one.
+
+    A rejected membership goes first, whatever its concept: it is a record
+    that the sense does NOT belong, so shipping it would show users the one
+    grouping the sweep ruled out. It stays in staging, where it is what keeps
+    54_build_concepts from re-attaching that sense on the next rebuild.
+
+    Order matters: concepts before their orphaned members
+    (concept_member.concept_id references concept, so the other way round
+    would leave members behind pointing at nothing).
+    """
+    out.execute("DELETE FROM concept_member WHERE status = 'rejected'")
+    out.execute(
+        "DELETE FROM concept WHERE confidence = 'uncertain' "
+        "  AND status <> 'confirmed'")
+    out.execute(
+        "DELETE FROM concept_member WHERE concept_id NOT IN "
+        "  (SELECT id FROM concept)")
+
+
 def export():
     if not STAGING.exists():
         raise SystemExit(
@@ -133,17 +158,8 @@ def export():
         cnt = out.execute(f'SELECT COUNT(*) FROM main."{t}"').fetchone()[0]
         print(f"  table  {t:<22} {cnt:>8,} rows")
 
-    # 1b. concepts: filter to the threshold the evidence supports. An
-    # uncertain grouping must not reach users even by accident — delete the
-    # concepts that fail first, then the members whose concept is now gone
-    # (concept_member.concept_id references concept; the other order would
-    # leave orphaned members behind).
-    out.execute(
-        "DELETE FROM concept WHERE confidence = 'uncertain' "
-        "  AND status <> 'confirmed'")
-    out.execute(
-        "DELETE FROM concept_member WHERE concept_id NOT IN "
-        "  (SELECT id FROM concept)")
+    # 1b. concepts: filter to the threshold the evidence supports.
+    filter_concepts(out)
     out.commit()
     kept_c = out.execute("SELECT COUNT(*) FROM concept").fetchone()[0]
     kept_m = out.execute("SELECT COUNT(*) FROM concept_member").fetchone()[0]
