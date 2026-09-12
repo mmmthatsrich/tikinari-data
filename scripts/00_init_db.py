@@ -1011,6 +1011,50 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_relation_target ON relation(target_entry_id);
         CREATE INDEX IF NOT EXISTS idx_relation_tsense ON relation(target_sense_id);
 
+        -- ── derivation: how a Māori word was formed from another ─────────────
+        -- docs/WORD_FORMATION_DESIGN.md. Kept OUT of ETY_*: POLLEX decides case
+        -- by case whether a derived form is separately reconstructible (312 of
+        -- its 3,424 Māori reflexes are), so its silence is a judgement, not a
+        -- gap to fill. `derived` separates a source's statement from our
+        -- segmentation; `position` carries compound order, which a relation
+        -- cannot ('aho pae' is latitude, 'pae aho' is nothing).
+        CREATE TABLE IF NOT EXISTS derivation (
+            id             INTEGER PRIMARY KEY,
+            entry_id       INTEGER NOT NULL REFERENCES entry(id),
+            sense_id       INTEGER REFERENCES sense(id),
+            base_entry_id  INTEGER REFERENCES entry(id),
+            base_sense_id  INTEGER REFERENCES sense(id),
+            base_form      TEXT NOT NULL,      -- the component as the source writes it
+            base_gloss     TEXT,               -- the source's gloss for that component
+            position       INTEGER,            -- 1,2,3 for compounds; NULL for affixation
+            process        TEXT,               -- compound | prefix | suffix | reduplication
+            affix          TEXT,               -- 'whaka-', '-nga'; NULL for compounds
+            evidence       TEXT NOT NULL,      -- which source said so
+            derived        INTEGER NOT NULL DEFAULT 0,   -- 1 = segmented, not attested
+            confidence     TEXT                -- certain | probable | uncertain
+        );
+        CREATE INDEX IF NOT EXISTS idx_derivation_entry ON derivation(entry_id);
+        CREATE INDEX IF NOT EXISTS idx_derivation_base  ON derivation(base_entry_id);
+
+        -- ── loan_origin: where a borrowed word came from ─────────────────────
+        -- docs/LOAN_ORIGIN_DESIGN.md. A table, not columns on entry, because a
+        -- disputed origin, a chain through an intermediate language and a
+        -- sense-specific borrowing all occur. Kept out of ETY_* because
+        -- inheritance and borrowing are mutually exclusive — the D23 rule.
+        CREATE TABLE IF NOT EXISTS loan_origin (
+            id            INTEGER PRIMARY KEY,
+            entry_id      INTEGER NOT NULL REFERENCES entry(id),
+            sense_id      INTEGER REFERENCES sense(id),
+            source_lang   TEXT,        -- as the source writes it: 'English', 'reo Wīwī'
+            source_word   TEXT,
+            source_gloss  TEXT,
+            via_lang      TEXT,
+            evidence      TEXT NOT NULL,
+            derived       INTEGER NOT NULL DEFAULT 0,
+            confidence    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_loan_origin_entry ON loan_origin(entry_id);
+
         -- ── entry_domain: subject / semantic-domain tags ─────────────────────
         CREATE TABLE IF NOT EXISTS entry_domain (
             id          INTEGER PRIMARY KEY,

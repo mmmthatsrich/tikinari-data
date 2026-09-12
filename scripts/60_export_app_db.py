@@ -71,6 +71,10 @@ APP_TABLES = [
     "ETY_reflex",
     "ETY_link",
     "ETY_entry_link",
+    # Word origin, kept out of ETY_* on purpose — see the two design notes.
+    # Both reference entry(id) and sense(id), so they follow those.
+    "derivation",
+    "loan_origin",
 ]
 
 # FTS5 virtual tables rebuilt from their content tables after the copy.

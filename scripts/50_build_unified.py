@@ -897,6 +897,23 @@ def delete_source_slice(con, source_id):
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
     con.execute("DELETE FROM form WHERE entry_id IN "
                 "(SELECT id FROM entry WHERE source_id=?)", (source_id,))
+    # derivation and loan_origin are pure projections of the core, rebuilt in
+    # full by 53_build_word_origin, so their rows for this source are dropped
+    # rather than released — including ones where this source is the BASE of
+    # someone else's derivation, which would otherwise block the delete.
+    for sql in (
+        "DELETE FROM derivation WHERE entry_id IN "
+        "(SELECT id FROM entry WHERE source_id=?) "
+        "   OR base_entry_id IN (SELECT id FROM entry WHERE source_id=?)",
+        "DELETE FROM loan_origin WHERE entry_id IN "
+        "(SELECT id FROM entry WHERE source_id=?)",
+    ):
+        try:
+            con.execute(sql, (source_id, source_id) if "base_entry_id" in sql
+                        else (source_id,))
+        except sqlite3.OperationalError:
+            pass            # table not present in an older DB
+
     # Sense-level references from other tables must be released before the
     # senses go. Both were added with sense addressability and would otherwise
     # make a source impossible to rebuild — the same failure the relation
