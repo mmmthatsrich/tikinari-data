@@ -117,11 +117,22 @@ class PositiveEvidence(unittest.TestCase):
         self.assertNotIn("gloss_overlap", kinds)
 
     def test_two_shared_words_are_ordinary_evidence(self):
+        # Both sides of the boundary in one test. Asserting only that two
+        # shared words yield 'gloss_overlap' passes against a build with no
+        # weak kind at all, which pins nothing: what has to hold is that the
+        # two cases differ — in kind, in weight and in the confidence a
+        # membership earns from them.
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
-        b = _sense(source_id="papakupu", gloss_en="the hill ridge")
-        kinds = [e["kind"] for e in positive_evidence(a, b)]
-        self.assertIn("gloss_overlap", kinds)
-        self.assertNotIn("gloss_overlap_weak", kinds)
+        two = _sense(source_id="papakupu", gloss_en="the hill ridge")
+        one = _sense(source_id="papakupu", gloss_en="ridge of a mountain")
+
+        ordinary = positive_evidence(a, two)
+        weak = positive_evidence(a, one)
+        self.assertEqual(["gloss_overlap"], [e["kind"] for e in ordinary])
+        self.assertEqual(["gloss_overlap_weak"], [e["kind"] for e in weak])
+        self.assertGreater(ordinary[0]["weight"], weak[0]["weight"])
+        self.assertEqual("probable", confidence_for(ordinary, []))
+        self.assertEqual("uncertain", confidence_for(weak, []))
 
     def test_stopwords_alone_are_not_overlap(self):
         # 'of a the' must never link two senses.

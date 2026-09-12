@@ -113,15 +113,21 @@ class AppDbIsNotStale(unittest.TestCase):
 class DerivedTablesArePopulated(unittest.TestCase):
     """Catch a skipped 52 / 08b / 53 / 54, which AppDbIsNotStale cannot see.
 
-    50_build_unified empties ETY_entry_link, pollex_entry_links, derivation,
-    loan_origin, concept and concept_member whenever it rewrites a source's
-    slice; only running the full 59_rebuild_derived.py chain refills them.
-    Skipping one of those four steps leaves staging's own derived tables
-    stale or empty, but 60_export_app_db then copies that same (broken)
-    state into the app DB, so app and staging agree and AppDbIsNotStale
-    passes anyway. This test instead asserts each table in staging clears a
-    floor well below its current count, so ordinary drift stays quiet and a
-    step-skip that empties or guts a table is loud.
+    50_build_unified empties ETY_entry_link, pollex_entry_links, derivation
+    and loan_origin whenever it rewrites a source's slice; only the full
+    59_rebuild_derived.py chain refills them. Skipping one of those steps
+    leaves staging's own derived tables stale or empty, but 60_export_app_db
+    then copies that same (broken) state into the app DB, so app and staging
+    agree and AppDbIsNotStale passes anyway. This test instead asserts each
+    table in staging clears a floor well below its current count, so ordinary
+    drift stays quiet and a step-skip that empties or guts a table is loud.
+
+    concept and concept_member are the exception, and their floors are worth
+    less than the others: 50_build_unified does NOT empty them — they hold
+    sweep judgements, so it only nulls their entry_id/sense_id cache — and a
+    skipped 54 therefore sails over a floor on the PREVIOUS build's rows.
+    The floors stay because they still catch a genuinely emptied table; the
+    entry-cache test below is what actually detects a skipped 54.
     """
 
     FLOORS = {
@@ -145,6 +151,28 @@ class DerivedTablesArePopulated(unittest.TestCase):
                     "staging's derived tables look stale or emptied by "
                     "50_build_unified; run 59_rebuild_derived.py")
         con.close()
+
+    def test_every_concept_member_has_its_entry_cache(self):
+        """The assertion that CAN see a skipped 54.
+
+        50_build_unified nulls concept_member.entry_id/sense_id for the
+        source it rewrites (the membership is keyed on the stable address;
+        entry.id is volatile), and only 54_build_concepts re-resolves it.
+        So a populated concept_member holding rows with a NULL entry_id
+        means the chain stopped somewhere before 54.
+        """
+        con = sqlite3.connect(DB_PATH)
+        total, orphaned = con.execute(
+            "SELECT COUNT(*), COUNT(*) FILTER (WHERE entry_id IS NULL) "
+            "  FROM concept_member").fetchone()
+        con.close()
+        self.assertGreater(total, 0, "concept_member is empty — run "
+                                     "59_rebuild_derived.py")
+        self.assertEqual(
+            orphaned, 0,
+            f"{orphaned:,} of {total:,} concept_member rows have no entry_id: "
+            "50_build_unified released the cache and 54_build_concepts never "
+            "re-resolved it — run 59_rebuild_derived.py")
 
 
 if __name__ == "__main__":

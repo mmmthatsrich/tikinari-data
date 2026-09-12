@@ -419,11 +419,15 @@ class PositiveEvidence(unittest.TestCase):
         self.assertIn("attributed_quote",
                       [e["kind"] for e in positive_evidence(a, b)])
 
-    def test_a_shared_cognate_set(self):
+    def test_a_shared_cognate_set_is_not_evidence(self):
+        # REMOVED 2026-09-12: every entry-to-cognate link in this corpus is
+        # match_method='headword_exact', so a shared cognate set only restates
+        # the shared headword — circular, and it merged three unrelated 'hoi'
+        # words into one concept. The spec's evidence table was corrected; this
+        # plan was not, which is what this row fixes.
         a = _sense(source_id="te_aka", cognate_sets=frozenset({7}))
         b = _sense(source_id="williams", cognate_sets=frozenset({7, 9}))
-        self.assertIn("shared_cognate_set",
-                      [e["kind"] for e in positive_evidence(a, b)])
+        self.assertEqual([], positive_evidence(a, b))
 
     def test_gloss_overlap_on_content_words(self):
         a = _sense(source_id="te_aka", gloss_en="ridge of a hill")
@@ -452,7 +456,7 @@ class PositiveEvidence(unittest.TestCase):
 
     def test_every_kind_has_a_weight(self):
         for kind in ("cites_source", "shared_example", "attributed_quote",
-                     "shared_cognate_set", "gloss_overlap"):
+                     "gloss_overlap"):
             self.assertIn(kind, EVIDENCE_WEIGHT)
 
     def test_detail_says_what_the_evidence_actually_was(self):
@@ -478,7 +482,8 @@ EVIDENCE_WEIGHT = {
     "cites_source":       1.0,   # Te Matatiki citing 'himoemoe W.50'
     "shared_example":     0.9,   # two sources printing the same sentence
     "attributed_quote":   0.7,   # Te Aka citing 'W 1971:54'
-    "shared_cognate_set": 0.6,
+    # No shared_cognate_set: cognate links are matched on spelling alone
+    # (match_method='headword_exact'), so counting one is circular.
     "gloss_overlap":      0.5,
 }
 
@@ -486,7 +491,6 @@ EVIDENCE_CONFIDENCE = {
     "cites_source":       "certain",
     "shared_example":     "certain",
     "attributed_quote":   "probable",
-    "shared_cognate_set": "probable",
     "gloss_overlap":      "probable",
 }
 
@@ -536,10 +540,8 @@ def positive_evidence(a, b):
         found.append(("attributed_quote",
                       f"both cite {sorted(shared_cit)[0][:40]!r}"))
 
-    shared_sets = a["cognate_sets"] & b["cognate_sets"]
-    if shared_sets:
-        found.append(("shared_cognate_set",
-                      f"{len(shared_sets)} shared cognate set(s)"))
+    # cognate_sets is carried on the sense-view for later display use and is
+    # deliberately NOT consulted: see EVIDENCE_WEIGHT above.
 
     overlap = _content_words(a["gloss_en"]) & _content_words(b["gloss_en"])
     if len(overlap) >= GLOSS_OVERLAP_MIN:
