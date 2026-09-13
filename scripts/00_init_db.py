@@ -1431,6 +1431,11 @@ def migrate_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE source_metadata ADD COLUMN default_dialect TEXT")
         print("  migrated: source_metadata.default_dialect added")
 
+    # Measured coverage/distinctiveness for gloss_overlap evidence rows -- see
+    # concept_evidence.COVERAGE_FLOOR / DISTINCT_CEILING. NULL on non-gloss kinds.
+    _add_column(conn, "concept_member_evidence", "coverage", "REAL")
+    _add_column(conn, "concept_member_evidence", "distinctiveness", "INTEGER")
+
 
 def seed_source_metadata(conn: sqlite3.Connection) -> None:
     sources = [
