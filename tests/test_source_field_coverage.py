@@ -128,6 +128,13 @@ class DerivedTablesArePopulated(unittest.TestCase):
     skipped 54 therefore sails over a floor on the PREVIOUS build's rows.
     The floors stay because they still catch a genuinely emptied table; the
     entry-cache test below is what actually detects a skipped 54.
+
+    The counts below did NOT move when the gloss-evidence rule changed to
+    coverage/distinctiveness (2026-09-13), and that is worth knowing rather
+    than surprising: both gloss kinds are evidence, so a pair attaches either
+    way and the thresholds move only a concept's confidence TIER, never the
+    grouping. Re-tuning them therefore cannot trip any floor here — it shows
+    up in the tier split and in what the app receives, not in these totals.
     """
 
     FLOORS = {

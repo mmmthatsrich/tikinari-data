@@ -122,6 +122,41 @@ class AppExport(unittest.TestCase):
         con.close()
         self.assertTrue({"concept", "concept_member"} <= names)
 
+    def test_himoemoe_actually_reaches_users_not_just_the_corpus(self):
+        """The recorded answer, checked where it counts.
+
+        test_himoemoe_unifies_its_sources (above) asserts the GROUPING, and
+        grouping is invariant to the gloss thresholds — both kinds of gloss
+        evidence attach a pair, so no threshold on the tuner's grid can
+        change which senses share a concept. That test therefore stays green
+        even if the thresholds tier this cluster 'uncertain' and the export
+        withholds it, which would deny the recorded answer in practice while
+        every grouping assertion still passed.
+
+        This is the assertion that would notice. It matters because the only
+        thing currently keeping the cluster shippable is three steps of
+        clearance on DISTINCT_CEILING: himoemoe's binding pair is te_aka x
+        te_matatiki on 'acidic', which is in exactly 7 glosses corpus-wide,
+        and the ceiling is 10. One new source glossing something 'acidic'
+        takes that to 8, two take it to 9. Without this test that drift is
+        silent. See the comment above the constants in concept_evidence.py.
+        """
+        if not self.APP.exists():
+            self.skipTest("app DB not built")
+        con = sqlite3.connect(self.APP)
+        spans = [r[0] for r in con.execute(
+            "SELECT COUNT(DISTINCT cm.source_id) FROM concept c "
+            "  JOIN concept_member cm ON cm.concept_id = c.id "
+            "  JOIN entry e ON e.source_id = cm.source_id "
+            "   AND e.source_entry_id = cm.source_entry_id "
+            " WHERE e.headword_search = 'himoemoe' GROUP BY c.id")]
+        con.close()
+        self.assertTrue(
+            any(n >= 4 for n in spans),
+            f"himoemoe's >=4-source concept did not reach the app: spans "
+            f"{spans}. The grouping is still right — check the confidence "
+            f"tier and DISTINCT_CEILING, not the seeding.")
+
     def test_no_uncertain_concept_reaches_the_app(self):
         if not self.APP.exists():
             self.skipTest("app DB not built")
