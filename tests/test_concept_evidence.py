@@ -14,6 +14,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
+# NOTE: this binds local COPIES of COVERAGE_FLOOR and DISTINCT_CEILING at
+# import time. positive_evidence() reads the LIVE module globals instead
+# (scripts/tune_gloss_thresholds.py mutates concept_evidence.COVERAGE_FLOOR /
+# concept_evidence.DISTINCT_CEILING when it sweeps). The two agree today, but
+# a future test that monkeypatches the module attributes would silently build
+# fixtures against these stale local copies while positive_evidence sees the
+# patched value. Read concept_evidence.COVERAGE_FLOOR / .DISTINCT_CEILING
+# directly in any test that monkeypatches them.
 from concept_evidence import (COVERAGE_FLOOR, DISTINCT_CEILING, EVIDENCE_WEIGHT,
                              SEED_CONFIDENCE, GlossIndex, blocks, confidence_for,
                              gloss_coverage, lexeme_key, positive_evidence)
@@ -203,6 +211,10 @@ class GlossGrading(unittest.TestCase):
         got = self._pair("Spoon", "spoon.", corpus)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
         self.assertEqual("probable", confidence_for(got, []))
+        # Enforce the axis isolation rather than asserting it in a comment: at
+        # a re-tuned ceiling this must still exceed DISTINCT_CEILING, or the
+        # test would silently stop exercising the coverage axis.
+        self.assertGreater(got[0]["distinctiveness"], DISTINCT_CEILING)
 
     def test_a_rare_shared_word_is_ordinary_evidence(self):
         # The other axis: coverage is LOW (one word out of six), but the
@@ -211,8 +223,8 @@ class GlossGrading(unittest.TestCase):
         corpus = [long_gloss, "narcissism", "narcissism of a sort"]
         got = self._pair(long_gloss, "narcissism", corpus)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
-        self.assertLess(got[0]["coverage"], 0.5)      # coverage did not save it
-        self.assertLessEqual(got[0]["distinctiveness"], 20)
+        self.assertLess(got[0]["coverage"], COVERAGE_FLOOR)  # coverage did not save it
+        self.assertLessEqual(got[0]["distinctiveness"], DISTINCT_CEILING)
 
     def test_one_common_word_in_two_long_glosses_is_weak(self):
         # Weak on BOTH axes: the 'a'/'form' noise case. Coverage is 1/6
@@ -248,6 +260,14 @@ class GlossGrading(unittest.TestCase):
         self.assertEqual(2, got["distinctiveness"])
 
     def test_coverage_at_the_floor_is_rescued_even_when_common(self):
+        """Builds its fixture from Fraction(COVERAGE_FLOOR).limit_denominator(20).
+
+        That is exact for every value on the tuner's grid and every 0.05 step
+        from 0.3 to 0.75. It FAILS LOUDLY, via assertAlmostEqual below, for
+        any floor needing a larger denominator -- 0.47, for instance. The
+        correct response to that failure is to rebuild this fixture, never to
+        weaken the assertion.
+        """
         # The spec's own example (§2, 'Give'/'Give forth.') sits at coverage
         # 0.5 — but a FIXED gloss pair only ever sits at 0.5, so it would
         # pin exactly that one value of COVERAGE_FLOOR rather than testing
@@ -451,10 +471,18 @@ class GlossIndexDf(unittest.TestCase):
         self.assertEqual(2, idx.df({"throw"}))
 
     def test_building_the_index_is_cheap_enough_to_do_once_per_run(self):
-        # The guard against an accidental rebuild inside the pair loop: 54
-        # does ~1.15M pair comparisons, so an index built per pair would be
-        # catastrophic rather than merely slow. 2,000 glosses stands in for
-        # the corpus's 150,037, which measures at 0.6s.
+        # A sanity bound on build cost, not a guard against a per-pair
+        # rebuild: this times a 2,000-gloss build against a 1.0s budget with
+        # roughly 80x headroom, so it would not go red if form_concepts built
+        # an index once per pair instead of once per run. The real guard
+        # against that is structural, not this timer: concept_evidence.py
+        # holds no database connection (see the module docstring), so
+        # form_concepts -- which lives in 54_build_concepts.py, the only code
+        # with a connection -- cannot build an index per pair even by
+        # accident. 2,000 glosses stands in for the corpus's 150,037, which
+        # measures at 0.6s; 54 does ~1.15M pair comparisons, so an index
+        # rebuilt per pair would be catastrophic rather than merely slow --
+        # this test just confirms the one-time cost is small.
         import time
         corpus = [f"gloss number {i} of the corpus" for i in range(2000)]
         started = time.time()

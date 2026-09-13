@@ -122,6 +122,20 @@ as a stand-in for the thresholds §5 will set properly.
 **Recovery.** In a random sample of 400 of the 10,683 uncertain concepts, 317
 (79%) clear the bar — extrapolating to roughly 8,466 concepts recovered.
 
+**Measured against the actual rebuild (2026-09-13).** Grouping is
+threshold-invariant (§5: every grid point yields the same 95,116 concepts), so
+this comparison is exact, not another sample. At the candidate rule used for
+this sample (`coverage >= 0.5 or df(set) <= 20`), actual recovery is **7,202**
+concepts (67% of the 10,683, not the extrapolated 79%). At the committed
+thresholds (`COVERAGE_FLOOR = 0.5`, `DISTINCT_CEILING = 10`), recovery is
+**5,985**. The 400-sample estimate over-predicted; it is left above rather than
+corrected in place because the discrepancy is itself informative — a
+79%-of-400 sample overstating a 67%-of-10,683 population by twelve points is a
+sampling-error size worth remembering next time a small sample stands in for a
+full rebuild. Either way, the change stands on the measurements in §5 (the
+hard constraints and soft scoreboard) and on the re-tuning mechanism in §6,
+not on this prediction.
+
 **No over-merging on the clusters with recorded answers.** Counting only pairs
 the current rule tiers weak that the candidate rule would promote:
 
@@ -231,6 +245,15 @@ removed and pairs are not refused. Staging is the laboratory; the export is
 what protects users. An earlier draft of this design proposed refusing weak
 pairs outright, which would have made the corpus unable to teach anything about
 its own thresholds.
+
+**The rebuild-ordering hazard.** `persist()` in `54_build_concepts.py` deletes
+all evidence rows unconditionally and re-inserts none for a rejected member —
+by design, a rejected membership earns no evidence rows. So a rebuild of 54
+destroys the stored `coverage`/`distinctiveness` of every `rejected`
+membership along with everything else, leaving only the judgement behind. Any
+threshold re-fit that needs the rejected rows' measurements must read them
+**before** running 54 again, not after: "a re-tier plus a rebuild of 54" is
+only true if the analysis runs first.
 
 ---
 

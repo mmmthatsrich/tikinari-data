@@ -140,6 +140,15 @@ implementation by measuring against the judged calibration clusters (§8.4) and
 recorded in the builder, not left to taste: too loose merges homographs, too
 tight leaves every cross-source pair a singleton.
 
+**This paragraph is superseded** (2026-09-13, by
+`2026-09-13-gloss-evidence-design.md`). The single count threshold described
+above (`GLOSS_OVERLAP_MIN`) could not hold both the terse agreements it needed
+to rescue and the noise that rescue admitted, so it was replaced by two named
+thresholds — `COVERAGE_FLOOR` and `DISTINCT_CEILING` in
+`scripts/concept_evidence.py` — graded as a disjunction over Jaccard coverage
+and corpus distinctiveness. See that spec for the measure, the validation, and
+how the thresholds were set.
+
 **`shared_cognate_set` was listed here and has been removed** (2026-09-12,
 during implementation). Every entry-to-cognate link in this corpus carries
 `match_method = 'headword_exact'` — matched on spelling, never on meaning — so

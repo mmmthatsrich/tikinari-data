@@ -290,6 +290,14 @@ def persist(con, concepts):
         # left pointing at the old one. It is NOT counted as a member: it
         # elects nothing, earns no evidence rows, and does not keep a concept
         # alive (see the orphan sweep below).
+        #
+        # Consequence for §6's re-tier story: the DELETE FROM
+        # concept_member_evidence above runs unconditionally, and this branch
+        # re-inserts nothing, so a rejected membership keeps its judgement but
+        # loses its coverage/distinctiveness on every rebuild of 54. A
+        # threshold re-fit that wants the rejected rows' measurements must
+        # read them BEFORE running 54 again, not after -- by the time this
+        # loop finishes, the negative half of the labelled data is gone.
         for m in rejected:
             key = m["view"]["member_key"]
             counts["excluded"] += 1
