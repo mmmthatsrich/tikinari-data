@@ -273,6 +273,27 @@ class GlossGrading(unittest.TestCase):
         self.assertGreater(got[0]["distinctiveness"], DISTINCT_CEILING)
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
 
+    def test_the_specs_own_half_coverage_example_is_ordinary_evidence(self):
+        # A commitment, not a measurement. The design's SS2 table lists hoatu
+        # 'Give' / 'Give forth.' at coverage 0.50 with df 270 in the real
+        # corpus, marked CORRECT and cited as one of the two rows the
+        # coverage axis exists to rescue ('coverage alone yes, df alone no').
+        # huripari sits on the same 0.50 there. So COVERAGE_FLOOR may not
+        # rise above 0.5 while that table stands, and this is the test that
+        # says so rather than a comment nobody reads: it goes red at 0.6, and
+        # the answer is to revisit SS2, not to loosen the assertion.
+        #
+        # df is pushed far past any plausible ceiling so ONLY the coverage
+        # axis's inclusive '>=' can rescue the pair — which is the whole
+        # point of the row: a common word that is nonetheless half of both
+        # glosses.
+        corpus = ["Give", "Give forth."] + ["give it a go"] * 300
+        got = self._pair("Give", "Give forth.", corpus)
+        self.assertAlmostEqual(0.5, got[0]["coverage"])
+        self.assertGreater(got[0]["distinctiveness"], DISTINCT_CEILING)
+        self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
+        self.assertEqual("probable", confidence_for(got, []))
+
     def test_distinctiveness_at_the_ceiling_is_rescued_even_at_low_coverage(self):
         # The mirror boundary: distinctiveness sits exactly at
         # DISTINCT_CEILING (inclusive '<='). Coverage is pushed well below

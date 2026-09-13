@@ -5,10 +5,19 @@ $ python scripts/tune_gloss_thresholds.py
 # 60_export_app_db would let through; 'uncert' is what it withholds,
 # which is also the sweep's review queue.
 #
-# Note every row's 'concepts' column: the grouping is identical at all
-# 25 points, so the four recorded answers cannot discriminate and the
-# selection is on the tier -- the fifth criterion (himo^) plus the
-# tightest satisfying point.
+# Two things to read off this table.
+#
+# The 'concepts' column is 95,116 on every row: the grouping is
+# identical at all 25 points, so the four recorded answers cannot
+# discriminate and the selection is on the tier, not the grouping.
+#
+# The ceiling-5 column is the only one that fails, at every floor:
+# himoemoe's pairs sit at df 7, so a ceiling of 5 tiers the six-source
+# unification uncertain and the export withholds it (himo^ = 0). That
+# is the measured constraint. The floor has no such constraint -- every
+# floor here satisfies every criterion -- which is why the section 2
+# cap of 0.5 is applied at the end, and why the two selection lines
+# below differ. What is SET in concept_evidence.py is the second one.
 
 gloss index: 150,037 glosses
 
@@ -43,3 +52,4 @@ shipping: himo^ is himoemoe's widest SHIPPING source span (>=4 required); hiwi^/
   0.7    80     9 False     4    1 |     4     9    10 |  OK    95,116   93,224   1,892
 
 tightest satisfying point: COVERAGE_FLOOR = 0.7, DISTINCT_CEILING = 10 (88,786 concepts ship, 6,330 uncertain)
+  tightest with floor <= 0.5 (the section 2 cap, and what is SET): COVERAGE_FLOOR = 0.5, DISTINCT_CEILING = 10 (90,418 concepts ship, 4,698 uncertain)

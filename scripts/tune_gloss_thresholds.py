@@ -38,6 +38,18 @@ build = importlib.import_module("54_build_concepts")
 COVERAGES = (0.3, 0.4, 0.5, 0.6, 0.7)
 CEILINGS = (5, 10, 20, 40, 80)
 
+# A cap on the coverage axis that the corpus cannot supply and the design can.
+# Section 2 of the design lists hoatu 'Give' / 'Give forth.' at coverage 0.50
+# as CORRECT, one of the two rows the coverage axis exists to rescue, and
+# huripari sits on the same 0.50. A floor above this grades both weak, which
+# would put the thresholds in contradiction with the document they implement.
+# Every criterion below is silent on the floor — himoemoe is rescued by df,
+# not by coverage — so without this the tightest-satisfying rule would run the
+# floor up to the tight edge of whatever grid it was handed. Pinned by
+# GlossGrading.test_the_specs_own_half_coverage_example_is_ordinary_evidence;
+# raising it means revisiting section 2 first.
+SPEC_COVERAGE_CAP = 0.5
+
 
 def constraints_hold(score):
     """The four recorded answers. All must hold."""
@@ -186,10 +198,24 @@ def main():
         print("\nNO POINT SATISFIES EVERY CRITERION — report this, do not "
               "relax one.")
         return
-    cov, ceil, ships, uncertain = max(accepted, key=lambda p: (p[0], -p[1]))
-    print(f"\ntightest satisfying point: COVERAGE_FLOOR = {cov}, "
-          f"DISTINCT_CEILING = {ceil} "
-          f"({ships:,} concepts ship, {uncertain:,} uncertain)")
+
+    def tightest(points):
+        return max(points, key=lambda p: (p[0], -p[1]))
+
+    def show(label, point):
+        cov, ceil, ships, uncertain = point
+        print(f"{label}: COVERAGE_FLOOR = {cov}, DISTINCT_CEILING = {ceil} "
+              f"({ships:,} concepts ship, {uncertain:,} uncertain)")
+
+    print()
+    show("tightest satisfying point", tightest(accepted))
+    within = [p for p in accepted if p[0] <= SPEC_COVERAGE_CAP]
+    if not within:
+        print("NO SATISFYING POINT HAS A FLOOR AT OR BELOW THE SPEC CAP "
+              f"({SPEC_COVERAGE_CAP}) — report this, do not raise the cap.")
+        return
+    show(f"  tightest with floor <= {SPEC_COVERAGE_CAP} (the section 2 cap, "
+         "and what is SET)", tightest(within))
 
 
 if __name__ == "__main__":
