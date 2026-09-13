@@ -157,25 +157,48 @@ _STOPWORDS = frozenset({
 # data. Loose is the expensive direction.
 #
 # DISTINCT_CEILING = 10 is the evidence. The fifth criterion is that a
-# recorded-correct grouping must not merely form, it must reach users:
-# getting himoemoe's six sources into one concept and then tiering it
-# 'uncertain' denies the recorded answer as surely as fragmenting it would,
-# because the export withholds it and nobody sees the unification. himoemoe's
-# pairs sit at coverage 0.20-0.25 with df 7, so this binds on the ceiling and
-# the binding is measured:
+# recorded-correct grouping must not merely form, it must reach users: getting
+# himoemoe's sources into one concept and then tiering it 'uncertain' denies
+# the recorded answer as surely as fragmenting it would, because the export
+# withholds it and nobody sees the unification.
 #
-#     cov  ceil  hiwi   hia  himo  soy | himo^ | concepts    ships  uncert
-#     0.5     5     9 False     4    1 |     0 |   95,116   89,311   5,805  <- rejected
-#     0.5    10     9 False     4    1 |     4 |   95,116   90,418   4,698  <- CHOSEN
-#     0.5    20     9 False     4    1 |     4 |   95,116   91,635   3,481  <- runner-up
+# What himoemoe actually produces, at every point on the grid, is TWO
+# concepts, not the single six-source one the superseded comment above calls
+# 'the one it is': {hepatakakupu, te_aka, te_matatiki, williams} and
+# {kimikupu_hou, paekupu}. hepatakakupu's gloss_en is NULL and it seeds first,
+# so the split is not a gloss-grading outcome and no threshold on this grid
+# closes it. The recorded answer is >= 4 sources unified (the acceptance test
+# asserts exactly that), and the first concept satisfies it.
 #
-# (himo^ is himoemoe's widest SHIPPING source span; the criterion wants >= 4.)
-# At a ceiling of 5 the whole column fails, at every coverage floor, while all
-# four grouping answers still read OK — they count concepts, and the grouping
-# never moved. 10 is the tightest ceiling that still ships himoemoe. The
-# criterion is applied to himoemoe alone: the other three recorded answers are
-# answers about SEPARATION, and demanding that every fragment of a separation
-# answer also ship would assert something no reviewer recorded.
+# Stepping the ceiling one at a time at floor 0.5 — measured, not from the
+# 5/10/20/40/80 grid:
+#
+#     ceil   himoemoe shipping span    ships
+#        5                        0   89,311
+#        6                        0   89,569
+#        7                        4   89,803   <- the cliff
+#       10                        4   90,418   <- SET
+#
+# So 10 is NOT the tightest ceiling that ships himoemoe: 7 is, and the
+# tightest-satisfying rule would pick 7 on the measurement alone. 10 is three
+# steps of deliberate clearance above the cliff, and it costs 615 concepts of
+# tightness given up knowingly.
+#
+# The clearance is there because the pin is thin. The whole ceiling constraint
+# is ONE membership in ONE cluster: te_matatiki joins on a single
+# gloss_overlap at coverage 0.20 with df 7, the word being 'acidic', which
+# occurs in exactly 7 glosses corpus-wide. (williams joins the same concept on
+# cites_source and is certain whatever the ceiling; te_aka on a shared
+# example.) A ceiling set at the cliff flips the first time that df moves —
+# one new source glossing something 'acidic' is enough — and it flips
+# silently, withholding a cluster whose recorded answer says it belongs
+# together. It also holds only while te_matatiki reaches the concept before
+# williams in seed order. A step above a measured cliff is engineering, not
+# slack; disagree with it from here if you want to, the numbers are all above.
+#
+# The criterion is applied to himoemoe alone: the other three recorded answers
+# are answers about SEPARATION, and demanding that every fragment of a
+# separation answer also ship would assert something no reviewer recorded.
 #
 # COVERAGE_FLOOR = 0.5 is the promise. No measurement pins it — himoemoe is
 # rescued by df, not by coverage, so the fifth criterion is silent here and

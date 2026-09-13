@@ -25,6 +25,7 @@ every sense reaches the app either way.
 import importlib
 import sqlite3
 import sys
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -66,14 +67,19 @@ def clusters_reach_users(score):
     SEPARATION — hiwi is eight words and not one, hia is not hīa,
     paekupu:hoi 'soy' stands alone — and demanding that every fragment of a
     separation answer also ships would assert something no reviewer ever
-    recorded. himoemoe's answer is the opposite kind: one word, six sources,
-    no disagreement anywhere. Tiering that 'uncertain' means
+    recorded. himoemoe's answer is the opposite kind: one word, six sources
+    across the key, no disagreement anywhere. Tiering that 'uncertain' means
     filter_concepts() withholds it and the answer never reaches a user, so
     the threshold has denied it as surely as fragmenting it would have.
 
     Keyed on the SHIPPING concepts' source count against the same >=4 the
     acceptance test records, so the criterion is the recorded answer itself
-    rather than a second, softer version of it.
+    rather than a second, softer version of it. >=4 and not 6 because the
+    corpus does not in fact produce a single six-source concept here: it
+    produces two, {hepatakakupu, te_aka, te_matatiki, williams} and
+    {kimikupu_hou, paekupu}, at every point on the grid. hepatakakupu's
+    gloss_en is NULL and it seeds first, so that split is not a gloss-grading
+    outcome and no threshold closes it.
 
     Kept apart from constraints_hold deliberately: those four are about
     grouping and this one is about tiering, and a grid where the first four
@@ -98,9 +104,19 @@ def _concepts_for(views, index, keys):
 def _max_sources(concepts, shipping=False):
     """Widest source span among these concepts; shipping ones only if asked.
 
-    'Shipping' is filter_concepts()'s rule: anything above 'uncertain'. A
-    freshly built concept is never 'confirmed', so the sweep's half of that
-    rule cannot apply here.
+    'Shipping' approximates filter_concepts() as confidence != 'uncertain'.
+    That is EXACT ONLY WHILE NO SWEEP JUDGEMENTS EXIST — today all 175,101
+    memberships are 'proposed'. Once the sweep starts judging it diverges in
+    both directions, and this tuner sees neither:
+
+      - a concept with a confirmed member ships despite an 'uncertain' tier
+        (filter_concepts keeps status='confirmed'), so this UNDER-counts;
+      - a rejected member is dropped at export, shrinking the source span of
+        a concept that does ship, so this OVER-counts its width.
+
+    Both are futures, not bugs today. When judgements exist, this function is
+    the thing to fix first — re-tuning against a corpus the sweep has touched
+    means asking filter_concepts, not guessing at it.
     """
     return max((len({m["view"]["source_id"] for m in c["members"]})
                 for c in concepts
@@ -109,6 +125,21 @@ def _max_sources(concepts, shipping=False):
 
 def _n_shipping(concepts):
     return sum(1 for c in concepts if c["confidence"] != "uncertain")
+
+
+# The soft scoreboard of the design, section 5: the four clusters the
+# superseded GLOSS_OVERLAP_MIN comment records specific behaviour for. Soft by
+# design — reported, never constrained — but reported HERE rather than only in
+# a report, so re-running this script gives the same scoreboard the choice was
+# made against. Each is printed as 'concepts/shipping'.
+SOFT_CLUSTERS = ("huripari", "hoatu", "huatea", "itinga")
+
+
+def soft_scoreboard(views, index):
+    """{cluster: (n concepts, n shipping)} for the section 5 clusters."""
+    got = _concepts_for(views, index, SOFT_CLUSTERS)
+    return {k: (len(got.get(k, [])), _n_shipping(got.get(k, [])))
+            for k in SOFT_CLUSTERS}
 
 
 def score_point(views, index):
@@ -155,25 +186,46 @@ def corpus_effects(views, index):
 
 
 def main():
-    con = sqlite3.connect(DB_PATH)
+    """Print the grid. Exits 2 rather than 0 if no point is selectable, so a
+    refusal is loud to a wrapper instead of looking like a clean run."""
+    # Opened read-only at the driver, not merely by discipline: this script
+    # exists to be re-run by whoever re-tunes next, and the one thing it must
+    # never do is write to the corpus it is measuring.
+    con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     views = build.load_senses(con)
     index = concept_evidence.GlossIndex(
         g for (g,) in con.execute(
             "SELECT gloss_en FROM sense WHERE gloss_en IS NOT NULL"))
-    print(f"gloss index: {len(index):,} glosses\n")
 
-    print("grouping: hiwi/hia/himo/soy, the four recorded answers")
-    print("shipping: himo^ is himoemoe's widest SHIPPING source span (>=4 "
-          "required); hiwi^/hia^ are reported only\n")
-    print(f"{'cov':>5} {'ceil':>5} {'hiwi':>5} {'hia':>5} {'himo':>5} "
-          f"{'soy':>4} | {'himo^':>5} {'hiwi^':>5} {'hia^':>5} | {'ok':>3} "
-          f"{'concepts':>9} {'ships':>8} {'uncert':>7}")
+    # Provenance printed rather than hand-added to the saved file afterwards,
+    # so a plain redirect reproduces the artifact whole.
+    print("$ python scripts/tune_gloss_thresholds.py")
+    print(f"# {date.today().isoformat()}, against {DB_PATH.name} opened "
+          f"read-only: {len(index):,} glosses,")
+    print(f"# {len(views):,} headword keys. form_concepts runs in memory; "
+          f"nothing is persisted.")
+    print("# 'ships' = certain + probable, what 60_export_app_db lets "
+          "through. 'uncert' is what it")
+    print("# withholds, which is also the sweep's review queue.\n")
+
+    print("hard      hiwi/hia/himo/soy — the four recorded answers, grouping")
+    print("shipping  himo^ is himoemoe's widest SHIPPING source span, and the "
+          "fifth criterion")
+    print("          wants >= 4; hiwi^/hia^ are reported, not constrained")
+    print("soft      the section 5 clusters, concepts/shipping — reported, "
+          "never constrained\n")
+    head = (f"{'cov':>5} {'ceil':>5} {'hiwi':>5} {'hia':>5} {'himo':>5} "
+            f"{'soy':>4} | {'himo^':>5} {'hiwi^':>5} {'hia^':>5} | "
+            + " ".join(f"{k[:5]:>7}" for k in SOFT_CLUSTERS)
+            + f" | {'ok':>3} {'concepts':>9} {'ships':>8} {'uncert':>7}")
+    print(head)
     accepted = []
     for cov in COVERAGES:
         for ceil in CEILINGS:
             concept_evidence.COVERAGE_FLOOR = cov
             concept_evidence.DISTINCT_CEILING = ceil
             s = score_point(views, index)
+            soft = soft_scoreboard(views, index)
             ok = point_is_acceptable(s)
             total, tiers = corpus_effects(views, index)
             ships = tiers["certain"] + tiers["probable"]
@@ -184,8 +236,10 @@ def main():
                   f"{s['hoi_soy_sources']:>4} | "
                   f"{s['himoemoe_shipping_sources']:>5} "
                   f"{s['hiwi_shipping']:>5} {s['hia_shipping']:>5} | "
-                  f"{'OK' if ok else 'no':>3} "
-                  f"{total:>9,} {ships:>8,} {tiers['uncertain']:>7,}")
+                  + " ".join(f"{f'{n}/{sh}':>7}" for n, sh in
+                             (soft[k] for k in SOFT_CLUSTERS))
+                  + f" | {'OK' if ok else 'no':>3} "
+                    f"{total:>9,} {ships:>8,} {tiers['uncertain']:>7,}")
     con.close()
 
     # Tightest, not loosest: highest floor, then lowest ceiling. 'ships' is
@@ -197,7 +251,7 @@ def main():
     if not accepted:
         print("\nNO POINT SATISFIES EVERY CRITERION — report this, do not "
               "relax one.")
-        return
+        sys.exit(2)
 
     def tightest(points):
         return max(points, key=lambda p: (p[0], -p[1]))
@@ -213,7 +267,7 @@ def main():
     if not within:
         print("NO SATISFYING POINT HAS A FLOOR AT OR BELOW THE SPEC CAP "
               f"({SPEC_COVERAGE_CAP}) — report this, do not raise the cap.")
-        return
+        sys.exit(2)
     show(f"  tightest with floor <= {SPEC_COVERAGE_CAP} (the section 2 cap, "
          "and what is SET)", tightest(within))
 

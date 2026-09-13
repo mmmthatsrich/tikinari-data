@@ -274,19 +274,24 @@ class GlossGrading(unittest.TestCase):
         self.assertEqual(["gloss_overlap"], [e["kind"] for e in got])
 
     def test_the_specs_own_half_coverage_example_is_ordinary_evidence(self):
-        # A commitment, not a measurement. The design's SS2 table lists hoatu
-        # 'Give' / 'Give forth.' at coverage 0.50 with df 270 in the real
-        # corpus, marked CORRECT and cited as one of the two rows the
-        # coverage axis exists to rescue ('coverage alone yes, df alone no').
-        # huripari sits on the same 0.50 there. So COVERAGE_FLOOR may not
-        # rise above 0.5 while that table stands, and this is the test that
-        # says so rather than a comment nobody reads: it goes red at 0.6, and
-        # the answer is to revisit SS2, not to loosen the assertion.
-        #
-        # df is pushed far past any plausible ceiling so ONLY the coverage
-        # axis's inclusive '>=' can rescue the pair — which is the whole
-        # point of the row: a common word that is nonetheless half of both
-        # glosses.
+        """COVERAGE_FLOOR may not rise above 0.5 while the design's §2 stands.
+
+        A commitment, not a measurement — and the one assertion in this file
+        that constrains a threshold rather than describing the rule. §2 lists
+        hoatu 'Give' / 'Give forth.' at coverage 0.50 with df 270 in the real
+        corpus, marked CORRECT and cited as one of the two rows the coverage
+        axis exists to rescue ('coverage alone ✅, df alone ❌ demoted');
+        huripari sits on the same 0.50 there.
+
+        THIS TEST GOES RED AT A FLOOR OF 0.6, and that is deliberate: it is
+        why the commitment lives here rather than in a comment nobody reads.
+        The answer to that redness is to revisit §2 and change this test on
+        purpose, never to loosen the assertion to let a tuning run through.
+
+        df is pushed far past any plausible ceiling so ONLY the coverage
+        axis's inclusive '>=' can rescue the pair — which is the whole point
+        of the row: a common word that is nonetheless half of both glosses.
+        """
         corpus = ["Give", "Give forth."] + ["give it a go"] * 300
         got = self._pair("Give", "Give forth.", corpus)
         self.assertAlmostEqual(0.5, got[0]["coverage"])
@@ -533,7 +538,7 @@ class ScoreboardConstraints(unittest.TestCase):
 class ScoreboardShipping(unittest.TestCase):
     """The fifth criterion: a recorded-correct grouping must reach users.
 
-    Grouping himoemoe's six sources correctly and then tiering the result
+    Grouping himoemoe's sources correctly and then tiering the result
     'uncertain' denies the recorded answer in practice — filter_concepts()
     withholds it and nobody ever sees the unification. So the four grouping
     answers of ScoreboardConstraints are necessary but not sufficient, and
