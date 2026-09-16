@@ -400,6 +400,29 @@ def _extract_base(atom):
     return re.split(r'\s*\(', atom)[0].strip()
 
 
+# Māori content words move between these roles freely, and the sources state
+# it themselves: where one source tags ONE entry with several parts of speech
+# it is declaring those the same word, and it does so for noun+verb on 15,957
+# entries, noun+stative on 12,843, stative+verb on 11,311, modifier+noun on
+# 2,656, modifier+verb on 2,203, adverb+stative on 523. A difference inside
+# this set is two partial descriptions of one word, not a boundary between
+# two words.
+#
+# The line is drawn on those co-tagging counts, not on taste. 'adverb' is in
+# on 523/519/505; 'locative' is out, co-tagged with noun 58 times and modifier
+# 39, and keeps blocking. 'proper noun' is emphatically out: noun+proper noun
+# is co-tagged 30 times corpus-wide, which is why 'Hene' the given name stays
+# apart from 'hene' the body part.
+OPEN_POS = frozenset({"noun", "verb", "stative", "modifier", "adverb"})
+
+# Not a syntactic category at all — it records where a word came from. The
+# corpus co-tags it with noun (2,335), proper noun (570), locative (452),
+# verb (284), modifier (157) and stative (25): with whatever the word
+# grammatically IS. Comparing it against a category is a type error, so it
+# is excluded from the comparison rather than given a place in OPEN_POS.
+PROVENANCE_POS = frozenset({"loan word"})
+
+
 def blocks(a, b):
     """Reasons these two senses must NOT share a concept.
 
@@ -423,14 +446,24 @@ def blocks(a, b):
             if _macron_shape(ha) != _macron_shape(hb):
                 reasons.append(f"macron disagreement: {ha!r} vs {hb!r}")
 
-    # POS block fires only when BOTH sides are single-valued and their bases differ.
-    # A source listing several parts of speech is describing a word that functions
-    # several ways; that is not a claim excluding another source's single tag.
+    # POS block fires only when BOTH sides are single-valued and their bases
+    # differ. A source listing several parts of speech is describing a word
+    # that functions several ways; that is not a claim excluding another
+    # source's single tag.
+    #
+    # Nor is a single tag, when both sit inside OPEN_POS: te Aka calling
+    # kahurangi a Modifier and Papakupu calling it a Noun are two partial
+    # views, and the corpus co-tags those categories on one entry tens of
+    # thousands of times. See the gloss of OPEN_POS above and
+    # docs/superpowers/specs/2026-09-17-pos-block-design.md.
     atoms_a, atoms_b = _pos_atoms(a["pos"]), _pos_atoms(b["pos"])
     if atoms_a and atoms_b and len(atoms_a) == 1 and len(atoms_b) == 1:
         base_a = _extract_base(next(iter(atoms_a)))
         base_b = _extract_base(next(iter(atoms_b)))
-        if base_a and base_b and base_a != base_b:
+        interchangeable = base_a in OPEN_POS and base_b in OPEN_POS
+        provenance = base_a in PROVENANCE_POS or base_b in PROVENANCE_POS
+        if (base_a and base_b and base_a != base_b
+                and not interchangeable and not provenance):
             reasons.append(f"incompatible part of speech: {a['pos']!r} vs {b['pos']!r}")
 
     return reasons

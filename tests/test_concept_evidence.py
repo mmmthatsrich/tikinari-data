@@ -405,9 +405,66 @@ class Blocks(unittest.TestCase):
         b = _sense(source_id="paekupu", headword="hīmoemoe")
         self.assertEqual([], blocks(a, b))
 
+    def test_open_categories_do_not_block_each_other(self):
+        # Māori content words move between these roles freely, and the sources
+        # say so themselves: noun+verb is co-tagged on 15,957 entries,
+        # noun+stative on 12,843, modifier+noun on 2,656.
+        for pa, pb in (("Noun", "Verb"), ("Noun", "Verb (transitive)"),
+                       ("Noun", "Stative"), ("Modifier", "Noun"),
+                       ("Modifier", "Verb"), ("Adverb", "Stative")):
+            with self.subTest(pair=(pa, pb)):
+                a = _sense(source_id="te_aka", pos=pa)
+                b = _sense(source_id="williams", pos=pb)
+                self.assertEqual([], blocks(a, b))
+
+    def test_the_kahurangi_case_does_not_block(self):
+        # The cluster that found this. te Aka tags kahurangi Modifier ('be
+        # blue, precious'), Papakupu tags it Noun ('blue, sky-blue'), and
+        # because a block against ANY member refuses the whole seed, te Aka's
+        # entire seven-sense entry was excluded from the concept holding the
+        # other four sources.
+        a = _sense(source_id="te_aka", headword="kahurangi", pos="Modifier")
+        b = _sense(source_id="papakupu", headword="kahurangi", pos="Noun")
+        self.assertEqual([], blocks(a, b))
+
+    def test_a_proper_noun_still_blocks_a_common_noun(self):
+        # The block that is doing real work: 'Hene' the given name beside
+        # 'hene' the body part. noun+proper noun is co-tagged 30 times
+        # corpus-wide, against 15,957 for noun+verb.
+        a = _sense(source_id="te_aka", pos="Proper noun (person)")
+        b = _sense(source_id="williams", pos="Noun")
+        self.assertTrue(blocks(a, b))
+
+    def test_a_provenance_tag_never_blocks(self):
+        # 'loan word' records where a word came from, not what it is. The
+        # corpus co-tags it with noun (2,335), proper noun (570), locative
+        # (452), verb (284) — with whatever the word grammatically is — so
+        # comparing it against a category is a type error.
+        for other in ("Noun", "Proper noun", "Locative", "Verb", "Particle"):
+            with self.subTest(other=other):
+                a = _sense(source_id="te_aka", pos="Loan word")
+                b = _sense(source_id="williams", pos=other)
+                self.assertEqual([], blocks(a, b))
+
+    def test_a_closed_class_difference_still_blocks(self):
+        for pa, pb in (("Noun", "Particle"), ("Noun", "Universal"),
+                       ("Noun", "Numeral"), ("Locative", "Noun")):
+            with self.subTest(pair=(pa, pb)):
+                a = _sense(source_id="te_aka", pos=pa)
+                b = _sense(source_id="williams", pos=pb)
+                self.assertTrue(blocks(a, b), f"{pa} vs {pb} stopped blocking")
+
     def test_incompatible_part_of_speech_blocks(self):
+        """Still live — for the categories that are a real boundary.
+
+        This used to assert Noun vs Verb (transitive), which the corpus
+        contradicts: the sources co-tag noun+verb on 15,957 single entries,
+        so neither tag excludes the other. Rewritten onto a pair with no
+        co-tagging behind it rather than deleted, because the clause it
+        guards still fires for every category outside OPEN_POS.
+        """
         a = _sense(source_id="te_aka", pos="Noun")
-        b = _sense(source_id="williams", pos="Verb (transitive)")
+        b = _sense(source_id="williams", pos="Particle")
         self.assertTrue(blocks(a, b))
 
     def test_a_missing_part_of_speech_never_blocks(self):
