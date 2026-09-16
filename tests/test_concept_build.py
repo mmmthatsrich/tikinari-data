@@ -126,6 +126,52 @@ class LoadSenses(unittest.TestCase):
         self.assertNotEqual(views[("williams", "1251", 1)]["lexeme"],
                             views[("williams", "1250", 1)]["lexeme"])
 
+    def test_a_macron_difference_inside_ngata_is_a_different_lexeme(self):
+        """The bug lives at this call site, not inside lexeme_key.
+
+        lexeme_key never normalised macrons away — load_senses handed it
+        `headword_search`, the column that already had. So ngata's 'manawa'
+        (heart) and 'mānawa' (mangrove) arrived indistinguishable and seeded
+        as one lexeme: a wrong merge, inside a single source, invisible to
+        every cross-source rule. Testing lexeme_key directly cannot catch
+        this — pass it the two spellings and it separates them correctly.
+        """
+        con = _fixture_db()
+        con.executemany(
+            "INSERT INTO entry (id, source_id, source_entry_id, headword, "
+            "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)",
+            [(90, "ngata", "WR-90", "manawa", "manawa", None, None),
+             (91, "ngata", "WR-91", "mānawa", "manawa", None, None)])
+        con.executemany(
+            "INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
+            "VALUES (?,?,?,?)",
+            [(90, 90, 1, "heart"), (91, 91, 1, "mangrove")])
+        con.commit()
+
+        views = {v["source_entry_id"]: v
+                 for v in self.mod.load_senses(con)["manawa"]}
+        self.assertNotEqual(views["WR-90"]["lexeme"], views["WR-91"]["lexeme"],
+                            "manawa and mānawa seeded as one lexeme")
+
+    def test_identical_ngata_spellings_still_share_a_lexeme(self):
+        # The grouping this seeding exists for must survive: ngata's 14
+        # 'hoatu' rows are one word seen from 13 English lemmas.
+        con = _fixture_db()
+        con.executemany(
+            "INSERT INTO entry (id, source_id, source_entry_id, headword, "
+            "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)",
+            [(92, "ngata", "WR-92", "hoatu", "hoatu", None, None),
+             (93, "ngata", "WR-93", "hoatu", "hoatu", None, None)])
+        con.executemany(
+            "INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
+            "VALUES (?,?,?,?)",
+            [(92, 92, 1, "give"), (93, 93, 1, "hand over")])
+        con.commit()
+
+        views = {v["source_entry_id"]: v
+                 for v in self.mod.load_senses(con)["hoatu"]}
+        self.assertEqual(views["WR-92"]["lexeme"], views["WR-93"]["lexeme"])
+
     def test_a_te_aka_word_id_locator_does_not_group_like_hepatakakupu(self):
         # Real te_aka rows carry 'word_id=N' too; only hepatakakupu may group by
         # it. Without the source gate in lexeme_key, te_aka would group wrongly.

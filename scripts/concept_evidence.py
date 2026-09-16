@@ -19,19 +19,30 @@ _WORD_ID = re.compile(r"word_id=(\d+)")
 _GROUP_BY_HEADWORD = {"ngata", "papakupu"}
 
 
-def lexeme_key(source_id, source_entry_id, headword_search, locator):
+def lexeme_key(source_id, source_entry_id, headword, locator):
     """Which lexeme a sense belongs to WITHIN its own source.
 
     He Pātaka Kupu scatters one lemma over several rows and names the grouping
     in entry.locator ('word_id=930'). Ngata and Papakupu split by headword.
     Williams and Te Aka give one entry per word.
+
+    The headword-seeded sources group on the headword AS WRITTEN, never on
+    `headword_search`. That column strips macrons, and a macron is a phoneme
+    here, not an accent: seeding on it merged ngata's 'manawa' (heart) with
+    'mānawa' (mangrove), and papakupu's 'koti' (coat) with 'kōti' (court) —
+    wrong merges inside a single source, which no cross-source rule can see
+    or undo. It also let one misspelled row veto its whole seed: seven ngata
+    rows spelling 'āhuaatua' were isolated from three other sources by an
+    eighth row missing the macron, because a block against any member refuses
+    the seed. Case is folded, since capitalisation is typography rather than
+    a word boundary.
     """
     if source_id == "hepatakakupu":
         m = _WORD_ID.search(locator or "")
         if m:
             return (source_id, "word", m.group(1))
     if source_id in _GROUP_BY_HEADWORD:
-        return (source_id, "hw", (headword_search or "").strip().lower())
+        return (source_id, "hw", (headword or "").strip().lower())
     return (source_id, "entry", str(source_entry_id))
 
 

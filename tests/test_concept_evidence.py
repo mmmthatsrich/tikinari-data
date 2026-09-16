@@ -58,6 +58,37 @@ class LexemeKey(unittest.TestCase):
         self.assertEqual(lexeme_key("papakupu", "2", "a", None),
                          lexeme_key("papakupu", "3", "a", None))
 
+    def test_ngata_macron_variants_are_different_lexemes(self):
+        # 'manawa' is heart/breath; 'mānawa' is the mangrove. headword_search
+        # strips macrons, so seeding on it merged 9 manawa rows with 6 mānawa
+        # rows into one lexeme — a wrong merge, silently, inside the source.
+        self.assertNotEqual(
+            lexeme_key("ngata", "WR-1", "manawa", None),
+            lexeme_key("ngata", "WR-2", "mānawa", None))
+
+    def test_papakupu_macron_variants_are_different_lexemes(self):
+        # 'koti' is a coat; 'kōti' is a court.
+        self.assertNotEqual(
+            lexeme_key("papakupu", "10", "koti", None),
+            lexeme_key("papakupu", "11", "kōti", None))
+
+    def test_one_misspelled_row_does_not_join_the_rest(self):
+        # ngata WR-HMN.12624 spells āhuaatua without its macron while the
+        # other seven rows carry it. Seeding them together let that one row's
+        # macron block veto the whole seed's attachment to te_aka, williams
+        # and hepatakakupu — seven correct rows isolated by one typo. Now it
+        # is its own lexeme and takes only itself out of the running.
+        self.assertNotEqual(
+            lexeme_key("ngata", "WR-HMN.11059#41666~1", "āhuaatua", None),
+            lexeme_key("ngata", "WR-HMN.12624#44323~2", "ahuaatua", None))
+
+    def test_case_alone_is_not_a_lexeme_distinction(self):
+        # Papakupu capitalises some headwords. Case is typography, not a word
+        # boundary — unlike a macron, which is a phoneme.
+        self.assertEqual(
+            lexeme_key("papakupu", "20", "Manawa", None),
+            lexeme_key("papakupu", "21", "manawa", None))
+
     def test_a_missing_locator_falls_back_to_the_entry(self):
         self.assertNotEqual(lexeme_key("hepatakakupu", "1", "x", None),
                             lexeme_key("hepatakakupu", "2", "x", None))

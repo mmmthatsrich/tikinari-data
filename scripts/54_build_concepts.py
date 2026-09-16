@@ -86,7 +86,7 @@ def load_senses(con, keys=None):
             "pos": pos,
             "gloss_en": gen,
             "gloss_mi": gmi,
-            "lexeme": lexeme_key(src, seid, hse, locator),
+            "lexeme": lexeme_key(src, seid, hw, locator),
             "cognate_sets": frozenset(cognates.get(eid, ())),
             "examples": frozenset(examples.get(sid, ())),
             "citations": frozenset(citations.get(sid, ())),
