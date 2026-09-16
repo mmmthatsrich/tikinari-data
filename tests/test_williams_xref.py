@@ -164,6 +164,56 @@ class TestResolveWilliamsXrefs(unittest.TestCase):
         eid = con.execute("SELECT target_entry_id FROM relation WHERE id=?", (rid,)).fetchone()[0]
         self.assertEqual(eid, 12)
 
+    def test_resolves_a_variant_of_the_same_way_as_a_see_also(self):
+        """variant_of is the same pointer and was never offered to the resolver.
+
+        Williams marks a variant with '=' at the head of an entry ('Ahine. =
+        wahine.') and a compare with the '‖' bar. Both name a headword, both
+        carry the same roman sense pointer when they need one, and both are
+        resolved by pick_target — but the query only ever selected see_also.
+        Measured on the corpus: see_also 73% resolved against variant_of 32%,
+        and 150 of the 542 unresolved variant_of rows resolve unambiguously
+        with no new machinery at all.
+        """
+        con = self._db()
+        rid = self._add(con, "variant_of", "tuaahu")
+        _bu.resolve_williams_xrefs(con)
+        eid = con.execute("SELECT target_entry_id FROM relation WHERE id=?",
+                          (rid,)).fetchone()[0]
+        self.assertEqual(eid, 12)
+
+    def test_a_variant_of_uses_the_roman_sense_to_pick_a_homograph(self):
+        con = self._db()
+        rid = self._add(con, "variant_of", "ahu (ii)")
+        _bu.resolve_williams_xrefs(con)
+        eid = con.execute("SELECT target_entry_id FROM relation WHERE id=?",
+                          (rid,)).fetchone()[0]
+        self.assertEqual(eid, 11)
+
+    def test_an_ambiguous_variant_of_is_still_refused(self):
+        # 'ahu' is two homographs and nothing says which. Guessing here would
+        # be the defect pick_target exists to prevent.
+        con = self._db()
+        rid = self._add(con, "variant_of", "ahu")
+        _bu.resolve_williams_xrefs(con)
+        eid = con.execute("SELECT target_entry_id FROM relation WHERE id=?",
+                          (rid,)).fetchone()[0]
+        self.assertIsNone(eid)
+
+    def test_a_split_variant_of_stays_a_variant_of(self):
+        """Extra rows from a multi-target pointer keep the original kind.
+
+        The split branch hardcoded 'see_also', so a variant naming several
+        targets would have turned into compare-links — a different claim
+        about the word.
+        """
+        con = self._db()
+        rid = self._add(con, "variant_of", "tuaahu, ahu (i)")
+        _bu.resolve_williams_xrefs(con)
+        kinds = [r[0] for r in con.execute(
+            "SELECT rel_type FROM relation WHERE entry_id=12")]
+        self.assertEqual(["variant_of", "variant_of"], sorted(kinds))
+
     def test_resolves_sense_specific_to_correct_homograph(self):
         con = self._db()
         rid = self._add(con, "see_also", "ahu (ii)")

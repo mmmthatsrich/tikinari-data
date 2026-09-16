@@ -1047,14 +1047,22 @@ def resolve_williams_xrefs(con):
     def match(key, sense, word):
         return pick_target(by_key.get(key) or [], sense, word)
 
+    # variant_of is the same kind of pointer and goes through the same
+    # resolver. Williams marks a variant with '=' at the head of an entry
+    # ('Ahine. = wahine.') and a compare with the '‖' bar; both name a
+    # headword and both carry a roman sense pointer when they need one. Only
+    # see_also was ever selected here, which is why see_also was 73% resolved
+    # against variant_of's 32% — 150 of 542 unresolved variant_of rows match
+    # unambiguously with no new machinery.
     rows = con.execute(
-        "SELECT r.id, r.entry_id, r.target_headword FROM relation r "
+        "SELECT r.id, r.entry_id, r.target_headword, r.rel_type FROM relation r "
         "JOIN entry e ON e.id = r.entry_id "
-        "WHERE r.rel_type = 'see_also' AND e.source_id = 'williams' "
+        "WHERE r.rel_type IN ('see_also', 'variant_of') "
+        "  AND e.source_id = 'williams' "
         "  AND r.target_entry_id IS NULL").fetchall()
 
     resolved = 0
-    for rid, entry_id, raw in rows:
+    for rid, entry_id, raw, rel_type in rows:
         hits = [m for m in (match(k, sn, w)
                             for k, sn, w in see_also_spellings(raw)) if m]
         if not hits:
@@ -1064,9 +1072,11 @@ def resolve_williams_xrefs(con):
         con.execute("UPDATE relation SET target_entry_id=?, target_headword=?, note=? "
                     "WHERE id=?", (first_eid, first_disp, note, rid))
         for eid, disp in hits[1:]:
+            # The split rows keep the ORIGINAL kind: a variant with several
+            # targets is several variants, not several compare-links.
             con.execute("INSERT INTO relation (entry_id, rel_type, target_headword, "
                         "target_entry_id, note) VALUES (?,?,?,?,?)",
-                        (entry_id, "see_also", disp, eid, raw))
+                        (entry_id, rel_type, disp, eid, raw))
         resolved += 1
     return resolved, len(rows)
 
