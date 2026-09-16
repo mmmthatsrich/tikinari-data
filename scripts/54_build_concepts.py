@@ -154,6 +154,49 @@ def form_concepts(views, index):
             concepts.append({"members": [{"view": s, "evidence": [],
                                           "confidence": conf} for s in seed]})
 
+    # Re-score every member against the concept it ENDED UP IN, not against
+    # whoever happened to be present when it attached.
+    #
+    # Seeds are processed in sorted order, so a member's confidence used to be
+    # frozen at attach time. On the 'ikarangi' cluster that made te_aka
+    # 'galaxy.' uncertain even though te_matatiki 'Galaxy' — coverage 1.00
+    # against it — joined the same concept moments later: te_aka had scored
+    # against paekupu's forty-word definition and never saw te_matatiki. It
+    # also left the FOUNDING seed with no evidence at all, and so with its
+    # seed confidence untouched: certain by virtue of never having been
+    # compared to anything, which flattered it.
+    #
+    # positive_evidence returns nothing for a same-source pair, so within-
+    # source members contribute nothing here and the seeding step remains the
+    # only thing that groups a source's own senses.
+    for c in concepts:
+        if len(c["members"]) > 1:
+            for m in c["members"]:
+                pooled, seen = [], set()
+                for other in c["members"]:
+                    if other is m:
+                        continue
+                    for e in positive_evidence(m["view"], other["view"], index):
+                        tag = (e["kind"], e["detail"])
+                        if tag not in seen:
+                            seen.add(tag)
+                            pooled.append(e)
+                seed_conf = SEED_CONFIDENCE.get(m["view"]["source_id"], "certain")
+                rescored = min((confidence_for(pooled, []), seed_conf),
+                               key=("uncertain", "probable", "certain").index)
+                m["evidence"] = pooled
+                # Re-scoring may only RAISE a membership, never lower it.
+                # Members joining adds evidence; it cannot unmake the evidence
+                # that justified this member's own attachment. Scored both
+                # ways against the corpus, lowering was badly wrong: it
+                # demoted every founding seed — which has no evidence because
+                # it was never compared to anything — and min() then sank the
+                # concept with it, taking the app from 90,187 concepts to
+                # 74,409. Monotone, the same change can only ever ship more.
+                m["confidence"] = max(
+                    (m["confidence"], rescored),
+                    key=("uncertain", "probable", "certain").index)
+
     for c in concepts:
         c["confidence"] = min((m["confidence"] for m in c["members"]),
                               key=("uncertain", "probable", "certain").index)
@@ -257,11 +300,19 @@ def persist(con, concepts):
             key = v["member_key"]
             if key in judged:
                 counts["kept"] += 1
+                # status is the human's and is never touched here; confidence
+                # is derived and must be re-derived, or a row judged under one
+                # rule keeps that rule's confidence for ever while the evidence
+                # rows beside it — which this same loop rewrites — say
+                # otherwise. The re-tuning mechanism in the gloss-evidence
+                # spec §6 fits thresholds by pairing a judgement with its
+                # measurements, so the judged rows are exactly the labels that
+                # must not go stale.
                 con.execute(
                     "UPDATE concept_member SET concept_id=?, entry_id=?, "
-                    " sense_id=? WHERE source_id=? AND source_entry_id=? "
-                    " AND sense_number IS ?",
-                    (concept_id, v["entry_id"], v["sense_id"],
+                    " sense_id=?, confidence=? WHERE source_id=? AND "
+                    " source_entry_id=? AND sense_number IS ?",
+                    (concept_id, v["entry_id"], v["sense_id"], m["confidence"],
                      key[0], key[1], key[2]))
                 mid = con.execute(
                     "SELECT id FROM concept_member WHERE source_id=? AND "

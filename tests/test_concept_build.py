@@ -266,6 +266,107 @@ class FormConcepts(unittest.TestCase):
             self.assertFalse({"hiwi", "hīwi"} <= hws, hws)
 
 
+class ConfidenceIsScoredAgainstFinalMembership(unittest.TestCase):
+    """A member's confidence must not depend on the order seeds arrive.
+
+    Found judging the 'ikarangi' cluster: te_aka 'galaxy.' and te_matatiki
+    'Galaxy' score coverage 1.00 against each other — unambiguous evidence —
+    yet te_aka was tiered uncertain. Seeds are processed sorted, so te_aka
+    attached when only paekupu was present, scored weak against paekupu's
+    40-word encyclopaedic definition, and never got credit when te_matatiki
+    arrived afterwards. Its confidence was frozen against whoever happened to
+    be there, not against the concept it ended up in.
+
+    No threshold tuning can fix that: the member was scored against the wrong
+    partner.
+    """
+
+    def setUp(self):
+        self.mod = importlib.import_module("54_build_concepts")
+        self.ce = importlib.import_module("concept_evidence")
+
+    def _fixture(self):
+        con = _fixture_db()
+        # Sources are seeded in sorted order, so 'aaa' founds the concept.
+        # aaa's gloss is long, so anything matching it scores low coverage;
+        # 'wide' is made common so the distinctiveness axis cannot rescue it
+        # either. bbb and ccc are terse and identical to each other.
+        con.executemany(
+            "INSERT INTO entry (id, source_id, source_entry_id, headword, "
+            "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)",
+            [(70, "aaa", "1", "kupu", "kupu", None, None),
+             (71, "bbb", "1", "kupu", "kupu", None, None),
+             (72, "ccc", "1", "kupu", "kupu", None, None)])
+        con.executemany(
+            "INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
+            "VALUES (?,?,?,?)",
+            [(70, 70, 1, "a wide assembly of many distant things gathered "
+                         "together across great space and counted slowly"),
+             (71, 71, 1, "wide."),
+             (72, 72, 1, "Wide")])
+        # Make 'wide' common enough that only coverage can rescue a pair.
+        con.executemany(
+            "INSERT INTO entry (id, source_id, source_entry_id, headword, "
+            "headword_search) VALUES (?,?,?,?,?)",
+            [(800 + i, "filler", f"f{i}", f"kupu{i}", f"kupu{i}")
+             for i in range(30)])
+        con.executemany(
+            "INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
+            "VALUES (?,?,?,?)",
+            [(800 + i, 800 + i, 1, "wide open spaces") for i in range(30)])
+        con.commit()
+        return con
+
+    def test_the_late_arrival_lifts_the_member_that_joined_before_it(self):
+        con = self._fixture()
+        index = _fixture_index(con)
+        concepts = self.mod.form_concepts(
+            self.mod.load_senses(con)["kupu"], index)
+        big = max(concepts, key=lambda c: len(c["members"]))
+        by_src = {m["view"]["source_id"]: m for m in big["members"]}
+        self.assertEqual({"aaa", "bbb", "ccc"}, set(by_src),
+                         "fixture did not form the three-source concept")
+        # bbb and ccc are 'wide.' and 'Wide' — coverage 1.00 between them.
+        self.assertEqual("probable", by_src["bbb"]["confidence"],
+                         "bbb was scored against aaa alone and never "
+                         "re-scored once ccc joined")
+
+    def test_rescoring_never_lowers_a_membership(self):
+        """Monotone by design, and the corpus insisted on it.
+
+        A founding seed carries no evidence — nothing was there to compare it
+        to — so scoring it against the members that later joined demoted it,
+        and min() over members sank the whole concept. Measured: allowing
+        re-scoring to lower took the app from 90,187 concepts to 74,409, a
+        17.5% fall, for memberships nobody had judged wrong. Members joining
+        adds evidence; it cannot unmake the evidence that justified an
+        attachment in the first place.
+        """
+        con = self._fixture()
+        index = _fixture_index(con)
+        concepts = self.mod.form_concepts(
+            self.mod.load_senses(con)["kupu"], index)
+        big = max(concepts, key=lambda c: len(c["members"]))
+        by_src = {m["view"]["source_id"]: m for m in big["members"]}
+        # aaa founds the concept and its long gloss matches nothing well.
+        self.assertEqual("certain", by_src["aaa"]["confidence"],
+                         "the founding seed was demoted by re-scoring")
+
+    def test_every_member_is_scored_against_every_other_source(self):
+        con = self._fixture()
+        index = _fixture_index(con)
+        concepts = self.mod.form_concepts(
+            self.mod.load_senses(con)["kupu"], index)
+        big = max(concepts, key=lambda c: len(c["members"]))
+        for m in big["members"]:
+            others = {o["view"]["source_id"] for o in big["members"]
+                      if o["view"]["source_id"] != m["view"]["source_id"]}
+            got = {d for e in m["evidence"] for d in [e["detail"]]}
+            self.assertTrue(
+                got, f"{m['view']['source_id']} carries no evidence at all "
+                     f"despite sharing a concept with {sorted(others)}")
+
+
 class Persist(unittest.TestCase):
     def setUp(self):
         self.mod = importlib.import_module("54_build_concepts")
@@ -302,15 +403,65 @@ class Persist(unittest.TestCase):
             "SELECT COUNT(*) FROM concept_member").fetchone()[0], first)
 
     def test_a_confirmed_membership_is_never_overwritten(self):
+        """The JUDGEMENT survives a rebuild. Confidence deliberately does not.
+
+        This test used to assert the confidence column survived too, by
+        setting it to 'certain' by hand — a value no build produces for
+        papakupu, whose seed confidence is 'probable' — and checking the
+        artificial value came back. That pinned the bug rather than the
+        contract: status is the human's and must never be touched, while
+        confidence is derived from evidence rows that this same rebuild
+        rewrites, so freezing it left a scalar agreeing with neither the
+        current evidence nor any preserved history. See the sibling
+        test_a_judged_membership_still_gets_a_fresh_confidence.
+        """
         con = _fixture_db()
         self._build(con)
-        con.execute("UPDATE concept_member SET status='confirmed', "
-                    "confidence='certain' WHERE source_id='papakupu'")
+        con.execute("UPDATE concept_member SET status='confirmed' "
+                    "WHERE source_id='papakupu'")
         con.commit()
         self._build(con)
-        row = con.execute("SELECT status, confidence FROM concept_member "
-                          "WHERE source_id='papakupu'").fetchone()
-        self.assertEqual(row, ("confirmed", "certain"))
+        status = con.execute("SELECT status FROM concept_member "
+                             "WHERE source_id='papakupu'").fetchone()[0]
+        self.assertEqual("confirmed", status)
+
+    def test_a_judged_membership_still_gets_a_fresh_confidence(self):
+        """status is the human's; confidence is the machine's.
+
+        persist() refreshes a judged member's evidence rows but used to leave
+        its confidence column alone, so a row judged under one rule kept that
+        rule's confidence for ever while its own evidence said otherwise.
+        That matters most where it is least visible: the re-tuning mechanism
+        in the gloss-evidence spec §6 fits thresholds by pairing a judgement
+        with its measurements, and the judged rows ARE the labels.
+        """
+        con = _fixture_db()
+        views = self.mod.load_senses(con)
+        idx = _fixture_index(con)
+        allc = []
+        for key in sorted(views):
+            allc.extend(self.mod.form_concepts(views[key], idx))
+        self.mod.persist(con, allc)
+
+        key = ("williams", "1251", 1)
+        con.execute(
+            "UPDATE concept_member SET status='confirmed', "
+            "  confidence='uncertain' WHERE source_id=? AND "
+            "  source_entry_id=? AND sense_number IS ?", key)
+        con.commit()
+
+        allc = []
+        for key2 in sorted(views):
+            allc.extend(self.mod.form_concepts(views[key2], idx))
+        self.mod.persist(con, allc)
+
+        status, conf = con.execute(
+            "SELECT status, confidence FROM concept_member WHERE source_id=? "
+            "  AND source_entry_id=? AND sense_number IS ?", key).fetchone()
+        self.assertEqual("confirmed", status, "the judgement was lost")
+        self.assertNotEqual("uncertain", conf,
+                            "confidence was left at the value it was judged "
+                            "with instead of being re-derived")
 
     def test_a_rejected_membership_is_never_revived(self):
         con = _fixture_db()
