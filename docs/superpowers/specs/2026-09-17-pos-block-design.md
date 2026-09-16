@@ -185,6 +185,50 @@ source. A large rise in multi-source concepts is the intended effect; a
 large *fall* in total concepts means merging is chaining and the change
 should be reconsidered.
 
+### Measured outcome (2026-09-17, after the rebuild)
+
+| | before | after | |
+|---|---|---|---|
+| concepts | 95,051 | 91,684 | −3,367 |
+| — certain | 67,236 | 63,206 | −4,030 |
+| — probable | 23,709 | 24,465 | +756 |
+| — uncertain | 4,106 | 4,013 | −93 |
+| multi-source concepts | 18,127 | 18,794 | **+667** |
+| app concepts | 90,946 | 87,673 | −3,273 |
+| `hoi` | 7 | **7** | held |
+
+**All four recorded answers hold**, with headroom: `hiwi` 8 concepts against a
+floor of 6, `hia` still apart from `hīa`, `himoemoe` still unifying ≥4 sources,
+`paekupu:hoi` still single-source. All 18 sweep judgements survived.
+
+**The reconsider-signal fired and was judged benign. The reasoning, so a later
+reader can disagree with it.** This section said a large fall in total concepts
+means merging is chaining. Total fell by 3,367 while multi-source rose by only
+667, which is exactly the shape that would worry: if merges were clean pairings
+the two numbers would be close.
+
+They are not close because most merges are not pairings. Single-source concepts
+fell by 4,034; about 1,334 of those paired off into the 667 new multi-source
+concepts, and the remaining ~2,700 were absorbed into concepts that were
+*already* multi-source — which lowers the total without moving the multi-source
+count at all. That is the intended effect (a te Aka `Modifier` entry joining a
+concept that already held the `Noun` reading), not accretion.
+
+Three checks support that reading over the chaining one:
+
+- **No runaway concept.** The largest is `tohu` at 88 members across 7 sources,
+  and its glosses are one genuinely polysemous word — sign/mark/token, to
+  preserve/spare, to instruct/advise. The source distribution is smooth:
+  72,890 concepts hold one source, 11,825 two, 4,711 three, tapering to 7 at
+  eight sources. Chaining would show as a blob, and there is none.
+- **`hoi` held at 7 with zero headroom.** It is the cluster on which
+  `shared_cognate_set` once merged ten distinct words, and the first concept
+  lost would have fired it.
+- **The certain→probable shift is arithmetic, not decay.** A concept absorbing
+  a `probable` member takes `min` over its members, so +756 probable against
+  −4,030 certain is consistent with ~3,367 certain concepts merging away and
+  ~756 being demoted by what they absorbed.
+
 **Membership in `OPEN` is set by co-tagging, not by taste.** A base belongs
 if the sources themselves co-tag it with another member on one entry, at a
 volume that cannot be transcription noise. `adverb` qualifies on 523/519/505;
