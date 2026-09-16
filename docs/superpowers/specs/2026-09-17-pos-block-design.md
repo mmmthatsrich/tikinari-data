@@ -194,6 +194,32 @@ source. A large rise in multi-source concepts is the intended effect; a
 large *fall* in total concepts means merging is chaining and the change
 should be reconsidered.
 
+### How to re-derive the before-side without a snapshot
+
+Every "before" figure in this section was measured **after** the change had
+already landed, and no pre-narrowing copy of `staging_dictionary.db` exists.
+That is not a gap: the old rule can be reconstructed in-process, read-only,
+because this design's whole behavioural change lives in two frozensets.
+
+```python
+import concept_evidence as ce
+ce.OPEN_POS = frozenset()        # restores the pre-change clause exactly:
+ce.PROVENANCE_POS = frozenset()  # every base pair blocks again
+# then re-run load_senses() / form_concepts() from 54_build_concepts.py
+```
+
+`blocks()` reads both names as module globals at call time, so emptying them
+puts the old clause back bit-for-bit without touching the tree or the
+database. `form_concepts` is deterministic, so the reconstruction is
+repeatable — every figure below was reproduced twice by that route, to the
+digit.
+
+Written down because it was not obvious: one engineer re-checking these
+numbers went looking for a database snapshot, did not find one, and took the
+before-side on trust. Anyone re-tuning `OPEN_POS` later needs this method,
+and it is the only way to get a counterfactual out of a rule that has
+already shipped.
+
 ### Measured outcome (2026-09-17, after the rebuild)
 
 | | before | after | |
@@ -223,7 +249,7 @@ concepts, and the remaining ~2,700 were absorbed into concepts that were
 count at all. That is the intended effect (a te Aka `Modifier` entry joining a
 concept that already held the `Noun` reading), not accretion.
 
-Three checks support that reading over the chaining one:
+Two checks support that reading over the chaining one; a third that looks like a check is not one, and is kept below because knowing it proves nothing is worth as much as the two that do:
 
 - **No runaway concept, checked against where each one started.** The
   largest concepts did grow materially — an absolute with no before-figure is
@@ -278,7 +304,7 @@ NEW: 18,794 multi-seed concepts, 44,109 cross-seed pairs, 3,803 without direct e
 ```
 
 84% of the newly-created cross-seed adjacencies are directly evidenced; the
-undirected share rose from 6.90% to 8.62%. Reading a sample of 14 transitive
+un-evidenced share rose from 6.90% to 8.62%. Reading a sample of 14 transitive
 joins by hand: 11 are right (`kiato` compact/density, `pūmau` invariant,
 `pupuri` hold/save, `pūkenga` scholar/lecturer, `anga` shell/structure) and 3
 are doubtful (`hīrea` whiff vs obscure, `mataara` alert vs witness, `putu`
