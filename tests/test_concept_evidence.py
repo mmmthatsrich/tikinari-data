@@ -507,6 +507,7 @@ class Blocks(unittest.TestCase):
         a = _sense(source_id="hepatakakupu", pos="Stative, Noun, Verb (intransitive)")
         b = _sense(source_id="paekupu", pos="Particle")
         self.assertEqual([], blocks(a, b))
+        self.assertEqual([], blocks(b, a))   # same guard, mirror orientation
 
     def test_transitivity_alone_does_not_block(self):
         # One source calls a verb transitive, another intransitive. Same verb.

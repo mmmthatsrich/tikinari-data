@@ -36,6 +36,21 @@ class Acceptance(unittest.TestCase):
         # 18 entries, eight distinct words plus two loans.
         self.assertGreaterEqual(len(self._concepts_on("hiwi")), 6)
 
+    def test_hoi_does_not_chain_into_fewer_concepts(self):
+        """The chaining canary, and the reason the POS block was loosened
+        carefully rather than removed.
+
+        'hoi' is the key on which shared_cognate_set once merged ten distinct
+        words — 'ear lobe', "that's enough", 'disobedient' — into one concept.
+        A block against ANY member refuses a whole seed, so releasing a block
+        permits a CHAIN, not just a pair: a third source compatible with each
+        of two separated words can now join them.
+
+        Baseline measured 2026-09-17, before the POS narrowing: 7 concepts.
+        A floor, so ordinary drift is quiet and a collapse is loud.
+        """
+        self.assertGreaterEqual(len(self._concepts_on("hoi")), 7)
+
     def test_hia_never_joins_hiia(self):
         # 'hīa' is hī + -a, 'draw a breath'; it shares a key only because
         # headword_search strips macrons.
