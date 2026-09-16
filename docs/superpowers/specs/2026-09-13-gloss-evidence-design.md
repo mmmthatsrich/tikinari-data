@@ -246,6 +246,64 @@ what protects users. An earlier draft of this design proposed refusing weak
 pairs outright, which would have made the corpus unable to teach anything about
 its own thresholds.
 
+### Notes for whoever re-tunes these
+
+Written down because they were expensive to learn and live nowhere else.
+
+**The grid is degenerate on grouping.** Both gloss kinds are evidence, so a pair
+attaches either way: no threshold on any grid changes which senses share a
+concept. Verified by hashing the member-key partition across the grid — identical
+at every point. Two consequences. The recorded calibration answers in
+`tests/test_concept_acceptance.py` are all about grouping, so **they cannot
+discriminate between threshold points at all** — a grid search scored on them
+alone returns whatever corner its scoring function points at. And no re-tune can
+over-merge; it can only withhold.
+
+**Cap every axis where no criterion binds, or the search returns your grid's
+edge.** This is the one that cost the most. The original rule ("the satisfying
+point that ships the most") is monotone in both axes, so it just picked the
+loosest corner. Replacing it with "the tightest satisfying point" reproduced the
+same pathology mirrored — the floor ran straight to 0.7, the tight edge, for no
+reason but that the grid stopped there. Only a criterion that actually binds
+pins an axis. Today `DISTINCT_CEILING` is pinned by measurement and
+`COVERAGE_FLOOR` is pinned by §2's table via `SPEC_COVERAGE_CAP`. Add an axis,
+or widen the grid, and you need a new cap or you will get its edge back.
+
+**The shipping criterion, and its limits.** `DISTINCT_CEILING` is pinned by
+requiring that a cluster whose recorded answer is *these belong together* must
+reach users, not merely group. Only `himoemoe` carries such an answer; `hiwi`,
+`hia` and `hoi` record **separation**, and "these are eight different words"
+says nothing about whether each of the eight is well enough evidenced to
+display. Do not extend the criterion to them without a recorded answer to base
+it on.
+
+**That pin is thin.** The whole ceiling constraint is one membership:
+`te_aka` × `te_matatiki` on `'acidic'`, in exactly 7 glosses corpus-wide. The
+ceiling is 10 — three steps of deliberate clearance, costing 615 concepts,
+because one new source glossing something `'acidic'` moves it. The measured
+cliff is between 6 and 7. `test_himoemoe_actually_reaches_users_not_just_the_corpus`
+exists because nothing else in the suite would notice if drift consumed the
+margin; with it in place, a tighter ceiling becomes safe to take.
+
+**Two fixtures are sized to today's constants.** In
+`tests/test_concept_evidence.py`, `test_identical_terse_glosses_are_ordinary_evidence`
+hardcodes a corpus giving df 21, so it goes red at any `DISTINCT_CEILING` >= 21
+(grid points 40 and 80). The fix is one line — build the corpus as
+`["a spoon of sorts"] * (DISTINCT_CEILING + 10)`, the way
+`test_coverage_at_the_floor_is_rescued_even_when_common` already does. And that
+boundary test derives its fixture from `Fraction(COVERAGE_FLOOR).limit_denominator(20)`,
+exact for every 0.05 step from 0.3 to 0.75 and **loudly failing** for a floor
+needing a larger denominator (0.47, say) — rebuild that fixture, never weaken
+the assertion.
+
+**The separation half of the tuning script does not exist yet.** The script
+reports the shipping delta but not how cleanly a candidate pair separates
+`confirmed` from `rejected`, because at the time of writing nothing was judged.
+`_max_sources(shipping=True)` also approximates `filter_concepts()` as
+`confidence != 'uncertain'`, which is exact only while no judgements exist; its
+docstring names itself the first thing to fix. Both are work for the first
+re-tune, not oversights.
+
 **The rebuild-ordering hazard.** `persist()` in `54_build_concepts.py` deletes
 all evidence rows unconditionally and re-inserts none for a rejected member —
 by design, a rejected membership earns no evidence rows. So a rebuild of 54
