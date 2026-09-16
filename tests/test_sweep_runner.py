@@ -520,3 +520,75 @@ class CliPrintsMaori(unittest.TestCase):
             0, run.returncode,
             "the runner cannot print a macron on a cp1252 console:\n"
             + run.stderr)
+
+
+class MemberAddressesWithHashInTheEntryId(unittest.TestCase):
+    """Four sources put '#' inside source_entry_id. The sense separator is
+    also '#', so the address is ambiguous and 42,062 of 175,101 memberships
+    — ngata 33,775, te_matatiki 5,097, kimikupu_hou 2,839,
+    tregear_exceptions 351 — could not be confirmed or rejected at all.
+
+    ngata ids ('WR-HMN.11059#41666~1') failed to parse outright; te_matatiki
+    ids ('WR-TM.666#48292') parsed into an entry and sense that do not exist,
+    so the judgement was refused as a missing membership. Found on the fifth
+    cluster of the concept calibration round, trying to confirm te_matatiki.
+
+    The database is what disambiguates: try the whole string as the entry id
+    first, and only split on a trailing '#N' if that finds nothing.
+    """
+
+    def setUp(self):
+        self.con = _db()
+        self.con.executemany(
+            "INSERT INTO concept_member (concept_id, source_id, "
+            " source_entry_id, sense_number, status, confidence) "
+            " VALUES (1,?,?,?,'proposed','probable')",
+            [("te_matatiki", "WR-TM.666#48292", None),
+             ("ngata", "WR-HMN.11059#41666~1", None)])
+        self.con.commit()
+
+    def test_a_te_matatiki_address_resolves_to_its_own_row(self):
+        self.assertEqual(
+            ("te_matatiki", "WR-TM.666#48292", None),
+            sweep_runner.resolve_member(self.con, "te_matatiki:WR-TM.666#48292"))
+
+    def test_an_ngata_address_resolves_to_its_own_row(self):
+        self.assertEqual(
+            ("ngata", "WR-HMN.11059#41666~1", None),
+            sweep_runner.resolve_member(self.con, "ngata:WR-HMN.11059#41666~1"))
+
+    def test_a_plain_sense_suffix_still_means_a_sense(self):
+        self.assertEqual(
+            ("te_aka", "79", 1),
+            sweep_runner.resolve_member(self.con, "te_aka:79#1"))
+
+    def test_an_address_matching_nothing_is_refused(self):
+        with self.assertRaises(ValueError):
+            sweep_runner.resolve_member(self.con, "te_aka:99999#1")
+
+    def test_confirming_a_hash_id_member_actually_marks_THAT_row(self):
+        """Validation and apply must resolve the address the same way.
+
+        _validate resolving correctly is not enough: if the apply pass parses
+        the address differently it writes to a different row, or to none, and
+        the judgement is silently lost after passing every check.
+        """
+        payload = {
+            "cluster_key": "aho",
+            "findings": [{
+                "kind": "observation",
+                "subject": "te_matatiki:WR-TM.666#48292",
+                "summary": "confirmed while judging the calibration round",
+                "concept_actions": [
+                    {"action": "confirm_member",
+                     "member": "te_matatiki:WR-TM.666#48292"}],
+            }],
+        }
+        claim(self.con, "S1")
+        record(self.con, "S1", json.dumps(payload))
+        self.assertEqual(
+            "confirmed",
+            self.con.execute(
+                "SELECT status FROM concept_member WHERE source_id = ? "
+                "  AND source_entry_id = ?",
+                ("te_matatiki", "WR-TM.666#48292")).fetchone()[0])

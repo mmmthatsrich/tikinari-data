@@ -47,7 +47,6 @@ from sweep_rubric import VERSION
 # expressible as confirm/reject on the memberships involved, and a first-class
 # split needs a rule for which concept keeps the id that nothing yet depends on.
 CONCEPT_ACTIONS = {"confirm_member", "reject_member"}
-_MEMBER_RE = re.compile(r"^([^:]+):([^#]+)(?:#(\d+))?$")
 
 
 def claim(con, session_id: str, tier: int | None = None):
@@ -59,18 +58,47 @@ def claim(con, session_id: str, tier: int | None = None):
     return key, batch, render(batch)
 
 
-def _parse_member(addr: str):
-    """(source_id, source_entry_id, sense_number) from 'source:entry#sense'.
+def resolve_member(con, addr: str):
+    """(source_id, source_entry_id, sense_number) for an address that exists.
 
-    sense_number is None when the address has no '#sense' — a NULL
-    sense_number, matched with `IS`, never `=`, since SQLite's `=` never
-    matches NULL.
+    The address format is ambiguous and the database is what settles it. Four
+    sources put '#' inside source_entry_id — ngata ('WR-HMN.11059#41666~1'),
+    te_matatiki ('WR-TM.666#48292'), kimikupu_hou and tregear_exceptions,
+    42,062 memberships between them — while '#' is also the sense separator.
+    Parsing on the text alone, ngata addresses failed outright and
+    te_matatiki's resolved to an entry and sense that do not exist, so a
+    quarter of the corpus could not be confirmed or rejected at all.
+
+    So: try the whole tail as the entry id with no sense first, and only fall
+    back to splitting a trailing '#N' if that finds nothing. Whichever matches
+    a real row is the answer; if neither does, the address is refused rather
+    than guessed at. If BOTH match — an entry literally named 'X#1' beside
+    entry 'X' sense 1 — that is refused too, because nothing here can tell
+    which the judge meant.
     """
-    m = _MEMBER_RE.match(addr.strip())
-    if not m:
+    addr = addr.strip()
+    if ":" not in addr:
         raise ValueError(f"unparseable member {addr!r}")
-    src, seid, sn = m.group(1), m.group(2), m.group(3)
-    return src, seid, (int(sn) if sn else None)
+    src, tail = addr.split(":", 1)
+    if not src or not tail:
+        raise ValueError(f"unparseable member {addr!r}")
+
+    candidates = [(src, tail, None)]
+    m = re.match(r"^(.*)#(\d+)$", tail)
+    if m and m.group(1):
+        candidates.append((src, m.group(1), int(m.group(2))))
+
+    found = [c for c in candidates if con.execute(
+        "SELECT 1 FROM concept_member WHERE source_id = ? "
+        "  AND source_entry_id = ? AND sense_number IS ?", c).fetchone()]
+    if not found:
+        raise ValueError(f"no concept membership for {addr!r}")
+    if len(found) > 1:
+        raise ValueError(
+            f"ambiguous member {addr!r}: matches both "
+            f"{found[0][1]!r} (no sense) and {found[1][1]!r} sense "
+            f"{found[1][2]} — nothing here can tell which was meant")
+    return found[0]
 
 
 def _validate(con, payload) -> dict:
@@ -124,13 +152,10 @@ def _validate(con, payload) -> dict:
             member = (a.get("member") or "").strip()
             if not member:
                 raise ValueError(f"{at}: member is required")
-            src, seid, sn = _parse_member(member)
-            row = con.execute(
-                "SELECT 1 FROM concept_member WHERE source_id = ? "
-                "  AND source_entry_id = ? AND sense_number IS ?",
-                (src, seid, sn)).fetchone()
-            if row is None:
-                raise ValueError(f"{at}: no concept membership for {member!r}")
+            try:
+                resolve_member(con, member)
+            except ValueError as exc:
+                raise ValueError(f"{at}: {exc}") from None
     return payload
 
 
@@ -156,7 +181,10 @@ def _apply_concept_actions(con, finding):
     """
     now = datetime.now(timezone.utc).isoformat()
     for a in finding.get("concept_actions") or []:
-        src, seid, sn = _parse_member(a["member"])
+        # Same resolver as _validate, so the row that validated is the
+        # row that gets written. Parsing it a second way here was how a
+        # judgement could pass every check and then land nowhere.
+        src, seid, sn = resolve_member(con, a["member"])
         confirming = a["action"] == "confirm_member"
         cur = con.execute(
             "UPDATE concept_member SET status = ? WHERE source_id = ? "
