@@ -487,3 +487,36 @@ class PayloadValidation(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CliPrintsMaori(unittest.TestCase):
+    """The CLI must survive a console that is not UTF-8.
+
+    Found on the first real `next` of the calibration sweep: the claim
+    committed, then `print(text)` died with UnicodeEncodeError and left the
+    cluster stranded `in_progress`. Windows consoles default to cp1252 and
+    Māori headwords carry macrons, so this was not an edge case — it was
+    most clusters. A dozen sibling scripts already call
+    `sys.stdout.reconfigure(encoding='utf-8')`; this module did not.
+
+    Forcing PYTHONIOENCODING makes the reproduction independent of whatever
+    locale the machine running the tests happens to have.
+    """
+
+    def test_importing_the_runner_makes_stdout_utf8(self):
+        import os
+        import subprocess
+        env = dict(os.environ, PYTHONIOENCODING="cp1252")
+        script = ("import sys; sys.path.insert(0, %r); import sweep_runner; "
+                  "print('m\u0101ori')"
+                  % str(Path(__file__).parent.parent / "scripts"))
+        # Decode as UTF-8 explicitly: PYTHONIOENCODING forces the CHILD's
+        # console to cp1252, which is the condition under test, but the child
+        # now writes UTF-8 and this side must read it as such.
+        run = subprocess.run([sys.executable, "-c", script],
+                             capture_output=True, encoding="utf-8",
+                             errors="replace", env=env)
+        self.assertEqual(
+            0, run.returncode,
+            "the runner cannot print a macron on a cp1252 console:\n"
+            + run.stderr)

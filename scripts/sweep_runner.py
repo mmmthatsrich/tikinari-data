@@ -29,6 +29,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+# Māori headwords carry macrons and a Windows console defaults to cp1252, so
+# printing a claimed cluster raised UnicodeEncodeError *after* the claim had
+# committed — stranding it in_progress until release_stale reclaimed it an
+# hour later. Every sibling script in this directory does the same.
+sys.stdout.reconfigure(encoding="utf-8")
+
 from utils import DB_PATH
 from sweep_batch import assemble, render
 from sweep_findings import ACTIONS, KINDS, record_finding
