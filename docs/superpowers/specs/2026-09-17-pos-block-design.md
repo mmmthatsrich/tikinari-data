@@ -82,7 +82,7 @@ Two changes to the POS clause. Nothing else in `blocks()` moves.
 **Open content categories never block each other.**
 
 ```
-OPEN = {noun, verb, stative, modifier, adverb}
+OPEN_POS = {noun, verb, stative, modifier, adverb}
 ```
 
 These are the categories Māori content words move between freely, and which
@@ -92,14 +92,23 @@ set is two partial descriptions, not a word boundary.
 **A provenance tag never blocks at all.**
 
 ```
-PROVENANCE = {loan word}
+PROVENANCE_POS = {loan word}
 ```
 
 `loan word` is not a syntactic category — it records where a word came from.
 The corpus co-tags it with noun (2,335), proper noun (570), locative (452),
 verb (284), modifier (157) and stative (25), i.e. with whatever the word
 grammatically is. Comparing it against a category is a type error, and it
-should be excluded from the comparison rather than given a place in `OPEN`.
+should be excluded from the comparison rather than given a place in
+`OPEN_POS`.
+
+This clause is not co-equal with `OPEN_POS` in effect, only in the code —
+it is worth keeping on principle (comparing a provenance tag against a
+category is a type error regardless of volume) but it barely moves the
+corpus. Isolated (run with `OPEN_POS` emptied), `PROVENANCE_POS` alone moves
+the count from 95,051 to 95,045 concepts, +5 multi-source: `loan word`
+blocks only when it is a source's *sole* tag on the entry, which is true on
+126 entries corpus-wide. Kept for correctness, not for weight.
 
 Every other base pair keeps blocking, on the existing both-sides-single-valued
 condition.
@@ -216,25 +225,77 @@ concept that already held the `Noun` reading), not accretion.
 
 Three checks support that reading over the chaining one:
 
-- **No runaway concept.** The largest is `tohu` at 88 members across 7 sources,
-  and its glosses are one genuinely polysemous word — sign/mark/token, to
-  preserve/spare, to instruct/advise. The source distribution is smooth:
-  72,890 concepts hold one source, 11,825 two, 4,711 three, tapering to 7 at
-  eight sources. Chaining would show as a blob, and there is none.
-- **`hoi` held at 7 with zero headroom.** It is the cluster on which
-  `shared_cognate_set` once merged ten distinct words, and the first concept
-  lost would have fired it.
+- **No runaway concept, checked against where each one started.** The
+  largest concepts did grow materially — an absolute with no before-figure is
+  a description, not a check:
+
+  | concept | before | after | |
+  |---|---|---|---|
+  | `tohu` | 75 | 88 | |
+  | `mate` | 41 | 67 | +63% |
+  | `rere` | 36 | 65 | +80% |
+  | `pai` | 41 | 54 | |
+  | `ora` | 23 | 35 | |
+  | `hanga` | 29 | 41 | |
+  | `mahi` | 59 | 71 | |
+
+  `tohu`'s 88 members across 7 sources are one genuinely polysemous word —
+  sign/mark/token, to preserve/spare, to instruct/advise. Decomposing the two
+  largest movers, `rere` and `mate`, both merges are correct: the new members
+  are the same word under another source's tag, not a chain. The failure mode
+  this scale of growth does produce is not a blob, it is the `houhere` case in
+  §6 — a source's own bad grouping admitted whole once its block releases,
+  the amplification §3 names, playing out at the scale these numbers show.
+  The source distribution stays smooth: 72,890 concepts hold one source,
+  11,825 two, 4,711 three, tapering to 7 at eight sources.
+- **`hoi` is unaffected by this change, which is worth being honest about.**
+  Run under both the old and new rules, the `hoi` partition is identical,
+  concept for concept — same 7 concepts, same lexeme membership. Its
+  separations are held by Williams' own homograph numbering, not by the POS
+  clause this design touches, so holding at 7 is not evidence about chaining
+  *from this change* — it could not have moved either way. `hoi` earns its
+  place as `test_hoi_does_not_chain_into_fewer_concepts`
+  (`tests/test_concept_acceptance.py`) for a different reason: it is the
+  cluster on which `shared_cognate_set` once actually chained ten distinct
+  words together, so it stays as a guard against *future* drift in `blocks()`
+  or the seeding step, not as a measurement of *this* one.
 - **The certain→probable shift is arithmetic, not decay.** A concept absorbing
   a `probable` member takes `min` over its members, so +756 probable against
   −4,030 certain is consistent with ~3,367 certain concepts merging away and
   ~756 being demoted by what they absorbed.
 
-**Membership in `OPEN` is set by co-tagging, not by taste.** A base belongs
-if the sources themselves co-tag it with another member on one entry, at a
-volume that cannot be transcription noise. `adverb` qualifies on 523/519/505;
-`locative` does not — it co-tags with noun 58 times and modifier 39, and is
-left blocking. That threshold is a judgement, and it is recorded here so a
-later reader can disagree with the line rather than guess where it was.
+**The cost this measures, and the honest number for it.** §3 names the risk
+directly: releasing a block "does not merely permit one pair; it permits a
+chain." The quantity that measures that risk is the transitive-join rate —
+cross-seed pairs that end up sharing a concept with no direct positive
+evidence between them, resting purely on both having attached to a shared
+third member — and it was absent from this section entirely. Measured over
+every concept:
+
+```
+OLD: 18,127 multi-seed concepts, 35,966 cross-seed pairs, 2,482 without direct evidence (6.90%), 1,516 concepts affected
+NEW: 18,794 multi-seed concepts, 44,109 cross-seed pairs, 3,803 without direct evidence (8.62%), 2,204 concepts affected
+```
+
+84% of the newly-created cross-seed adjacencies are directly evidenced; the
+undirected share rose from 6.90% to 8.62%. Reading a sample of 14 transitive
+joins by hand: 11 are right (`kiato` compact/density, `pūmau` invariant,
+`pupuri` hold/save, `pūkenga` scholar/lecturer, `anga` shell/structure) and 3
+are doubtful (`hīrea` whiff vs obscure, `mataara` alert vs witness, `putu`
+foot-length vs heap). A later reader pulling a fresh sample has 8.62% to
+compare against, rather than nothing.
+
+**Membership in `OPEN_POS` is set by co-tagging, not by taste.** A base
+belongs if the sources themselves co-tag it with another member on one
+entry, at a volume that cannot be transcription noise. `adverb` qualifies on
+523/519/505; `locative` does not — it co-tags with noun 58 times and
+modifier 39, and is left blocking. That threshold is a judgement, and it is
+recorded here so a later reader can disagree with the line rather than guess
+where it was. It is argued per base pair, but membership is transitively
+closed and applies per concept: `adverb`+`modifier` releases at 46 co-tags
+while `locative`+`noun` still blocks at 58 — a kept pair outranking a
+released one — because the line is drawn on each base's overall behaviour,
+not on the volume of any one pairing within `OPEN_POS`.
 
 ---
 
@@ -249,12 +310,40 @@ later reader can disagree with the line rather than guess where it was.
 - **The anti-chaining rule itself.** Refusing a whole seed because one member
   blocks is a strong rule that this design leaves exactly as it is; it is
   what makes a released block matter, and it deserves its own examination.
+- **A confirmation can carry later arrivals it never judged.**
+  `54_build_concepts.py` marks a whole concept `confirmed` if *any* member is
+  confirmed, and `60_export_app_db.py` ships a concept when
+  `status = 'confirmed' OR confidence IN (certain, probable)`. So a human
+  confirmation made about one grouping can carry a later arrival into the app
+  on its back. Concept 1332172 (`hikunga`) is `confirmed` **and**
+  `uncertain`: it holds two human-confirmed te Aka senses, and under this
+  branch williams `1114701` newly joined it — that member now reaches the app
+  riding a confirmation that was never made about it. The machinery is
+  pre-existing (both scripts predate this branch); this branch is what made
+  it fire. Checked against all eight confirmed concepts and all 18 judged
+  rows in the sweep: `hikunga` is the only one whose partition changed, and
+  that merge is itself correct. No user-visible harm today — recorded here as
+  a limit, not fixed.
+- **A source's own bad grouping, exposed rather than caused.** He Pātaka Kupu
+  files `word_id=1073` across five entries — 'industrious' (source_entry_id
+  2369) and four lacebark-tree entries (810/820/826/832) — and the design
+  trusts a source's own grouping completely. Te Aka 41352 tags `houhere`
+  `Modifier`; HPK's four lacebark entries tag it `Noun`. Under the old rule
+  that difference blocked, so te Aka 41352 and williams 1466 ('Industrious')
+  formed their own concept, kept apart from HPK's five. `modifier`/`noun` is
+  in `OPEN_POS` under this rule, so it no longer blocks and the two join
+  HPK's blob instead — confirmed against the live corpus: `houhere`
+  'lacebark' now appears in two different concepts. Root cause is HPK's
+  `word_id`, not `blocks()` — but it is the clearest live example of the
+  amplification §3 describes: releasing a block admits a *whole seed*,
+  including senses that are semantically remote from the one that earned the
+  release.
 
 ---
 
 ## 7. Testing
 
-- **Unit, against `blocks()` directly:** each `OPEN` pair returns no POS
+- **Unit, against `blocks()` directly:** each `OPEN_POS` pair returns no POS
   reason; `noun` vs `proper noun` still does; `loan word` against every
   category returns none; a multi-valued tag still never blocks; the
   same-source and macron clauses are untouched by any of it.

@@ -425,9 +425,34 @@ class Blocks(unittest.TestCase):
 
     def test_open_pos_is_exactly_the_measured_set(self):
         # OPEN_POS's membership is set by the corpus's own co-tagging counts,
-        # not by taste. 'interjection' (326), 'determiner' (242) and
-        # 'pronoun' (128) are real single-valued corpus tags that would start
+        # not by taste. 'interjection' (191), 'determiner' (215) and
+        # 'pronoun' (86) are real single-valued corpus tags that would start
         # wrongly merging with nouns if they crept into this set.
+        #
+        # Counted the way blocks() actually sees a tag: one row per SENSE,
+        # taking sense.part_of_speech_en, falling back to entry.part_of_speech_en,
+        # then sense.part_of_speech, then entry.part_of_speech (the same
+        # `spos_en or epos_en or spos or epos` 54_build_concepts.py builds each
+        # sense-view's "pos" field from), restricted to rows whose _pos_atoms()
+        # is single-valued, then bucketed by _extract_base(). Query:
+        #
+        #   SELECT s.part_of_speech_en, e.part_of_speech_en,
+        #          s.part_of_speech, e.part_of_speech
+        #     FROM sense s JOIN entry e ON e.id = s.entry_id
+        #    WHERE e.headword_search IS NOT NULL
+        #
+        # then in Python: pos = spos_en or epos_en or spos or epos; keep rows
+        # where len(_pos_atoms(pos)) == 1; bucket by _extract_base(atom).
+        #
+        # Other ways of counting land elsewhere and none reproduces the old
+        # 326/242/128: entry-level single-valued (one row per entry, same
+        # fallback minus the sense columns) gives 137/100/71; sense-level
+        # counted on the raw columns only (no entry fallback) gives 189/173/85;
+        # summing the entry-level and sense-level counts gives 326/273/156 —
+        # which is where the old 'interjection' (326) came from, but 'determiner'
+        # 273 and 'pronoun' 156 there still don't match what was recorded either.
+        # The figures here are the ones the production code path actually
+        # produces, which is why they are the ones pinned.
         self.assertEqual(
             frozenset({"noun", "verb", "stative", "modifier", "adverb"}),
             OPEN_POS)
