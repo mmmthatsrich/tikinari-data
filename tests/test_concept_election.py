@@ -88,3 +88,60 @@ class ElectGloss(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CrossReferenceGlossesLoseTheElection(unittest.TestCase):
+    """A bare pointer is not a meaning, and must not be elected over one.
+
+    Williams writes 'Variant of wahine.', 'Cf. akakaikū.', '= kaitoa.' as a
+    whole gloss — a pointer to another headword, not a definition. Measured
+    on the corpus, 778 concepts reached the app with one of these elected as
+    their gloss_en, so a user looking up Ahine was shown 'Variant of wahine.'
+    as that word's meaning.
+
+    It is still better than nothing when nothing else is on offer: the
+    pointer tells a reader where to look. So it is demoted, not banned.
+    """
+
+    def _m(self, src, gloss, key=None):
+        return {"source_id": src, "gloss_en": gloss, "gloss_mi": None,
+                "member_key": key or (src, "1", 1)}
+
+    def test_a_real_gloss_beats_a_cross_reference_from_a_better_source(self):
+        # williams outranks papakupu in GLOSS_EN_PRECEDENCE, so without the
+        # demotion the pointer would win on source order alone.
+        members = [self._m("williams", "Variant of wahine."),
+                   self._m("papakupu", "woman, wife")]
+        value, key = elect_gloss(members, "en")
+        self.assertEqual("woman, wife", value)
+        self.assertEqual(("papakupu", "1", 1), key)
+
+    def test_a_cross_reference_still_wins_when_it_is_all_there_is(self):
+        members = [self._m("williams", "Cf. akakaikū.")]
+        value, _ = elect_gloss(members, "en")
+        self.assertEqual("Cf. akakaikū.", value)
+
+    def test_the_equals_form_is_recognised(self):
+        members = [self._m("williams", "= kaitoa."),
+                   self._m("papakupu", "serves you right")]
+        self.assertEqual("serves you right", elect_gloss(members, "en")[0])
+
+    def test_a_definition_that_merely_starts_like_one_is_not_demoted(self):
+        # 'A form of net used at the mouths of rivers.' is prose, not a
+        # pointer: a pointer names exactly one headword.
+        members = [self._m("williams", "A form of net used at the mouths of rivers."),
+                   self._m("papakupu", "net")]
+        self.assertEqual("A form of net used at the mouths of rivers.",
+                         elect_gloss(members, "en")[0])
+
+    def test_a_pointer_plus_a_meaning_is_not_demoted(self):
+        # '= pehea. How.' carries a real gloss after the pointer.
+        members = [self._m("williams", "= pehea. How."),
+                   self._m("papakupu", "what")]
+        self.assertEqual("= pehea. How.", elect_gloss(members, "en")[0])
+
+    def test_two_cross_references_still_elect_by_source_order(self):
+        members = [self._m("papakupu", "Cf. tangata."),
+                   self._m("williams", "Variant of wahine.")]
+        value, _ = elect_gloss(members, "en")
+        self.assertEqual("Variant of wahine.", value)

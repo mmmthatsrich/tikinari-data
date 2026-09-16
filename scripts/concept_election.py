@@ -5,6 +5,8 @@ composed. That is what lets the corpus state a canonical form while keeping
 the rubric's first rule — never invent lexicographic content.
 """
 
+import re
+
 _MACRON_VOWELS = "āēīōū"
 
 # D18's counts: te_aka can supply 1,943 of the 2,297 contested spellings,
@@ -61,8 +63,31 @@ def elect_headword(members, derived_long):
     return (best["headword"], best["member_key"], reason)
 
 
+# A gloss that is nothing but a pointer at another headword: Williams writes
+# 'Variant of wahine.', 'Cf. akakaikū.', '= kaitoa.' as a whole gloss. The
+# target is exactly ONE word — that is what separates a pointer from prose
+# that merely opens the same way ('A form of net used at the mouths of
+# rivers.'), and from a pointer with a real gloss after it ('= pehea. How.'),
+# neither of which is demoted.
+_XREF_GLOSS = re.compile(
+    r"^\s*(?:cf\.|see|=|same as|a form of|var\.|variant of)\s+"
+    r"[\wāēīōūĀĒĪŌŪ'\-]+\s*[.,;]?\s*$", re.I)
+
+
+def _is_cross_reference(gloss):
+    return bool(_XREF_GLOSS.match(gloss or ""))
+
+
 def elect_gloss(members, lang):
-    """(value, member_key) for 'en' or 'mi', or (None, None)."""
+    """(value, member_key) for 'en' or 'mi', or (None, None).
+
+    A bare cross-reference loses to any real gloss, whatever its source's
+    precedence. Measured before this rule existed, 778 concepts reached the
+    app with one elected as their meaning, so a reader looking up Ahine was
+    told it means 'Variant of wahine.' It is demoted rather than banned: when
+    nothing else is on offer the pointer is still worth showing, because it
+    tells the reader where to look.
+    """
     if lang == "en":
         order, field = GLOSS_EN_PRECEDENCE, "gloss_en"
         pool = [m for m in members if m["source_id"] not in _NO_GLOSS_EN]
@@ -73,5 +98,8 @@ def elect_gloss(members, lang):
     pool = [m for m in pool if (m.get(field) or "").strip()]
     if not pool:
         return (None, None)
+    if field == "gloss_en":
+        real = [m for m in pool if not _is_cross_reference(m[field])]
+        pool = real or pool          # fall back when pointers are all we have
     best = min(pool, key=lambda m: _rank(m["source_id"], order))
     return (best[field], best["member_key"])
