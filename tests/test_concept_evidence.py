@@ -23,8 +23,9 @@ sys.stdout.reconfigure(encoding="utf-8")
 # patched value. Read concept_evidence.COVERAGE_FLOOR / .DISTINCT_CEILING
 # directly in any test that monkeypatches them.
 from concept_evidence import (COVERAGE_FLOOR, DISTINCT_CEILING, EVIDENCE_WEIGHT,
-                             SEED_CONFIDENCE, GlossIndex, blocks, confidence_for,
-                             gloss_coverage, lexeme_key, positive_evidence)
+                             OPEN_POS, SEED_CONFIDENCE, GlossIndex, blocks,
+                             confidence_for, gloss_coverage, lexeme_key,
+                             positive_evidence)
 
 
 class LexemeKey(unittest.TestCase):
@@ -408,14 +409,28 @@ class Blocks(unittest.TestCase):
     def test_open_categories_do_not_block_each_other(self):
         # Māori content words move between these roles freely, and the sources
         # say so themselves: noun+verb is co-tagged on 15,957 entries,
-        # noun+stative on 12,843, modifier+noun on 2,656.
+        # noun+stative on 12,843, verb+stative on 11,311, modifier+noun on
+        # 2,656, noun+adverb on 519, verb+adverb on 505, modifier+stative on
+        # 85, modifier+adverb on 46.
         for pa, pb in (("Noun", "Verb"), ("Noun", "Verb (transitive)"),
                        ("Noun", "Stative"), ("Modifier", "Noun"),
-                       ("Modifier", "Verb"), ("Adverb", "Stative")):
+                       ("Modifier", "Verb"), ("Adverb", "Stative"),
+                       ("Verb", "Stative"), ("Noun", "Adverb"),
+                       ("Adverb", "Verb"), ("Modifier", "Stative"),
+                       ("Adverb", "Modifier")):
             with self.subTest(pair=(pa, pb)):
                 a = _sense(source_id="te_aka", pos=pa)
                 b = _sense(source_id="williams", pos=pb)
                 self.assertEqual([], blocks(a, b))
+
+    def test_open_pos_is_exactly_the_measured_set(self):
+        # OPEN_POS's membership is set by the corpus's own co-tagging counts,
+        # not by taste. 'interjection' (326), 'determiner' (242) and
+        # 'pronoun' (128) are real single-valued corpus tags that would start
+        # wrongly merging with nouns if they crept into this set.
+        self.assertEqual(
+            frozenset({"noun", "verb", "stative", "modifier", "adverb"}),
+            OPEN_POS)
 
     def test_the_kahurangi_case_does_not_block(self):
         # The cluster that found this. te Aka tags kahurangi Modifier ('be
@@ -459,9 +474,10 @@ class Blocks(unittest.TestCase):
 
         This used to assert Noun vs Verb (transitive), which the corpus
         contradicts: the sources co-tag noun+verb on 15,957 single entries,
-        so neither tag excludes the other. Rewritten onto a pair with no
-        co-tagging behind it rather than deleted, because the clause it
-        guards still fires for every category outside OPEN_POS.
+        so neither tag excludes the other. Rewritten onto a pair with only 12
+        co-tagged entries behind it, against 15,957 for noun+verb, rather
+        than deleted, because the clause it guards still fires for every
+        category outside OPEN_POS.
         """
         a = _sense(source_id="te_aka", pos="Noun")
         b = _sense(source_id="williams", pos="Particle")
@@ -483,11 +499,13 @@ class Blocks(unittest.TestCase):
         self.assertIn("macron", blocks(a, b)[0].lower())
 
     def test_a_multi_valued_pos_never_blocks(self):
-        # hepatakakupu tags himoemoe 'Stative, Noun, Verb (intransitive)' and
-        # paekupu tags it 'Modifier'. Both are right: a word that functions
-        # several ways is not a claim excluding another source's single tag.
+        # hepatakakupu tags a word 'Stative, Noun, Verb (intransitive)' and
+        # paekupu tags it 'Particle' (a closed class, so the OPEN_POS escape
+        # cannot fire and mask what this test is actually pinning). A word
+        # that functions several ways is not a claim excluding another
+        # source's single tag.
         a = _sense(source_id="hepatakakupu", pos="Stative, Noun, Verb (intransitive)")
-        b = _sense(source_id="paekupu", pos="Modifier")
+        b = _sense(source_id="paekupu", pos="Particle")
         self.assertEqual([], blocks(a, b))
 
     def test_transitivity_alone_does_not_block(self):
