@@ -329,7 +329,42 @@ only true if the analysis runs first.
   it is a separate design.
 - **Source-structure limits.** Williams entries 1251/1252 each bundle several
   of `hiwi`'s eight words under one entry number. No gloss rule reaches this.
-- **Non-English glosses.** `gloss_mi` is not consulted, as today.
+- **Non-English glosses, and the monolingual source they strand.** `gloss_mi`
+  is not consulted, as today. Measured after the first rebuild (2026-09-16),
+  that costs one source almost entirely. He Pātaka Kupu is monolingual — **0**
+  of its 24,941 senses carry `gloss_en`, 24,900 carry `gloss_mi` — so no gloss
+  rule in this design can reach it. It earns **zero evidence rows of any kind**,
+  and **3.4%** of its memberships reach a cross-source concept, against 26-80%
+  for every other source:
+
+  | source | members | in a multi-source concept |
+  |---|---|---|
+  | te_matatiki | 5,097 | 79.7% |
+  | taikupu | 2,265 | 70.2% |
+  | ngata | 33,775 | 62.9% |
+  | williams | 24,976 | 46.6% |
+  | te_aka | 59,485 | 38.2% |
+  | paekupu | 16,486 | 26.7% |
+  | **hepatakakupu** | **24,941** | **3.4%** |
+
+  The 853 that do connect arrive through the three non-gloss kinds, almost all
+  `shared_example` (811) with a few `cites_source` (15) — and that route is
+  nearly exhausted: of its 19,042 senses carrying an example, only **632**
+  example sentences appear in any other source.
+
+  A `gloss_mi` rule is not the obvious answer. Only one other source carries
+  Māori glosses at all (paekupu, 3,435 senses), so the entire reachable gain is
+  bounded by that; and hepatakakupu's Māori text is *definitions* rather than
+  glosses — `'Te kore e whakaaro ki te tangata, te takahi i a ia, te kore e aro
+  ki tōna hā.'` is a sentence — so matching it would need a Māori stopword list
+  and its own calibration, not a reuse of §2's thresholds.
+
+  **What this costs is collapsing, not content.** All 24,941 senses reach the
+  app and 24,848 of its memberships ship; concepts are an overlay, so a user
+  searching a word still sees He Pātaka Kupu's entry, just as a separate result
+  rather than folded in with the other sources' treatment of the same word.
+  That is why this is recorded here rather than fixed: the figures, not the
+  intuition, should decide whether Māori-side matching is worth building.
 
 ---
 
