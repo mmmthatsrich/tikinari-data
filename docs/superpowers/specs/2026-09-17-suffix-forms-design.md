@@ -1,0 +1,303 @@
+# Derived forms: capturing the suffixes the sources record and none stores
+
+**Status:** design, 2026-09-17
+**Amends:** the `form` table's `form_type` vocabulary; `05_hepataka_parse.py`;
+the paekupu and te_aka importers; the extraction step in `50_build_unified.py`
+**Motivating requirement:** the app will surface derived forms in display, and
+the corpus must answer "how many passives / nominalisations, by suffix".
+
+---
+
+## 1. What is being lost
+
+Seven of the eleven dictionary sources record the derived forms of a word —
+the passive (`whakarere` → `whakarerea`) and the nominalisation (`kake` →
+`kakenga`) — and so does the pollex comparative dataset, which sits outside
+`entry` in its own tables. **None of it reaches the database.** Measured
+across every source, reading raw records end to end rather than scanning for
+a guessed pattern:
+
+| source | notation | where it lives | tokens |
+|---|---|---|---|
+| hepatakakupu | `-a -nga` | `<strong>` in raw HTML | **19,687** |
+| ngata | `whakarere, whakarerea` | `<B>` in `body_raw` | **4,462** |
+| te_aka | `(-tia)`, `(-a,-hia)` | after the POS marker | **~3,950** |
+| paekupu | `~a`, `~tanga` | headword | **1,407** |
+| papakupu | `[-tia]` and `~tia` | headword **and** definition head | **185** |
+| pollex † | `Awhi-tia` | headword / `maori_reflex` | **109** |
+| williams | `Pass. arohaina` | prose | **~100** |
+| kimikupu_hou | `(-tia)` | `<B>` in `body_raw` | **18** |
+| te_matatiki, taikupu, temarareo, tregear | — | — | 0, verified |
+
+† pollex is not one of the eleven and has no `entry` rows; §3 covers what
+that costs.
+
+**≈29,900 tokens. Seven notations. Seven locations.**
+
+Meanwhile the `form` table — which exists for precisely this — holds 654
+rows, all `variant` and `plural`. The schema has been ready the whole time
+and nothing has ever written a derived form into it.
+
+### Two consequences, one of them already measured
+
+**The data is simply absent.** A user looking up `kake` cannot be shown that
+its passive is `kakea` and its nominalisation `kakenga`, because the parser
+reads the string `-a -nga [Tāne]`, extracts `[Tāne]` as the semantic domain,
+and discards the rest.
+
+**Two sources corrupt the matching key with it.** paekupu writes the suffix
+into the headword (`ahu ~nga`) and te_aka sometimes does too (`āmine (-tia)`),
+so `headword_search` becomes `ahu ~nga` and `amine (-tia)`. Those entries can
+never meet the plain `ahu` and `amine` that four other sources hold.
+**1,407 paekupu entries and 243 te_aka entries are severed this way** — the
+only consequence of this defect with a measured cost today.
+
+---
+
+## 2. What gets stored
+
+One row in `form` per derived form, per entry.
+
+```sql
+form (
+    id, entry_id, form, form_search, form_type, note
+)
+```
+
+No schema change is required. Four decisions about how it is used:
+
+**`form` holds the COMPLETE word, never the fragment.** `whakarerea`, not
+`-a`. The sources disagree about which they record — hepatakakupu gives the
+fragment, ngata gives the whole word — and the complete form is the one a
+reader needs and the one `form_search` can match on. Where a source gives
+only a fragment, the form is composed as `headword + suffix`; where it gives
+the whole word, it is taken as-is. §4 covers composition.
+
+**`form_type` gains two values**, joining the existing `variant`,
+`alt_spelling`, `plural`, `inflected`:
+
+```
+passive          -tia -hia -ina -ngia -ria -mia -kia -whia -na -a
+nominalisation   -nga -tanga -hanga -ranga -anga -manga
+```
+
+That split is not a judgement call; it is the standard Māori morphology and
+it matches the observed distribution exactly — the ten passive suffixes and
+six nominalising ones account for every token counted above.
+
+**Where the suffix must be recovered from a whole word, the longest match
+wins.** The suffix sets overlap, and the sources that record a derived word
+whole — ngata, williams — never say which suffix produced it. So the rule is
+stated rather than left to the reader: strip the known base, then classify
+the remainder against the longest suffix it matches. `-tanga` before `-anga`
+before `-nga`; `-ina` before `-na` before `-a`. A remainder matching nothing
+is refused, not guessed at — §8.
+
+**`note` carries the suffix and its provenance**, as `-tia (te_aka)`. This
+is what makes the required query cheap: counting by suffix reads `note`,
+counting by class reads `form_type`, and provenance survives for the sweep
+to judge. A dedicated column was considered and rejected — `note` already
+exists, and the suffix is recoverable from `form` minus `headword` anyway.
+
+### The query the requirement asks for
+
+```sql
+-- how many of each class
+SELECT form_type, COUNT(*) FROM form
+ WHERE form_type IN ('passive','nominalisation') GROUP BY 1;
+
+-- how many of each suffix
+SELECT substr(note, 1, instr(note,' ')-1) AS suffix, COUNT(*)
+  FROM form WHERE form_type = 'passive' GROUP BY 1 ORDER BY 2 DESC;
+```
+
+`60_export_app_db.py` already copies `form` to the app database, so display
+needs no new plumbing.
+
+---
+
+## 3. Where the work happens — three layers
+
+The parts have very different costs, and only one of them touches a parser.
+
+**Layer 2 — parse. hepatakakupu only, and it is two thirds of the corpus.**
+Its 19,687 tokens exist *only* in the raw HTML; just 24 rows carry anything
+into `hepatakakupu_entries`. `05_hepataka_parse.py` finds the `<strong>`
+element, regexes `\[([^\]]+)\]` for the semantic domain, and drops the
+suffix text around it. The fix is to capture that text into a new
+`hepatakakupu_entries.suffixes` column and re-parse the **14,996 raw pages
+already on disk**. No re-scraping.
+
+**Layer 2.5 — import. paekupu and te_aka only**, for the key strip in §5.
+
+**Layer 3 — extraction at unify. The other six.** Their tokens already
+survive into the per-source tables and die only because nothing reads them:
+
+```
+ngata         4,462 pairs  body_raw      (comma-separated complete forms)
+te_aka        3,504 rows   senses JSON   (definition_raw, leading '(-tia)')
+paekupu       1,423 rows   headword      (trailing '~a')
+williams        183 rows   definition    ('Pass. arohaina')
+papakupu        153 rows   definition    (leading '~tia') + 13 headword
+kimikupu_hou     29 rows   body_raw      ('(-tia)' inside <B>)
+```
+
+Nothing upstream is touched. `50_build_unified.py` reads fields it currently
+ignores and writes `form` rows.
+
+### pollex is a special case and may be dropped
+
+pollex has no `entry` rows. It reaches entries only through
+`pollex_entry_links`, a many-to-many table carrying `match_confidence` and
+matching on `headword_exact` — **34,176 entries are linked, and one entry
+can carry up to 8 links.** A pollex form therefore has no single
+unambiguous `entry_id`: writing `Awhi-tia` means writing it once per linked
+entry keyed `awhi`.
+
+That is defensible — each of those entries genuinely has that passive — but
+it is a different operation from the other six, it is the one place where a
+`form` row would rest on a probabilistic match rather than on a source's own
+filing, and it is worth **109 tokens, 0.4% of the corpus**. **Ruling: build
+pollex last, behind a `match_confidence` threshold, and drop it without
+argument if it complicates the rest.** The other six carry the requirement
+on their own.
+
+---
+
+## 4. Extracting each notation
+
+Each source needs its own reader because each records something different.
+The readers are pure functions over a string, testable without a database.
+
+**hepatakakupu — fragment, entry-level.** `<strong>` text is
+`" -a -nga [Tāne] "`. Take the hyphen-initial tokens before the bracket.
+Compose against the headword: `kake` + `-a` → `kakea`, `kake` + `-nga` →
+`kakenga`.
+
+**ngata — complete forms, already whole.** `<B>whakaranu, whakaranua,
+tūkino, tūkinotia</B>` is a comma list that mixes base+derived pairs with
+synonyms. The discriminator is morphological and was validated on the
+corpus: form B is a derived form of A only when `B.startswith(A)` and the
+remainder is a known suffix. That test separated **3,568 rows holding
+genuine pairs from 4,806 rows that are synonym lists only** — `whakamā,
+pōrahu, pōrahurahu` is correctly rejected. Store B whole; `note` records the
+suffix the longest-match rule identified.
+
+**te_aka — fragment, two locations.** `(-tia)` appears after the POS marker
+and at the head of `definition_raw`. It may hold several: `(-a,-hia)`.
+Compose each against the headword.
+
+**paekupu — fragment, in the headword.** `ahu ~nga` → base `ahu`, suffix
+`-nga`, form `ahunga`. **The base also replaces the headword for
+`headword_search` purposes — see §5.**
+
+**papakupu — both.** `tāpiri [-tia]` in the headword and `~tia, ~tanga`
+leading the definition. Same composition.
+
+**williams — complete form, in prose.** `Pass. arohaina, be the object of
+love` gives the whole word after the marker. Take the first token after
+`Pass.`/`pass.`; store it whole; derive the suffix by longest match.
+
+**kimikupu_hou — fragment, inside `<B>`.** `tūtōkai (-tia)`. Note its
+`body_text` column is empty for 2,823 of 2,831 rows, so the reader must use
+`body_raw`; that gap is recorded in §7 and is not fixed here.
+
+**pollex — joined, if built at all.** `Awhi-tia` splits at the hyphen into
+base and suffix; `Aroha-ina, -tia` carries two. The base is the Māori
+reflex, not necessarily the pollex headword. See §3 for why this one is
+last and optional.
+
+---
+
+## 5. The key severance, fixed as a consequence
+
+Once the suffix is extracted, the headword it was attached to is the bare
+word, and `headword_search` follows from that. `ahu ~nga` keys as `ahu`;
+`āmine (-tia)` keys as `amine`. That un-severs the **1,407 paekupu and 243
+te_aka entries** that currently cannot meet their own base form in four
+other sources.
+
+`headword_search` is computed per-importer, so the strip belongs in the
+importers for correctness. Doing it at unify instead would leave the
+per-source tables disagreeing with the unified one. **The importers are the
+right place and this spec puts it there**, accepting that paekupu and te_aka
+need re-importing from their existing per-source tables.
+
+This is the only part of the change with a measured benefit today. It is
+also the only part that alters an existing key, so §6 gates it accordingly.
+
+---
+
+## 6. Validating
+
+**Hard gate — the recorded calibration answers.** All four in
+`tests/test_concept_acceptance.py` must hold after the rebuild: `hiwi` ≥ 6
+concepts, `hia` never joins `hīa`, `himoemoe` unifies ≥ 4 sources,
+`paekupu:hoi` stays single-source. A failure means the key change
+over-merged and the rule is wrong, not the test.
+
+**Second gate — `hoi` ≥ 7 concepts**, the chaining canary.
+
+**Counts, reported:** forms written per source against the figures in §1. A
+source coming in more than 10% below its measured token count means its
+reader is missing a shape; more than a few percent above means it is
+matching something it should not. Both are worth stopping for.
+
+**Composition is checked against the sources that give both.** ngata and
+williams supply complete derived forms; hepatakakupu, te_aka, paekupu,
+papakupu and kimikupu_hou supply fragments to compose. Where the same word
+appears in both groups, the composed form must equal the recorded one.
+`whakarere` + `-a` must equal ngata's `whakarerea`. That is a free
+correctness check on the composition rule and it should be a test.
+
+**No silent duplicates.** One entry may earn the same form from several
+sources. Rows are per `(entry_id, form, form_type)`; provenance accumulates
+in `note`. Counting queries must not double-count a form because three
+sources agree on it.
+
+---
+
+## 7. What this does not fix
+
+- **`kimikupu_hou.body_text` is empty for 2,823 of 2,831 rows**, against
+  ~100% for every sibling Wakareo source. Its raw HTML is intact in
+  `body_raw`, so this reader works — but any other rule reading `body_text`
+  sees almost nothing from that source. A separate backfill, recorded here
+  because this work is what found it.
+- **Derived forms filed as their own entries.** `whakairia` and `tikina`
+  exist as standalone headwords in ngata and papakupu with nothing linking
+  them to `whakairi` and `tiki`. That is an eighth representation and needs
+  a relation, not a `form` row. Out of scope.
+- **Irregular and suppletive forms.** Composition assumes concatenation.
+  Where a source records a derived form that is not `base + suffix`, only
+  the sources that give the complete word will carry it correctly. The §6
+  cross-check will reveal how often that happens; it does not fix it.
+- **tregear.** Its raw HTML holds **5** `Pass.` mentions, in the same prose
+  notation williams uses, and the imported `tregear_exceptions` slice — 321
+  entries — carries **none** of them. Five tokens do not justify a reader
+  or a re-import.
+- **Whether te_aka records a derived form for every verb.** It tags 7,963
+  verbs and carries ~3,950 suffix-bearing pages, so roughly half its verbs
+  have none recorded. Whether that is te_aka's editorial choice or a scrape
+  gap is unknown and unexamined.
+
+---
+
+## 8. Testing
+
+- **Unit, per reader, against the real strings from §4** — one test per
+  source using a verbatim sample from its raw data, including the
+  multi-suffix cases (`(-a,-hia)`, `-a -nga`, `Aroha-ina, -tia`) and the
+  negative cases that must not match: ngata's synonym lists, kimikupu_hou's
+  `(-waro)` chemistry, temarareo's `~` meaning "reflects as", pollex's
+  `*qati(-afi)` reconstruction, and the English word *pass* in an ordinary
+  gloss. **Every one of those classes produced a false positive during the
+  survey; each earns a test.**
+- **Composition:** `base + suffix` against the sources that record the whole
+  word, per §6.
+- **Classification:** the longest-match rule in §2 — `kakenga` resolves to
+  `-nga` and not `-a`; `tūkinotia` to `-tia` and not `-ia`. An unknown
+  remainder is refused rather than guessed.
+- **Key severance:** `ahu ~nga` keys as `ahu`; a paekupu entry and its
+  te_aka base land in one concept after the rebuild.
+- **Acceptance, against the real database:** §6's gates, unweakened.
