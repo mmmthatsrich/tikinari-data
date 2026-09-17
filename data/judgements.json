@@ -707,6 +707,23 @@
   },
   {
    "action": "deferred",
+   "cluster_key": "ikarangi",
+   "confidence": null,
+   "created_at": "2026-09-16T10:18:45.322336+00:00",
+   "detail": "It is a definition in a gloss column, and it actively harms matching: a 40-word gloss gives every partner a near-zero Jaccard coverage, so paekupu can essentially only ever attach on the distinctiveness axis. That is likely why paekupu's cross-source reach is 26.7%, low for a source with 16,486 senses. Worth measuring how many paekupu glosses are definition-length before deciding anything. [ANSWERED 2026-09-17: the hypothesis behind this finding — that definition-length gloss_en depresses paekupu's cross-source reach — is FALSIFIED. Gloss length does not predict reach: temarareo has the longest glosses in the corpus (mean 6.2 content words, 17.7% at >=10) and reaches 79.8%; papakupu matches paekupu's lengths almost exactly (mean 5.0 vs 4.8) and reaches 55.7% against paekupu's 28.7%. The actual cause is vocabulary, not glossing: only 45.6% of paekupu's 16,486 entries share a headword key with ANY other source, the lowest in the corpus, because it is a coinage dictionary and over half its words do not exist elsewhere to be matched. Normalised against what is reachable at all it sits at 63%, below ngata 85%, williams 80% and te_aka 79% but unremarkable. The long gloss remains a field_placement observation — a 40-word encyclopaedic definition is not a gloss — but it is not the cause of anything measurable, so there is no pipeline fix here.]",
+   "finding_id": "calibration-concepts:ikarangi:2",
+   "kind": "field_placement",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "calibration-concepts",
+   "severity": null,
+   "subject": "paekupu:ikarangi",
+   "summary": "gloss_en holds an encyclopaedic definition, not a gloss: 'An assembly of billions of stars, their planets, gas and dust orbiting in space and held together by the force of gravity. The Milky Way is the name of our galaxy containing the Sun and Earth. There …'"
+  },
+  {
+   "action": "deferred",
    "cluster_key": "itinga",
    "confidence": "certain",
    "created_at": "2026-09-11T23:53:19.286094+00:00",
@@ -2659,23 +2676,6 @@
    "severity": "low",
    "subject": "ngata 'huurori' against every other source's 'hurori'",
    "summary": "one source macronises and five do not"
-  },
-  {
-   "action": "queued",
-   "cluster_key": "ikarangi",
-   "confidence": null,
-   "created_at": "2026-09-16T10:18:45.322336+00:00",
-   "detail": "It is a definition in a gloss column, and it actively harms matching: a 40-word gloss gives every partner a near-zero Jaccard coverage, so paekupu can essentially only ever attach on the distinctiveness axis. That is likely why paekupu's cross-source reach is 26.7%, low for a source with 16,486 senses. Worth measuring how many paekupu glosses are definition-length before deciding anything.",
-   "finding_id": "calibration-concepts:ikarangi:2",
-   "kind": "field_placement",
-   "reverted_at": null,
-   "review": null,
-   "reviewed_at": null,
-   "rubric_version": "v2",
-   "session_id": "calibration-concepts",
-   "severity": null,
-   "subject": "paekupu:ikarangi",
-   "summary": "gloss_en holds an encyclopaedic definition, not a gloss: 'An assembly of billions of stars, their planets, gas and dust orbiting in space and held together by the force of gravity. The Milky Way is the name of our galaxy containing the Sun and Earth. There …'"
   },
   {
    "action": "queued",

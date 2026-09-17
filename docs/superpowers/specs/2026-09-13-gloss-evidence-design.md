@@ -347,6 +347,17 @@ only true if the analysis runs first.
   | paekupu | 16,486 | 26.7% |
   | **hepatakakupu** | **24,941** | **3.4%** |
 
+  **Its vocabulary is not the explanation — measured 2026-09-17.** 97.0% of
+  hepatakakupu's 24,941 entries share a headword key with at least one other
+  source, the second-highest in the corpus. So the words are there to be
+  matched and nothing matches them. Normalising each source's reach against
+  the share of its entries that *could* reach anything puts the gap beyond
+  argument: ngata 85%, williams 80%, te_aka 79%, papakupu 67%, paekupu 63% —
+  and hepatakakupu **6%**. Compare paekupu, whose own low raw reach (28.7%)
+  turns out to be mostly correct: only 45.6% of its entries share a key at
+  all, because it is a coinage dictionary and half its words exist nowhere
+  else. hepatakakupu has the opposite problem, and it is this design's.
+
   The 853 that do connect arrive through the three non-gloss kinds, almost all
   `shared_example` (811) with a few `cites_source` (15) — and that route is
   nearly exhausted: of its 19,042 senses carrying an example, only **632**
