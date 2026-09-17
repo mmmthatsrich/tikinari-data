@@ -244,8 +244,25 @@ COVERAGE_FLOOR = 0.5
 DISTINCT_CEILING = 10
 
 
+# Macrons are folded BEFORE tokenising, never stripped after. `[a-z]+` stops
+# at a macron, so a Māori word quoted inside an English gloss used to come
+# apart: 'pōuri' became 'uri', 'kūmara' became 'mara', 'tī kōuka' became
+# 'uka'. That is worse than dropping the word — it invents a different one —
+# and it stopped the macronised and bare spellings of one word matching each
+# other, which is how te Aka's "used with pōuri" failed to meet Williams'
+# "used with pouri." on the wetangotango cluster. 3,689 English glosses, 2.5%
+# of them, contain a macronised word.
+#
+# Folding is right HERE and wrong in a headword, where a macron is a phoneme
+# and 'manawa' is not 'mānawa' (see lexeme_key). Inside an English gloss the
+# macron is a citation of a Māori word, and both spellings of it mean the
+# same thing.
+_GLOSS_MACRONS = str.maketrans("āēīōūĀĒĪŌŪ", "aeiouaeiou")
+
+
 def _content_words(text):
-    return frozenset(w for w in re.findall(r"[a-z]+", (text or "").lower())
+    folded = (text or "").translate(_GLOSS_MACRONS).lower()
+    return frozenset(w for w in re.findall(r"[a-z]+", folded)
                      if w not in _STOPWORDS and len(w) > 2)
 
 

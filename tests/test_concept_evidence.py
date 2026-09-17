@@ -24,8 +24,8 @@ sys.stdout.reconfigure(encoding="utf-8")
 # directly in any test that monkeypatches them.
 from concept_evidence import (COVERAGE_FLOOR, DISTINCT_CEILING, EVIDENCE_WEIGHT,
                              OPEN_POS, SEED_CONFIDENCE, GlossIndex, blocks,
-                             confidence_for, gloss_coverage, lexeme_key,
-                             positive_evidence)
+                             _content_words, confidence_for, gloss_coverage,
+                             lexeme_key, positive_evidence)
 
 
 class LexemeKey(unittest.TestCase):
@@ -750,3 +750,48 @@ class ScoreboardShipping(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MacronisedWordsInEnglishGlosses(unittest.TestCase):
+    """A macron inside an English gloss must not shred the word around it.
+
+    `[a-z]+` stops at every macron, so a Māori word quoted inside an English
+    gloss came apart: 'pōuri' became 'uri', 'kūmara' became 'mara', 'tī
+    kōuka' became 'uka'. That is worse than dropping the word — it invents a
+    different one, and it makes the macronised and bare spellings of the same
+    word fail to match each other.
+
+    Found reading the tier-3 cluster 'wetangotango': te Aka glosses it "very
+    - an intensive only used with pōuri" and Williams "intensive, used with
+    pouri.", plainly the same word, and the two could not match because one
+    side's 'pōuri' had been reduced to 'uri'. 3,689 English glosses — 2.5% —
+    contain a macronised word.
+    """
+
+    def test_a_macronised_word_survives_whole(self):
+        self.assertIn("pouri", _content_words("used with pōuri"))
+        self.assertNotIn("uri", _content_words("used with pōuri"))
+
+    def test_the_two_spellings_of_one_word_now_match(self):
+        a = _content_words("very - an intensive only used with pōuri .")
+        b = _content_words("intensive, used with pouri.")
+        self.assertIn("pouri", a & b)
+        self.assertIn("intensive", a & b)
+
+    def test_every_macron_vowel_is_folded(self):
+        for word, want in (("kūmara", "kumara"), ("tī", None), ("kōuka", "kouka"),
+                           ("whānau", "whanau"), ("Āpōpō", "apopo")):
+            with self.subTest(word=word):
+                got = _content_words(f"the {word} thing")
+                if want is None:
+                    self.assertNotIn("t", got)      # 2 chars, below the floor
+                else:
+                    self.assertIn(want, got)
+
+    def test_folding_does_not_disturb_plain_english(self):
+        self.assertEqual({"intensive", "pouri"},
+                         _content_words("intensive, used with pouri."))
+
+    def test_stopwords_still_apply_after_folding(self):
+        # 'Ā' folds to 'a', which is a stopword and 1 character.
+        self.assertEqual(set(), _content_words("Ā the of"))
