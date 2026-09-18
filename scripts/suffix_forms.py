@@ -124,6 +124,17 @@ def strip_suffix_notation(headword):
     'ahu ~nga' -> 'ahu'. This is what headword_search must be built from:
     keying 1,407 paekupu entries on 'ahu ~nga' severs them from the plain
     'ahu' four other sources hold (spec §5).
+
+    A tilde can also introduce an IRREGULAR alternative form rather than a
+    suffix — 'hau ~hāua ~tanga' names 'hāua' as a whole irregular derivation
+    of 'hau', not 'hau' plus a suffix, and 'tiki atu ~tīkina atu' names
+    'tīkina atu' as a whole alternative phrase. Neither '~hāua' nor
+    '~tīkina' is in the suffix vocabulary, so the strip loop below leaves
+    them standing; deleting just the tilde token would still glue a
+    trailing word from the alternative onto the base ('tiki atu ~tīkina
+    atu' -> 'tiki atu atu', wrong). Truncating at the first tilde still
+    standing, once every recognised suffix has already been removed,
+    keeps the base only.
     """
     text = (headword or "").strip()
     if not text:
@@ -135,7 +146,11 @@ def strip_suffix_notation(headword):
     for match in reversed(list(_TILDE_TOKEN.finditer(text))):
         if classify("-" + fold(match.group(1))):
             text = text[:match.start()] + text[match.end():]
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
+    tilde_idx = text.find("~")
+    if tilde_idx != -1:
+        text = text[:tilde_idx].strip()
+    return text
 
 
 # 'Pass. arohaina' / '; pass. arahina.' — Williams's marker, then the word.

@@ -196,6 +196,27 @@ class StripNotation(unittest.TestCase):
         # does, or a macron'd suffix is read but never stripped.
         self.assertEqual(strip_suffix_notation("ahu ~hīa"), "ahu")
 
+    def test_an_irregular_alternative_form_is_truncated_not_deleted(self):
+        # '~hāua' is not a suffix (note the vowel change from 'hau') — it is
+        # a whole irregular derived form, and truncating at the tilde is the
+        # only way to drop it without leaving anything from it glued on.
+        self.assertEqual(strip_suffix_notation("hau ~hāua ~tanga"), "hau")
+
+    def test_an_irregular_multi_word_alternative_does_not_leak_a_trailing_word(self):
+        # Deleting just the '~tīkina' token would leave 'tiki atu atu' — the
+        # trailing 'atu' belongs to the alternative phrase 'tīkina atu', not
+        # to the base. Truncating at the tilde keeps only 'tiki atu'.
+        self.assertEqual(strip_suffix_notation("tiki atu ~tīkina atu"),
+                         "tiki atu")
+
+    def test_a_recognised_suffix_before_an_irregular_strips_then_truncates(self):
+        # '~nga' is a real suffix and comes first; '~kūtia' is the
+        # irregular alternative and comes after. The recognised suffix must
+        # still be read correctly even though truncation removes it too.
+        self.assertEqual(strip_suffix_notation("kukuti ~nga ~kūtia"),
+                         "kukuti")
+        self.assertEqual(read_tilde_suffixes("kukuti ~nga ~kūtia"), ["-nga"])
+
 
 from suffix_forms import composition_bases
 
