@@ -136,3 +136,48 @@ def strip_suffix_notation(headword):
         if classify("-" + fold(match.group(1))):
             text = text[:match.start()] + text[match.end():]
     return re.sub(r"\s+", " ", text).strip()
+
+
+# 'Pass. arohaina' / '; pass. arahina.' — Williams's marker, then the word.
+_PASSIVE_MARKER = re.compile(r"\bpass\.\s*([a-zāēīōū]+)", re.I)
+
+
+def derived_from_list(forms):
+    """(base, derived, suffix) for every base+derived pair in *forms*.
+
+    ngata prints one comma-separated run per record holding derived forms and
+    synonyms together: 'whakaranu, whakaranua, tūkino, tūkinotia' is two
+    pairs, and 'whakaranu, pūhui' is a synonym. Only the spellings separate
+    them, so every ordered pair is tested and only known suffixes are kept.
+
+    The run is NOT assumed to be ordered base-then-derived, because ngata
+    interleaves pairs; each earlier form is tested against each later one.
+    """
+    out = []
+    items = [f for f in (forms or []) if isinstance(f, str) and f.strip()]
+    for i, base in enumerate(items):
+        for candidate in items[i + 1:]:
+            suffix = derived_pair(base, candidate)
+            if suffix:
+                out.append((base, candidate, suffix))
+    return out
+
+
+def read_williams_passives(headword, definition):
+    """(base, derived, suffix) for each 'Pass. <form>' in *definition*.
+
+    The marker alone is not enough. Williams's prose also ends sentences with
+    the English verb 'pass', so 'to pass. Be' offers 'Be' as a passive; of 85
+    naive matches in the corpus only 35 survive the morphological test. The
+    base may be any comma-separated part of the headword ('Amu, amuamu').
+    """
+    bases = [p.strip() for p in re.split(r"[,;]", headword or "") if p.strip()]
+    out = []
+    for match in _PASSIVE_MARKER.finditer(definition or ""):
+        candidate = match.group(1)
+        for base in bases:
+            suffix = derived_pair(base, candidate)
+            if suffix:
+                out.append((base, candidate, suffix))
+                break
+    return out

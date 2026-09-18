@@ -195,3 +195,65 @@ class StripNotation(unittest.TestCase):
         # The tilde loop's classify guard must fold the same way the reader
         # does, or a macron'd suffix is read but never stripped.
         self.assertEqual(strip_suffix_notation("ahu ~hīa"), "ahu")
+
+
+from suffix_forms import derived_from_list, read_williams_passives
+
+
+class NgataEquivalentList(unittest.TestCase):
+    """ngata_entries.equivalents is a comma-separated run that mixes
+    base+derived pairs with plain synonyms. Verbatim samples."""
+
+    def test_a_base_and_its_passive(self):
+        # WR-HMN.58, 'Abuse'
+        self.assertEqual(derived_from_list(["tūkino", "tūkinotia"]),
+                         [("tūkino", "tūkinotia", "-tia")])
+
+    def test_two_pairs_in_one_run(self):
+        # WR-HMN.166, 'Adulterate'
+        self.assertEqual(
+            derived_from_list(["whakaranu", "whakaranua", "tūkino",
+                               "tūkinotia"]),
+            [("whakaranu", "whakaranua", "-a"),
+             ("tūkino", "tūkinotia", "-tia")])
+
+    def test_a_synonym_run_yields_nothing(self):
+        # WR-HMN.1845, 'Compound'. pūhui is another word for the same idea.
+        self.assertEqual(derived_from_list(["whakaranu", "pūhui"]), [])
+
+    def test_a_reduplication_is_not_a_derived_form(self):
+        self.assertEqual(derived_from_list(["pōrahu", "pōrahurahu"]), [])
+
+    def test_a_single_item_run_yields_nothing(self):
+        self.assertEqual(derived_from_list(["whakaranu"]), [])
+
+
+class WilliamsProse(unittest.TestCase):
+    """williams_entries.definition marks the passive in running prose."""
+
+    def test_a_marked_passive(self):
+        self.assertEqual(
+            read_williams_passives("Aroha",
+                                   "1. n. Love, yearning. Pass. arohaina."),
+            [("Aroha", "arohaina", "-ina")])
+
+    def test_a_lowercase_marker(self):
+        self.assertEqual(
+            read_williams_passives("Arahi", "; pass. arahina. 1. Lead."),
+            [("Arahi", "arahina", "-na")])
+
+    def test_the_base_may_be_any_comma_part_of_the_headword(self):
+        # 'Amu, amuamu' — the passive belongs to the second form.
+        self.assertEqual(
+            read_williams_passives("Amu, amuamu", "Grumble. Pass. amuamutia."),
+            [("amuamu", "amuamutia", "-tia")])
+
+    def test_the_english_verb_pass_is_not_a_marker(self):
+        # 'Āianei' ends a sentence with 'pass.' and the next word is English.
+        # A naive regex accepts 'Be' here; the morphological test rejects it.
+        self.assertEqual(
+            read_williams_passives("Āianei", "ad. Now, presently, to pass. Be"),
+            [])
+
+    def test_a_definition_with_no_marker_yields_nothing(self):
+        self.assertEqual(read_williams_passives("Kake", "Ascend, climb."), [])
