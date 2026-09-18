@@ -249,7 +249,12 @@ def read_whole_forms(headword):
     """
     out = []
     for match in _TILDE_RUN.finditer(headword or ""):
-        run = _RUN_TAIL.sub("", match.group(1)).strip()
+        # The paren of a '(~…)' group rides along on the token. Strip it from
+        # the RUN, not just from the head used for the lookup: the run is what
+        # becomes the stored form, and the corpus guard rejects '(' but not
+        # ')', so a stray closing paren would reach the form column unseen.
+        run = _RUN_TAIL.sub("", match.group(1)).replace(")", " ").strip()
+        run = re.sub(r"\s+", " ", run)
         if not run:
             continue
         # '(~nga)' leaves the paren riding on the token; strip it before the

@@ -86,6 +86,16 @@ class ReadWholeForms(unittest.TestCase):
         # a typo. '~xyzzy' ends in no known suffix and is refused.
         self.assertEqual(read_whole_forms("kupu ~xyzzy"), [])
 
+    def test_a_parenthesised_whole_form_does_not_keep_its_paren(self):
+        # Paren-stripping guards the vocabulary lookup, so it must also
+        # guard the string that becomes the form. paekupu holds no such
+        # headword today, and the corpus guard in test_suffix_extraction.py
+        # rejects '(' but not ')' — so a refresh introducing this shape
+        # would write 'kūtia) atu' into the form column and no test would
+        # notice.
+        self.assertEqual(read_whole_forms("kupu (~kūtia) atu"),
+                         [("kūtia atu", "-tia", "passive")])
+
     def test_a_run_that_is_only_a_suffix_is_not_a_word(self):
         # A bare '~ia' is a fragment, not a whole form: there is nothing in
         # front of the suffix for it to be a derivation OF.
