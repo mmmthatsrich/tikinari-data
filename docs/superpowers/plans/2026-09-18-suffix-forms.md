@@ -225,10 +225,9 @@ PASSIVE = ("-tia", "-hia", "-ina", "-ngia", "-ria", "-mia", "-kia", "-whia",
 NOMINALISATION = ("-nga", "-tanga", "-hanga", "-ranga", "-anga", "-manga",
                   "-kanga", "-inga", "-unga")
 
-# Longest first: 'whakamātanga' is -tanga, not -anga and not -nga. Sorting by
-# length is what makes the longest-match rule in the spec hold.
-_BY_LENGTH = tuple(sorted(PASSIVE + NOMINALISATION, key=len, reverse=True))
-
+# Longest-match needs no ordering here: describe_derivation returns the ENTIRE
+# remainder as one affix ('whakamātanga' minus 'whakamā' is '-tanga', never
+# '-anga'), and _CLASS is an exact-match lookup. The rule holds structurally.
 _CLASS = {s: "passive" for s in PASSIVE}
 _CLASS.update({s: "nominalisation" for s in NOMINALISATION})
 
@@ -276,14 +275,12 @@ Expected: PASS, 13 tests.
 
 - [ ] **Step 5: Verify the tests can actually fail (mutation check)**
 
-Temporarily change `_BY_LENGTH` to sort shortest-first
-(`key=len, reverse=False`) and re-run. `test_the_longest_suffix_wins` must
-fail. If it still passes, the test is not testing the rule — fix the test
-before continuing. Then restore the line.
-
-Note: `_BY_LENGTH` is not yet read by any function in this task; it is
-consumed in Task 3. If the mutation does not fail the test at this stage,
-that is expected — record it and re-run this check at the end of Task 3.
+Temporarily remove `"-tanga"` from the `NOMINALISATION` tuple and re-run.
+Both `test_the_vocabulary_is_complete` and `test_the_longest_suffix_wins`
+must fail — the second because `derived_pair("whakamā", "whakamātanga")`
+then finds `-tanga` outside the vocabulary and returns `None`. If either
+still passes, that test is not testing what it claims; fix it before
+continuing. Then restore the entry and confirm green.
 
 - [ ] **Step 6: Commit**
 
@@ -664,16 +661,15 @@ def read_williams_passives(headword, definition):
 Run: `py -m pytest tests/test_suffix_forms.py -v`
 Expected: PASS, 41 tests.
 
-- [ ] **Step 5: Re-run the Task 1 mutation check**
+- [ ] **Step 5: Mutation check on the new readers**
 
-Change `_BY_LENGTH` to sort shortest-first and re-run.
-`test_the_longest_suffix_wins` must now fail, because `derived_pair` is
-reached through `derived_from_list`. Restore the line and confirm green.
-
-If it still does not fail: `describe_derivation` returns the whole remainder
-in one piece, so the longest-match rule is satisfied structurally rather than
-by ordering. Record that in the ledger and leave `_BY_LENGTH` in place as
-documentation of the rule — do not delete it, Task 5 reporting uses it.
+Temporarily change `derived_pair` to return `affix` unconditionally (drop the
+`if affix in _CLASS` guard) and re-run.
+`test_a_shared_prefix_is_not_a_suffix` and
+`test_a_synonym_is_not_a_derived_form` must fail — the vocabulary guard is
+the only thing rejecting `pōrahurahu`. If they still pass, the tests are not
+exercising the discriminator; fix them before continuing. Then restore the
+guard and confirm green.
 
 - [ ] **Step 6: Commit**
 
@@ -1424,9 +1420,13 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import DB_PATH
 
-# (source, floor) — measured 2026-09-18, before dedup collapse.
-FLOORS = (("ngata", 3000), ("te_aka", 2500), ("paekupu", 1000),
-          ("papakupu", 100), ("williams", 25), ("kimikupu_hou", 10))
+# (source, floor) — set at ~90% of a full extraction simulated against the
+# live per-source tables on 2026-09-18, which yielded: ngata 4,646 /
+# te_aka 5,354 / paekupu 1,788 / papakupu 212 / williams 35 /
+# kimikupu_hou 18, total 12,053 rows. The margin absorbs
+# drop_truncated_tail, which the simulation did not model.
+FLOORS = (("ngata", 4100), ("te_aka", 4800), ("paekupu", 1600),
+          ("papakupu", 185), ("williams", 31), ("kimikupu_hou", 15))
 
 
 class DerivedForms(unittest.TestCase):
