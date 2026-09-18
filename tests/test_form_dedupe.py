@@ -63,8 +63,17 @@ class FormDedupe(unittest.TestCase):
 
     def test_the_same_source_twice_does_not_repeat_itself_in_the_note(self):
         self.b.add_form(self.eid, "kakea", "passive", "-a (te_aka)")
-        self.b.add_form(self.eid, "kakea", "passive", "-a (te_aka)")
-        self.assertEqual(self._rows()[0][2], "-a (te_aka)")
+        self.b.add_form(self.eid, "kakea", "passive", "-a (ngata)")
+        self.b.add_form(self.eid, "kakea", "passive", "-a (te_aka)")   # already present
+        self.assertEqual(self._rows()[0][2], "-a (te_aka, ngata)")
+
+    def test_a_differing_suffix_keeps_both_rather_than_dropping_one(self):
+        # A second sighting almost always carries the same suffix (12,053 of
+        # 12,053 keys today), but when it doesn't, silently dropping one is
+        # exactly what this module must not do.
+        self.b.add_form(self.eid, "kakea", "passive", "-tia (te_aka)")
+        self.b.add_form(self.eid, "kakea", "passive", "-ngia (ngata)")
+        self.assertEqual(self._rows()[0][2], "-tia (te_aka); -ngia (ngata)")
 
     def test_a_different_form_type_is_a_different_row(self):
         self.b.add_form(self.eid, "kakea", "passive", "-a (te_aka)")

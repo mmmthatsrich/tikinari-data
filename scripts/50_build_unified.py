@@ -120,17 +120,22 @@ _FORM_NOTE = re.compile(r"^(.*?)\s*\(([^)]*)\)\s*$")
 def _merge_form_note(existing, incoming):
     """Fold a second sighting's provenance into '-tia (te_aka, ngata)'.
 
-    Both notes carry the same suffix, so only the source list grows. A note
-    that does not match the '<suffix> (<sources>)' shape is left alone rather
-    than reformatted — the variant and plural rows predate this convention.
+    A second sighting usually carries the same suffix, in which case only the
+    source list grows. Differing suffixes are rare — across every reader's
+    output today there are none — but silently dropping one is exactly what
+    this module must not do, so both survive, joined by '; '. A note that
+    does not match the '<suffix> (<sources>)' shape is left alone rather than
+    reformatted — the variant and plural rows predate this convention.
     """
     if not incoming or incoming == existing:
         return existing
     if not existing:
         return incoming
     old, new = _FORM_NOTE.match(existing), _FORM_NOTE.match(incoming)
-    if not (old and new) or old.group(1) != new.group(1):
+    if not (old and new):
         return existing
+    if old.group(1) != new.group(1):
+        return f"{existing}; {incoming}"
     sources = [s.strip() for s in old.group(2).split(",") if s.strip()]
     for source in (s.strip() for s in new.group(2).split(",")):
         if source and source not in sources:
