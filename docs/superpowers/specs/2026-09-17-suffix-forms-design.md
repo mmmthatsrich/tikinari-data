@@ -28,7 +28,7 @@ a guessed pattern:
 | paekupu | `~a`, `~tanga` | headword | **1,407** | here |
 | papakupu | `[-tia]` and `~tia` | headword **and** definition head | **185** | here |
 | pollex † | `Awhi-tia` | headword / `maori_reflex` | **109** | here, optional |
-| williams | `Pass. arohaina` | prose | **~100** | here |
+| williams | `Pass. arohaina` | prose | **85 seen, 35 survive** | here |
 | kimikupu_hou | `(-tia)` | `<B>` in `body_raw` | **18** | here |
 | te_matatiki, taikupu, temarareo, tregear | — | — | 0, verified | — |
 
@@ -59,7 +59,7 @@ its passive `whakarerea`, because nothing reads the column it sits in.
 into the headword (`ahu ~nga`) and te_aka sometimes does too (`āmine (-tia)`),
 so `headword_search` becomes `ahu ~nga` and `amine (-tia)`. Those entries can
 never meet the plain `ahu` and `amine` that four other sources hold.
-**1,407 paekupu entries and 243 te_aka entries are severed this way** — the
+**1,407 paekupu entries and 322 te_aka entries are severed this way** — the
 only consequence of this defect with a measured cost today.
 
 ---
@@ -153,8 +153,9 @@ into the per-source tables and die only because nothing reads them:
 ```
 ngata         4,462 pairs  body_raw      (comma-separated complete forms)
 te_aka        3,504 rows   senses JSON   (definition_raw, leading '(-tia)')
-paekupu       1,423 rows   headword      (trailing '~a')
-williams        183 rows   definition    ('Pass. arohaina')
+paekupu       1,407 rows   headword      (trailing '~a')
+williams         85 rows   definition    ('Pass. arohaina', 35 survive the
+                                          morphological test)
 papakupu        153 rows   definition    (leading '~tia') + 13 headword
 kimikupu_hou     29 rows   body_raw      ('(-tia)' inside <B>)
 ```
@@ -162,7 +163,7 @@ kimikupu_hou     29 rows   body_raw      ('(-tia)' inside <B>)
 Nothing upstream is touched. `50_build_unified.py` reads fields it currently
 ignores and writes `form` rows.
 
-### pollex is a special case and may be dropped
+### pollex was dropped
 
 pollex has no `entry` rows. It reaches entries only through
 `pollex_entry_links`, a many-to-many table carrying `match_confidence` and
@@ -174,10 +175,16 @@ entry keyed `awhi`.
 That is defensible — each of those entries genuinely has that passive — but
 it is a different operation from the other six, it is the one place where a
 `form` row would rest on a probabilistic match rather than on a source's own
-filing, and it is worth **109 tokens, 0.3% of the corpus**. **Ruling: build
-pollex last, behind a `match_confidence` threshold, and drop it without
-argument if it complicates the rest.** The other six carry the requirement
-on their own.
+filing, and it is worth **109 tokens, 0.3% of the corpus**. The draft ruling
+was to gate pollex behind a `match_confidence` threshold, but that threshold
+does not exist to gate on: all 57,792 `pollex_entry_links` rows carry
+`match_confidence = 1.0` and `match_method = 'headword_exact'` — every link
+is nominally "full confidence," including the **12,347 of 34,176 linked
+entries that carry 2+ links (up to 8)**, which is exactly the ambiguity a
+confidence threshold would have needed to resolve. With nothing to gate on,
+**pollex was dropped**, per the standing fallback ("drop it without argument
+if it complicates the rest"). The other six carry the requirement on their
+own.
 
 ---
 
@@ -190,7 +197,7 @@ The readers are pure functions over a string, testable without a database.
 tūkino, tūkinotia</B>` is a comma list that mixes base+derived pairs with
 synonyms. The discriminator is morphological and was validated on the
 corpus: form B is a derived form of A only when `B.startswith(A)` and the
-remainder is a known suffix. That test separated **3,568 rows holding
+remainder is a known suffix. That test separated **3,664 rows holding
 genuine pairs from 4,806 rows that are synonym lists only** — `whakamā,
 pōrahu, pōrahurahu` is correctly rejected. Store B whole; `note` records the
 suffix the longest-match rule identified.
@@ -210,9 +217,12 @@ leading the definition. Same composition.
 love` gives the whole word after the marker. Take the first token after
 `Pass.`/`pass.`; store it whole; derive the suffix by longest match.
 
-**kimikupu_hou — fragment, inside `<B>`.** `tūtōkai (-tia)`. Note its
-`body_text` column is empty for 2,823 of 2,831 rows, so the reader must use
-`body_raw`; that gap is recorded in §7 and is not fixed here.
+**kimikupu_hou — fragment, anywhere in `body_raw`.** `tūtōkai (-tia)`. The
+shipped reader runs `read_paren_suffixes` over the entire `body_raw` blob,
+not just its `<B>` region — there is no region-scoping, so a suffix marker
+elsewhere in the raw HTML is read the same way. Note its `body_text` column
+is empty for 2,823 of 2,831 rows, so the reader must use `body_raw`; that gap
+is recorded in §7 and is not fixed here.
 
 **pollex — joined, if built at all.** `Awhi-tia` splits at the hyphen into
 base and suffix; `Aroha-ina, -tia` carries two. The base is the Māori
@@ -225,7 +235,7 @@ last and optional.
 
 Once the suffix is extracted, the headword it was attached to is the bare
 word, and `headword_search` follows from that. `ahu ~nga` keys as `ahu`;
-`āmine (-tia)` keys as `amine`. That un-severs the **1,407 paekupu and 243
+`āmine (-tia)` keys as `amine`. That un-severs the **1,407 paekupu and 322
 te_aka entries** that currently cannot meet their own base form in four
 other sources.
 
@@ -266,10 +276,18 @@ both groups, the composed form must equal the recorded one. `whakarere` +
 `-a` must equal ngata's `whakarerea`. That is a free correctness check on
 the composition rule and it should be a test.
 
-**No silent duplicates.** One entry may earn the same form from several
-sources, and one source may yield it from several senses. Rows are per
-`(entry_id, form, form_type)`; provenance accumulates in `note`. Counting
-queries must not double-count a form because three sources agree on it.
+**No silent duplicates.** Dedup is real, but it operates WITHIN a source, not
+across sources: te_aka routinely writes the same form twice, once from the
+headword and once from each sense that repeats the suffix marker. Cross-source
+accumulation onto one row cannot occur in the current pipeline — `unify_source`
+calls `delete_source_slice` and then builds a fresh `Builder` per source, and
+every `entry` row carries the `source_id` it was minted under, so no
+`entry_id` is ever shared between two sources' passes. (Empirically, 0 of the
+12,091 derived-form notes contain a comma or semicolon, which is what two
+sources landing on the same row would look like.) Rows are per
+`(entry_id, form, form_type)`; provenance accumulates in `note` for the
+within-source case. Counting queries must not double-count a form because one
+source mentioned it three times.
 
 ---
 

@@ -958,7 +958,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             entry_id    INTEGER NOT NULL REFERENCES entry(id),
             form        TEXT NOT NULL,
             form_search TEXT NOT NULL,             -- normalise_search_key, for matching
-            form_type   TEXT,                      -- variant | alt_spelling | plural | inflected
+            form_type   TEXT,                      -- variant | alt_spelling | plural | inflected |
+                                                    -- passive | nominalisation
             note        TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_form_entry  ON form(entry_id);

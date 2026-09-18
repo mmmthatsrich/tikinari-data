@@ -1,7 +1,7 @@
 """headword_search must not carry suffix notation (spec §5).
 
 paekupu writes the suffix into the headword ('ahu ~nga') and te_aka sometimes
-does too ('āmine (-tia)'). Keyed that way, 1,407 paekupu entries and 321
+does too ('āmine (-tia)'). Keyed that way, 1,407 paekupu entries and 322
 te_aka entries can never meet the plain 'ahu' and 'amine' that four other
 sources hold.
 """
@@ -33,7 +33,13 @@ class TheBuiltDatabaseAgrees(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.con = sqlite3.connect(DB_PATH)
+        # Read-only: this suite must never be able to alter the working
+        # database it measures. See tests/test_suffix_extraction.py.
+        cls.con = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.con.close()
 
     def test_no_paekupu_key_carries_a_tilde(self):
         n = self.con.execute(

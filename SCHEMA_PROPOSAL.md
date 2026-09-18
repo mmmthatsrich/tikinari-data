@@ -226,7 +226,8 @@ CREATE TABLE form (
     entry_id    INTEGER NOT NULL REFERENCES entry(id),
     form        TEXT NOT NULL,
     form_search TEXT NOT NULL,              -- normalised, for matching
-    form_type   TEXT,                       -- variant | alt_spelling | plural | inflected
+    form_type   TEXT,                       -- variant | alt_spelling | plural | inflected |
+                                            -- passive | nominalisation
     note        TEXT
 );                                          -- ← Papakupu variant_forms, Paekupu alternative_words
 
