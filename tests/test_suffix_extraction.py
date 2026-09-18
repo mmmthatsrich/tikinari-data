@@ -5,9 +5,12 @@ per-source tables before the rebuild ran, less a margin. They are tripwires,
 not targets: a source coming in far under has a reader missing a shape, and a
 source coming in far over is matching something that is not a suffix.
 
-Simulated totals on 2026-09-18, after every reader fix:
-    ngata 4,645 · te_aka 5,358 · paekupu 1,823 · papakupu 212 ·
-    williams 35 · kimikupu_hou 18  =  12,091 rows, zero malformed strings.
+Totals on 2026-09-18 — the six already-built sources' current measured
+counts against the live database, plus hepatakakupu's count as verified
+against its raw pages ahead of its own rebuild:
+    ngata 4,646 · te_aka 5,361 · paekupu 1,823 · papakupu 212 ·
+    williams 35 · kimikupu_hou 18 · hepatakakupu 22,883  =
+    34,978 rows, zero malformed strings.
 """
 import sqlite3
 import sys
@@ -21,8 +24,9 @@ from utils import DB_PATH
 
 # (source, floor) — ~90% of the simulated count, absorbing the small
 # difference between a simulation and the real builder's entry minting.
-FLOORS = (("ngata", 4100), ("te_aka", 4800), ("paekupu", 1600),
-          ("papakupu", 185), ("williams", 31), ("kimikupu_hou", 15))
+FLOORS = (("hepatakakupu", 20500), ("ngata", 4100), ("te_aka", 4800),
+          ("paekupu", 1600), ("papakupu", 185), ("williams", 31),
+          ("kimikupu_hou", 15))
 
 DERIVED = ("passive", "nominalisation")
 
@@ -75,7 +79,7 @@ class DerivedForms(unittest.TestCase):
         bad = self.con.execute(
             "SELECT form FROM form WHERE form_type IN (?, ?) AND "
             "(form LIKE '%~%' OR form LIKE '%(-%' OR form LIKE '%,%' OR "
-            "form LIKE '%.%')",
+            "form LIKE '%.%' OR form LIKE '%(%')",
             DERIVED).fetchall()
         self.assertEqual(bad, [], f"malformed derived forms: {bad[:5]}")
 
