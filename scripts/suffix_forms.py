@@ -63,3 +63,76 @@ def derived_pair(base, candidate):
 def compose(headword, suffix):
     """'kake' + '-a' -> 'kakea'. Straight concatenation, macrons preserved."""
     return (headword or "").strip() + (suffix or "").lstrip("-")
+
+
+# A suffix token as the sources write it: a hyphen or tilde, then letters.
+# Macrons are allowed because papakupu occasionally marks one.
+_TOKEN = r"[-~]\s*([a-zāēīōū]+)"
+
+_PAREN_GROUP = re.compile(r"\(\s*((?:" + _TOKEN + r"\s*,?\s*)+)\)", re.I)
+_TILDE_TOKEN = re.compile(r"~\s*([a-zāēīōū]+)", re.I)
+_BRACKET_GROUP = re.compile(r"\[\s*((?:-\s*[a-zāēīōū]+\s*,?\s*)+)\]", re.I)
+_HYPHEN_TOKEN = re.compile(r"-\s*([a-zāēīōū]+)", re.I)
+
+
+def _keep_known(raw_tokens):
+    """Normalise to '-xxx' and drop everything outside the vocabulary.
+
+    Dropping is the point. kimikupu_hou's '(-waro)' is a chemical component,
+    temarareo's '~ kainga' means 'reflects as', and neither is a suffix. The
+    vocabulary is the only thing separating them from '-tia'.
+    """
+    out = []
+    for token in raw_tokens:
+        suffix = "-" + token.strip().lower()
+        if classify(suffix):
+            out.append(suffix)
+    return out
+
+
+def read_paren_suffixes(text):
+    """['-a', '-hia'] from '(-a,-hia) to be able' or 'āmine (-tia)'."""
+    for group in _PAREN_GROUP.finditer(text or ""):
+        found = _keep_known(_HYPHEN_TOKEN.findall(group.group(1)))
+        if found:
+            return found
+    return []
+
+
+def read_tilde_suffixes(text):
+    """['-tia', '-tanga'] from '~tia, ~tanga (1) beget' or 'ahu ~nga'.
+
+    Separators vary: paekupu spaces them, papakupu uses commas and at least
+    once a semicolon ('~a, ~ria, ~ngia; ~nga'). Reading every tilde token and
+    filtering by vocabulary handles all of them without a separator rule.
+    """
+    return _keep_known(_TILDE_TOKEN.findall(text or ""))
+
+
+def read_bracket_suffixes(text):
+    """['-tia'] from 'tāpiri [-tia]'. '[Tāne]' is a domain and yields []."""
+    for group in _BRACKET_GROUP.finditer(text or ""):
+        found = _keep_known(_HYPHEN_TOKEN.findall(group.group(1)))
+        if found:
+            return found
+    return []
+
+
+def strip_suffix_notation(headword):
+    """The bare headword, with any suffix notation removed.
+
+    'ahu ~nga' -> 'ahu'. This is what headword_search must be built from:
+    keying 1,407 paekupu entries on 'ahu ~nga' severs them from the plain
+    'ahu' four other sources hold (spec §5).
+    """
+    text = (headword or "").strip()
+    if not text:
+        return text
+    text = _PAREN_GROUP.sub(" ", text)
+    text = _BRACKET_GROUP.sub(" ", text)
+    # Only strip a tilde run that the vocabulary recognises, so a stray tilde
+    # in an unrelated headword does not truncate it.
+    for match in reversed(list(_TILDE_TOKEN.finditer(text))):
+        if classify("-" + match.group(1).lower()):
+            text = text[:match.start()] + text[match.end():]
+    return re.sub(r"\s+", " ", text).strip()
