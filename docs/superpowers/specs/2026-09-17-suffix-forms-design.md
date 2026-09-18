@@ -59,7 +59,8 @@ its passive `whakarerea`, because nothing reads the column it sits in.
 into the headword (`ahu ~nga`) and te_aka sometimes does too (`āmine (-tia)`),
 so `headword_search` becomes `ahu ~nga` and `amine (-tia)`. Those entries can
 never meet the plain `ahu` and `amine` that four other sources hold.
-**1,407 paekupu entries and 322 te_aka entries are severed this way** — the
+**1,407 paekupu entries and 322 te_aka entries are severed this way** (321
+carry the `(-` notation in the headword; one more is severed by a bracket) — the
 only consequence of this defect with a measured cost today.
 
 ---
@@ -167,7 +168,7 @@ ignores and writes `form` rows.
 
 pollex has no `entry` rows. It reaches entries only through
 `pollex_entry_links`, a many-to-many table carrying `match_confidence` and
-matching on `headword_exact` — **34,176 entries are linked, and one entry
+matching on `headword_exact` — **34,558 entries are linked, and one entry
 can carry up to 8 links.** A pollex form therefore has no single
 unambiguous `entry_id`: writing `Awhi-tia` means writing it once per linked
 entry keyed `awhi`.
@@ -179,7 +180,7 @@ filing, and it is worth **109 tokens, 0.3% of the corpus**. The draft ruling
 was to gate pollex behind a `match_confidence` threshold, but that threshold
 does not exist to gate on: all 57,792 `pollex_entry_links` rows carry
 `match_confidence = 1.0` and `match_method = 'headword_exact'` — every link
-is nominally "full confidence," including the **12,347 of 34,176 linked
+is nominally "full confidence," including the **12,686 of 34,558 linked
 entries that carry 2+ links (up to 8)**, which is exactly the ambiguity a
 confidence threshold would have needed to resolve. With nothing to gate on,
 **pollex was dropped**, per the standing fallback ("drop it without argument
