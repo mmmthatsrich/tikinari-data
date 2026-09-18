@@ -144,7 +144,7 @@ def _merge_form_note(existing, incoming):
     return f"{old.group(1)} ({', '.join(sources)})"
 
 
-def _add_suffix_forms(b, entry_id, headword, suffixes, source):
+def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
     """Write one form row per known suffix, composed against *headword*.
 
     An unrecognised suffix writes nothing: classify() is the only thing
@@ -155,9 +155,22 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source):
     '~hangā'), so classify() is looked up on the FOLDED suffix — classify()
     itself never folds, by design (suffix_forms.classify's own contract) —
     while the suffix passed to compose()/note keeps its original spelling.
+
+    *tally* is optional and normally left None: the other six sources tally
+    inside the reader that produced their suffixes (e.g. read_paren_suffixes
+    takes b.suffix_tally directly). hepatakakupu has no reader here — its
+    suffixes arrive already parsed in the `suffixes` column — so
+    build_hepatakakupu is the one caller that passes b.suffix_tally through
+    to here instead. Passing a tally from the other six as well would
+    double-count every token.
     """
     for suffix in suffixes or []:
         form_type = suffix_forms.classify(suffix_forms.fold(suffix))
+        if tally is not None:
+            if form_type:
+                tally.keep()
+            else:
+                tally.refuse(suffix)
         if not form_type:
             continue
         if b.add_form(entry_id, suffix_forms.compose(headword, suffix),
@@ -548,7 +561,8 @@ def build_te_aka(con, b):
 def build_hepatakakupu(con, b):
     sql = ("SELECT id, word_id, headword, headword_sort, headword_search, "
            "part_of_speech, definition, usage_examples, sense_number, synonyms, "
-           "synonym_senses, master_word_id, master_sense, semantic_domain "
+           "synonym_senses, master_word_id, master_sense, semantic_domain, "
+           "suffixes "
            "FROM hepatakakupu_entries ORDER BY word_id, sense_number, id")
     # He Pataka Kupu addresses a sense as (word_id, sense_number) and splits every
     # sense into its own row, so that pair names exactly one entry. Collected on
@@ -561,7 +575,7 @@ def build_hepatakakupu(con, b):
     masters: list = []           # (entry_id, master_word_id, master_sense)
     synonym_refs: list = []      # (entry_id, headword, sense, note)
     for (id_, wid, hw, hs, hse, pos, d, ux, sn, syn, syn_senses,
-         master_wid, master_sn, dom) in con.execute(sql):
+         master_wid, master_sn, dom, suffixes) in con.execute(sql):
         # He Pātaka Kupu word_id is NOT unique per row (same word_id repeats across
         # senses, and some word_ids are shared sentinels), so it cannot be the device-id
         # stem. Use the source row PK — guaranteed unique and stable. word_id is kept in
@@ -571,6 +585,12 @@ def build_hepatakakupu(con, b):
         eid = b.add_entry(seid, hw, hs, hse, pos=pos, locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def_mi": d, "sn": sn,
                                     "ex": examples, "syn": jload(syn), "dom": dom})
+        # hepatakakupu records its suffixes in a separate element, so hw is
+        # already bare — no strip_suffix_notation, unlike paekupu. Each row
+        # here is one SENSE and mints its own entry, so these forms do not
+        # collapse across a word's senses.
+        _add_suffix_forms(b, eid, hw, jload(suffixes), "hepatakakupu",
+                          b.suffix_tally)
         sid = b.add_sense(eid, sn, None, d, d, part_of_speech=pos)  # monolingual Māori -> gloss_mi
         for i, ex in enumerate(examples):
             text, src = split_src(ex)

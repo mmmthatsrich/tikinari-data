@@ -7,7 +7,8 @@ source coming in far over is matching something that is not a suffix.
 
 Simulated totals on 2026-09-18, after every reader fix:
     ngata 4,645 · te_aka 5,358 · paekupu 1,823 · papakupu 212 ·
-    williams 35 · kimikupu_hou 18  =  12,091 rows, zero malformed strings.
+    williams 35 · kimikupu_hou 18 · hepatakakupu 22,882  =
+    34,977 rows, zero malformed strings.
 """
 import sqlite3
 import sys
@@ -21,8 +22,9 @@ from utils import DB_PATH
 
 # (source, floor) — ~90% of the simulated count, absorbing the small
 # difference between a simulation and the real builder's entry minting.
-FLOORS = (("ngata", 4100), ("te_aka", 4800), ("paekupu", 1600),
-          ("papakupu", 185), ("williams", 31), ("kimikupu_hou", 15))
+FLOORS = (("hepatakakupu", 20500), ("ngata", 4100), ("te_aka", 4800),
+          ("paekupu", 1600), ("papakupu", 185), ("williams", 31),
+          ("kimikupu_hou", 15))
 
 DERIVED = ("passive", "nominalisation")
 
