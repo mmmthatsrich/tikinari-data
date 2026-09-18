@@ -1,11 +1,18 @@
-"""`derivation` and `loan_origin` hold only what a source stated (D38).
+"""`derivation` and `loan_origin` hold only what a source printed (D38).
 
-Step 1 of both design notes: attested rows only, `derived = 0`. The value of
-these tables is that every row can be traced to a source that said so, so the
-assertions here are about that discipline rather than about volume.
+Every row traces to a source, so the assertions here are about that discipline
+rather than about volume. What each row does NOT share is how the source
+supported it, and `derived` is the column that keeps the two apart:
 
-  derivation   6,778 rows — Williams sub-entries (D36), Te Matatiki bracketed
-               components, Paekupu component notes
+  derivation   11,424 rows
+               attested, derived = 0 (6,778) — Williams sub-entries (D36),
+               Te Matatiki bracketed components, Paekupu component notes.
+               The source itself paired the two words.
+               segmented, derived = 1 (4,646) — ngata printed a word and its
+               own passive in one comma-separated run ('ahu, ahutia, ahuna')
+               and 50_build_unified's suffix rules matched the spellings. The
+               run is the source's; the pairing within it is ours, so these
+               carry 'probable' where the attested rows carry 'certain'.
   loan_origin  109 rows — only where the source names a language or the word
                borrowed from. A marker saying merely 'borrowed' earns no row;
                entry.loan_marker already records that for 22,832 entries.
@@ -33,12 +40,28 @@ class WordOriginTables(unittest.TestCase):
     def _one(self, sql, *a):
         return self.con.execute(sql, a).fetchone()[0]
 
-    def test_every_derivation_row_is_attested(self):
-        # Step 1 asserts nothing of its own. When step 2 adds the segmented
-        # whaka-/reduplication/-tanga rows they will carry derived = 1, and
-        # this becomes the count of the attested half.
+    def test_only_ngata_supplies_segmented_derivations(self):
+        # derived = 1 means the pairing is our segmentation, not the source's
+        # statement. ngata is the only source that earns it; a second source
+        # appearing here has skipped the warrant table in 53_build_word_origin.
+        self.assertEqual(self.con.execute(
+            "SELECT DISTINCT evidence FROM derivation WHERE derived <> 0"
+        ).fetchall(), [("ngata: printed in one run with its base",)])
+
+    def test_the_attested_rows_stay_attested(self):
+        # The three sources that pair the words themselves must never drift
+        # into derived = 1; that would erase the distinction the column exists
+        # to record.
         self.assertEqual(self._one(
-            "SELECT COUNT(*) FROM derivation WHERE derived <> 0"), 0)
+            "SELECT COUNT(*) FROM derivation "
+            "WHERE derived <> 0 AND evidence NOT LIKE 'ngata%'"), 0)
+        self.assertGreater(self._one(
+            "SELECT COUNT(*) FROM derivation WHERE derived = 0"), 6500)
+
+    def test_a_segmented_row_is_never_claimed_as_certain(self):
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM derivation "
+            "WHERE derived <> 0 AND confidence = 'certain'"), 0)
 
     def test_every_derivation_row_names_its_evidence(self):
         self.assertEqual(self._one(
@@ -62,8 +85,9 @@ class WordOriginTables(unittest.TestCase):
         self.assertEqual(self._one(
             "SELECT COUNT(*) FROM derivation WHERE entry_id = base_entry_id"), 0)
 
-    def test_the_attested_derivations_are_all_there(self):
-        self.assertGreater(self._one("SELECT COUNT(*) FROM derivation"), 6500)
+    def test_the_derivations_are_all_there(self):
+        # Floor, not a target: 6,778 attested + 4,646 segmented = 11,424.
+        self.assertGreater(self._one("SELECT COUNT(*) FROM derivation"), 11000)
 
     def test_every_loan_origin_row_carries_an_origin(self):
         # The fact of borrowing lives on entry.loan_marker. This table is for

@@ -229,9 +229,12 @@ a canonical form without inventing lexicographic content.
 
 ### Headword, in order
 
-1. **Morphological evidence.** If `derivation` (D38, 6,778 rows) says the word is
+1. **Morphological evidence.** If `derivation` (D38) says the word is
    base + affix and the base is macronised, that settles it. `hōmai` is long
-   because it is `hō` + `mai`.
+   because it is `hō` + `mai`. Only the attested half counts — the 6,778 rows
+   carrying `derived = 0`, where the source paired the two words itself.
+   ngata's 4,646 `derived = 1` rows are our segmentation of a comma-separated
+   run and carry `probable`; they are recorded but do not settle a spelling.
 2. **Macron-informative preference.** Where members disagree, prefer the
    macronised spelling. The evidence is asymmetric: a source marking length
    makes a claim; a source omitting it may simply not mark length. Williams 1957
