@@ -112,8 +112,26 @@ It reads; it never composes. The source already printed the whole word:
 `compose('hau', '-hāua')` returns `hauhāua`, which §2 shows is attested
 nowhere.
 
-An unclassifiable run writes nothing and is refused through the existing
-`Tally`, exactly as an unrecognised suffix fragment is today.
+An unclassifiable run writes nothing. It is already counted as refused by
+`read_tilde_suffixes`, which sees the same headword and rejects the same
+token, so `read_whole_forms` takes no `Tally` of its own — tallying twice
+would count each token twice. The consequence is that the refusal report
+lists these sixteen as refused while they are written. The report is a
+diagnostic rather than data, and reconciling it belongs with the known
+`Tally` defect where `seen` already does not equal written plus refused.
+
+**Limits of the rule.** The reader asks only whether the run's first element
+ends in a vocabulary suffix. It does not check that the run is a single
+word, nor that it resembles the base. `read_whole_forms('waiata ~ wā roa')`
+returns `('wā roa', '-a', 'passive')` — `wā` ends in `-a` and the rest of
+the run rides along. No paekupu headword has that shape today: all 1,407
+tilde headwords yield exactly the sixteen forms in §3 and zero
+unclassifiable runs. But a refresh that introduced a multi-word tilde
+annotation whose first word happened to end in a vowel would fabricate a
+form, and the corpus guard would not catch it — the guard rejects `~`, `(`,
+`,` and `.`, none of which such a run contains. The protection is that the
+count is pinned: `tests/test_whole_forms_corpus.py` asserts exactly sixteen
+rows, so a seventeenth fails the suite the moment it appears.
 
 ### 4.2 `strip_suffix_notation` is not touched
 

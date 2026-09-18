@@ -129,9 +129,13 @@ class ReadWholeForms(unittest.TestCase):
         self.assertEqual(read_whole_forms("rārangi (~tanga) kōrero"), [])
 
     def test_a_comma_separated_run_stops_at_the_comma(self):
-        # papakupu separates with commas and semicolons. Nothing in paekupu
-        # needs this today, but a run must never swallow the next word.
-        self.assertEqual(read_whole_forms("pūrua ~tia, pūtoru ~tia ..."), [])
+        # papakupu separates with commas and semicolons, and a run must
+        # never swallow the word after one. The head here must be OUTSIDE
+        # the vocabulary: a recognised head is discarded before _RUN_TAIL
+        # is ever consulted, so a case like 'pūrua ~tia, pūtoru' would pass
+        # this test with the comma rule deleted.
+        self.assertEqual(read_whole_forms("x ~kūtia, pūtoru"),
+                         [("kūtia", "-tia", "passive")])
 
     def test_an_unclassifiable_run_writes_nothing(self):
         # The vocabulary is the only thing separating a real derivation from
@@ -466,8 +470,16 @@ def _add_whole_forms(b, entry_id, forms, source):
 
     _add_suffix_forms cannot be reused: it composes, and these forms exist
     precisely because composing does not work — 'hau' + '-hāua' is
-    'hauhāua', a word attested nowhere, while the source's own 'hāua' is
-    attested in eight dictionaries.
+    'hauhāua', a word no dictionary in the corpus holds.
+
+    Where the corpus can corroborate the whole-form reading it does, by
+    EXACT spelling: 'motuhanga' is a headword in four sources, 'tākina' in
+    two, 'kūtia' and 'wetekina' in ngata. 'hāua' itself rests on paekupu
+    alone — it is attested in no other source, and the eight entries that
+    share its FOLDED key are 'hauā' and 'Hauā', a different word. Never
+    count attestation on headword_search; that key strips macrons and
+    collapses doubled vowels, and reading a count off it is the specific
+    error the spec's §2 exists to warn about.
 
     The note carries ', whole' because the suffix in it is read off the
     form's spelling rather than printed by the source as a fragment. The
@@ -520,7 +532,8 @@ git commit -m "feat(unified): store paekupu's whole irregular forms verbatim
 
 _add_suffix_forms composes, which is exactly what these sixteen forms
 cannot survive: 'hau' + '-hāua' is 'hauhāua', attested nowhere, while the
-source's own 'hāua' is attested in eight dictionaries. _add_whole_forms
+source's own 'hāua' is attested in paekupu alone — and the eight entries
+sharing its folded key are 'hauā', a different word. _add_whole_forms
 writes the string the source printed and marks the note ', whole' to record
 that its suffix is our reading of the spelling rather than a fragment
 paekupu wrote.

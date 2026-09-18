@@ -77,9 +77,13 @@ class ReadWholeForms(unittest.TestCase):
         self.assertEqual(read_whole_forms("rārangi (~tanga) kōrero"), [])
 
     def test_a_comma_separated_run_stops_at_the_comma(self):
-        # papakupu separates with commas and semicolons. Nothing in paekupu
-        # needs this today, but a run must never swallow the next word.
-        self.assertEqual(read_whole_forms("pūrua ~tia, pūtoru ~tia ..."), [])
+        # papakupu separates with commas and semicolons, and a run must
+        # never swallow the word after one. The head here must be OUTSIDE
+        # the vocabulary: a recognised head is discarded before _RUN_TAIL
+        # is ever consulted, so a case like 'pūrua ~tia, pūtoru' would pass
+        # this test with the comma rule deleted.
+        self.assertEqual(read_whole_forms("x ~kūtia, pūtoru"),
+                         [("kūtia", "-tia", "passive")])
 
     def test_an_unclassifiable_run_writes_nothing(self):
         # The vocabulary is the only thing separating a real derivation from

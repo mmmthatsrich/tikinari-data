@@ -183,8 +183,16 @@ def _add_whole_forms(b, entry_id, forms, source):
 
     _add_suffix_forms cannot be reused: it composes, and these forms exist
     precisely because composing does not work — 'hau' + '-hāua' is
-    'hauhāua', a word attested nowhere, while the source's own 'hāua' is
-    attested in eight dictionaries.
+    'hauhāua', a word no dictionary in the corpus holds.
+
+    Where the corpus can corroborate the whole-form reading it does, by
+    EXACT spelling: 'motuhanga' is a headword in four sources, 'tākina' in
+    two, 'kūtia' and 'wetekina' in ngata. 'hāua' itself rests on paekupu
+    alone — it is attested in no other source, and the eight entries that
+    share its FOLDED key are 'hauā' and 'Hauā', a different word. Never
+    count attestation on headword_search; that key strips macrons and
+    collapses doubled vowels, and reading a count off it is the specific
+    error the spec's §2 exists to warn about.
 
     The note carries ', whole' because the suffix in it is read off the
     form's spelling rather than printed by the source as a fragment. The
