@@ -59,8 +59,7 @@ its passive `whakarerea`, because nothing reads the column it sits in.
 into the headword (`ahu ~nga`) and te_aka sometimes does too (`āmine (-tia)`),
 so `headword_search` becomes `ahu ~nga` and `amine (-tia)`. Those entries can
 never meet the plain `ahu` and `amine` that four other sources hold.
-**1,407 paekupu entries and 322 te_aka entries are severed this way** (321
-carry the `(-` notation in the headword; one more is severed by a bracket) — the
+**1,407 paekupu entries and 321 te_aka entries are severed this way** — the
 only consequence of this defect with a measured cost today.
 
 ---
@@ -198,8 +197,8 @@ The readers are pure functions over a string, testable without a database.
 tūkino, tūkinotia</B>` is a comma list that mixes base+derived pairs with
 synonyms. The discriminator is morphological and was validated on the
 corpus: form B is a derived form of A only when `B.startswith(A)` and the
-remainder is a known suffix. That test separated **3,664 rows holding
-genuine pairs from 4,806 rows that are synonym lists only** — `whakamā,
+remainder is a known suffix. That test separated **3,665 records holding
+genuine pairs from 4,655 that are synonym lists only** — `whakamā,
 pōrahu, pōrahurahu` is correctly rejected. Store B whole; `note` records the
 suffix the longest-match rule identified.
 
@@ -284,7 +283,7 @@ accumulation onto one row cannot occur in the current pipeline — `unify_source
 calls `delete_source_slice` and then builds a fresh `Builder` per source, and
 every `entry` row carries the `source_id` it was minted under, so no
 `entry_id` is ever shared between two sources' passes. (Empirically, 0 of the
-12,091 derived-form notes contain a comma or semicolon, which is what two
+12,095 derived-form notes contain a comma or semicolon, which is what two
 sources landing on the same row would look like.) Rows are per
 `(entry_id, form, form_type)`; provenance accumulates in `note` for the
 within-source case. Counting queries must not double-count a form because one

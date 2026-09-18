@@ -160,9 +160,9 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source):
         form_type = suffix_forms.classify(suffix_forms.fold(suffix))
         if not form_type:
             continue
-        b.add_form(entry_id, suffix_forms.compose(headword, suffix),
-                   form_type, f"{suffix} ({source})")
-        b.derived_forms_written += 1
+        if b.add_form(entry_id, suffix_forms.compose(headword, suffix),
+                      form_type, f"{suffix} ({source})"):
+            b.derived_forms_written += 1
 
 
 def _add_derived_forms(b, entry_id, triples, source):
@@ -171,8 +171,8 @@ def _add_derived_forms(b, entry_id, triples, source):
         form_type = suffix_forms.classify(suffix_forms.fold(suffix))
         if not form_type:
             continue
-        b.add_form(entry_id, derived, form_type, f"{suffix} ({source})")
-        b.derived_forms_written += 1
+        if b.add_form(entry_id, derived, form_type, f"{suffix} ({source})"):
+            b.derived_forms_written += 1
 
 
 class Builder:
@@ -249,12 +249,12 @@ class Builder:
 
     def add_form(self, entry_id, form, form_type, note=None):
         if not form:
-            return
+            return False
         # A form that merely restates the headword or its macron-stripped sort
         # key is not a variant: headword_search already normalises both, so the
         # row adds nothing and inflates the app's "has variants" signal.
         if form.casefold() in self._lemmas.get(entry_id, ()):
-            return
+            return False
         # One row per (entry, form, type). A derived form is routinely recorded
         # by several sources, and by several senses within one source; writing
         # it once per sighting would make the corpus-wide suffix counts report
@@ -267,13 +267,17 @@ class Builder:
                 self.con.execute("UPDATE form SET note = ? WHERE id = ?",
                                  (merged, rowid))
                 self._forms[key] = (rowid, merged)
-            return
+            return False
         cur = self.con.execute(
             "INSERT INTO form (entry_id, form, form_search, form_type, note) "
             "VALUES (?,?,?,?,?)",
             (entry_id, form, normalise_search_key(form), form_type, note))
         self._forms[key] = (cur.lastrowid, note)
         self.counts["form"] += 1
+        # True only when a row actually landed. The refusal report counts rows,
+        # not attempts: counting attempts would report how often a form was
+        # sighted, which is the very thing this method's dedup exists to stop.
+        return True
 
     def add_relation(self, entry_id, rel_type, target_headword, target_entry_id=None,
                      note=None, target_sense_id=None):
@@ -851,9 +855,9 @@ def _wakareo_en_mi(con, b, table):
                 if base == mi:
                     form_type = suffix_forms.classify(suffix_forms.fold(suffix))
                     if form_type:
-                        b.add_form(eid, derived, form_type,
-                                   f"{suffix} ({source})")
-                        b.derived_forms_written += 1
+                        if b.add_form(eid, derived, form_type,
+                                      f"{suffix} ({source})"):
+                            b.derived_forms_written += 1
             # kimikupu_hou marks the suffix inside <B> in the raw body; its
             # body_text column is empty for 2,823 of 2,831 rows. mi itself
             # can still carry its own paren notation ('tūtōkai (-tia)'), so
