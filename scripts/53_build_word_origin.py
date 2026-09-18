@@ -1,9 +1,11 @@
 """Build `derivation` and `loan_origin` from what the sources already state.
 
-See docs/WORD_FORMATION_DESIGN.md and docs/LOAN_ORIGIN_DESIGN.md. This is step
-1 of both: the attested rows only, `derived = 0`. Nothing here infers a
-derivation or an origin — every row exists because a source said so and the
-reference already resolves to an entry.
+See docs/WORD_FORMATION_DESIGN.md and docs/LOAN_ORIGIN_DESIGN.md. Every row
+here rests on something a source printed and a reference that already resolves
+to an entry; none is invented. Most rows are attested outright (`derived = 0`),
+where the source itself paired the two words. ngata is the one source whose
+pairing is read off the spellings instead of stated, and those rows carry
+`derived = 1` — the column exists for exactly that distinction.
 
 Sources, in order of how much each says:
 
@@ -11,6 +13,12 @@ Sources, in order of how much each says:
     williams      1,507 `derived_from` relations — Williams prints a derivative
                   inside its base entry's paragraph (D36). Affix and process are
                   read off the two spellings, never guessed.
+    ngata         `derived_from` relations written by 50_build_unified where a
+                  comma-separated run of equivalents held a word and its own
+                  passive or nominalisation ('ahu, ahutia, ahuna'). The run is
+                  the source's; which members are derivations is our
+                  segmentation, so these are the table's only `derived = 1`
+                  rows and the only ones below `certain`.
     te_matatiki   entries with two or more resolved component cross-references
                   — 'Ahopae [aho W.3 "line" pae W.244 "horizontal ridges"]'.
                   Order is the order the source printed them.
@@ -60,11 +68,30 @@ def collect_derivations(con):
     rows = []
     first = _first_sense(con)
 
-    # ── Williams: a sub-entry and the base whose paragraph printed it ────────
-    for eid, child, base_eid, base_form in con.execute(
-            "SELECT r.entry_id, e.headword, r.target_entry_id, r.target_headword "
+    # ── derived_from: a word and the base it was formed from ─────────────────
+    # Two sources write this relation and their warrants differ. Williams
+    # PRINTS the derivative inside its base entry's paragraph, so the pairing
+    # is the source's own statement. ngata only lists both in one
+    # comma-separated run; 50_build_unified's suffix rules matched the
+    # spellings. That is segmentation, which is what `derived` separates —
+    # and the longest-base rule makes the match good rather than certain
+    # ('patu' + '-kia' also fits 'pātukia', really 'pātuki' + '-a').
+    WARRANT = {
+        "williams": ("williams: printed under this base entry", 0, "certain"),
+        "ngata":    ("ngata: printed in one run with its base", 1, "probable"),
+    }
+    for src, eid, child, base_eid, base_form in con.execute(
+            "SELECT e.source_id, r.entry_id, e.headword, r.target_entry_id, "
+            "       r.target_headword "
             "  FROM relation r JOIN entry e ON e.id = r.entry_id "
             " WHERE r.rel_type = 'derived_from' AND r.target_entry_id IS NOT NULL"):
+        warrant = WARRANT.get(src)
+        if warrant is None:
+            # A source that starts writing derived_from without a warrant
+            # recorded here would otherwise inherit whichever label sat in
+            # this block — the very defect this mapping replaces.
+            continue
+        evidence, derived, confidence = warrant
         process, affix = describe_derivation(normalise_search_key(child),
                                              normalise_search_key(base_form))
         rows.append({
@@ -72,8 +99,8 @@ def collect_derivations(con):
             "base_entry_id": base_eid, "base_sense_id": first.get(base_eid),
             "base_form": base_form, "base_gloss": None,
             "position": None, "process": process, "affix": affix,
-            "evidence": "williams: printed under this base entry",
-            "derived": 0, "confidence": "certain",
+            "evidence": evidence,
+            "derived": derived, "confidence": confidence,
         })
 
     # ── Te Matatiki and Paekupu: components of a coined term, in order ───────

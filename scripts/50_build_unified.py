@@ -924,9 +924,27 @@ def _wakareo_en_mi(con, b, table):
             _add_suffix_forms(b, eid, suffix_forms.strip_suffix_notation(mi),
                               raw_suffixes, source)
             siblings.append((eid, mi))
-        for eid, _ in siblings:
+        # The run holds derivations and synonyms together, and `pairs` above
+        # already separated them. Cross-filing the whole run as synonyms says
+        # 'ahu' means the same as 'ahutia', which it does not — one is the
+        # other's passive. Only the pairs the suffix rules did NOT claim are
+        # synonyms of each other.
+        bases_of = {}
+        for base, derived, _suffix in pairs:
+            bases_of.setdefault(derived, set()).add(base)
+        for eid, mi in siblings:
             for other_eid, other_mi in siblings:
-                if other_eid != eid:
+                if other_eid == eid:
+                    continue
+                if other_mi in bases_of.get(mi, ()):
+                    b.add_relation(eid, "derived_from", other_mi, other_eid)
+                elif mi in bases_of.get(other_mi, ()):
+                    # The inverse of a derived_from already written from the
+                    # other end. derivation.base_entry_id is indexed, so the
+                    # pair reads from either side without a second row, and
+                    # no rel_type says 'has a derived form'.
+                    continue
+                else:
                     b.add_relation(eid, "synonym", other_mi, other_eid)
 
 

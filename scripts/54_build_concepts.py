@@ -211,8 +211,16 @@ _JUDGED = ("confirmed", "rejected")
 def _derived_long(con):
     """Member keys whose word is formed on a base carrying a long vowel.
 
-    derivation (D38) is attested word formation, so where it says hōmai is
-    hō + mai the macron is settled by morphology rather than by a vote.
+    Attested word formation settles this: where a source itself says hōmai is
+    hō + mai, the macron follows from morphology rather than from a vote.
+
+    Restricted to derived = 0 for that reason. ngata's 4,646 rows are our
+    segmentation of a comma-separated run, not the source's pairing, and they
+    carry 'probable' — good enough to record, not good enough to settle a
+    spelling that propagates into the app's canonical headword. Dropping them
+    here changes no election today: all 1,195 with a macronised base were
+    measured against the pre-change database and moved zero of 91,140 elected
+    headwords (tests/test_derived_long_scope.py).
 
     The test fixture (_fixture_db in tests/test_concept_build.py) has no
     derivation table, so this query is guarded the same way utils._has_table
@@ -224,7 +232,8 @@ def _derived_long(con):
     try:
         rows = con.execute(
             "SELECT e.source_id, e.source_entry_id, d.base_form "
-            "  FROM derivation d JOIN entry e ON e.id = d.entry_id")
+            "  FROM derivation d JOIN entry e ON e.id = d.entry_id "
+            " WHERE d.derived = 0")
     except sqlite3.OperationalError:
         return out
     for src, seid, base in rows:
