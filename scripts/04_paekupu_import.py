@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import normalise_sort_key, normalise_search_key, compute_content_hash
+from suffix_forms import strip_suffix_notation
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -135,7 +136,10 @@ def _build_row(r: dict, now: str) -> tuple:
         r["slug"],
         hw,
         normalise_sort_key(hw),
-        normalise_search_key(hw),
+        # 'ahu ~nga' keys as 'ahu'. The headword column keeps the source's own
+        # spelling; only the matching key is built from the bare word, or the
+        # entry can never meet the plain 'ahu' four other sources hold.
+        normalise_search_key(strip_suffix_notation(hw)),
         r.get("headword_en"),
         r.get("part_of_speech"),
         r.get("pos_mi"),
@@ -298,7 +302,7 @@ def refresh_import(conn: sqlite3.Connection, records: list[dict]) -> None:
             (
                 r["headword"],
                 normalise_sort_key(r["headword"]),
-                normalise_search_key(r["headword"]),
+                normalise_search_key(strip_suffix_notation(r["headword"])),
                 r.get("headword_en"),
                 r.get("part_of_speech"),
                 r.get("pos_mi"),

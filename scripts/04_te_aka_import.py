@@ -28,6 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from utils import normalise_sort_key, normalise_search_key, compute_content_hash, \
     load_source_abbrevs, expand_citations
+from suffix_forms import strip_suffix_notation
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -172,7 +173,8 @@ def _build_row(entry: dict, now: str) -> tuple:
         entry["word_id"],
         entry["headword"],
         normalise_sort_key(entry["headword"]),
-        normalise_search_key(entry["headword"]),
+        # 'āmine (-tia)' keys as 'amine' — see the paekupu importer.
+        normalise_search_key(strip_suffix_notation(entry["headword"])),
         entry.get("part_of_speech"),
         entry.get("definition"),
         json.dumps(entry.get("senses") or [], ensure_ascii=False),
@@ -335,7 +337,7 @@ def refresh_import(conn: sqlite3.Connection, entries: list[dict]) -> None:
             (
                 e["headword"],
                 normalise_sort_key(e["headword"]),
-                normalise_search_key(e["headword"]),
+                normalise_search_key(strip_suffix_notation(e["headword"])),
                 e.get("part_of_speech"),
                 e.get("definition"),
                 json.dumps(e.get("senses") or [], ensure_ascii=False),
