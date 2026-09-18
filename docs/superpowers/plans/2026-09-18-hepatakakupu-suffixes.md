@@ -465,11 +465,28 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 - Consumes: `hepatakakupu_entries.suffixes` from Task 3, and these, already
   shipped in `scripts/50_build_unified.py`:
   - `_add_suffix_forms(b, entry_id, headword, suffixes, source)` — classifies
-    each suffix (folding at the lookup site), composes it against `headword`,
+    each suffix as `classify(fold(suffix))`, composes it against `headword`,
     writes through `add_form`, and increments `b.derived_forms_written` only
     when a row actually lands
-  - `b.suffix_tally` — the `Tally` the refusal report prints from
+  - `b.suffix_tally` — a `suffix_forms.Tally` with `.seen` (int),
+    `.refused` (list), `.keep()` and `.refuse(token)`
   - `jload(text)` — the file's JSON-array helper
+- Produces: `_add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None)`
+  — the same function with one optional trailing parameter.
+
+**Read this before Step 1 — it is why the signature changes.** The `Tally` is
+populated by the READERS, not by `_add_suffix_forms`. Every shipped source
+threads `b.suffix_tally` into its reader call (`read_paren_suffixes(hw,
+b.suffix_tally)` and friends). **hepatakakupu has no reader at unify** — its
+suffixes arrive already parsed in the `suffixes` column. So without a change,
+`_add_suffix_forms` tallies nothing and hepatakakupu's refusal report prints
+`0 seen, 22,882 written, 0 refused`, defeating the spec §6 requirement for the
+largest source in the corpus.
+
+`_add_suffix_forms` is the right home for the tally because it is already the
+place that classifies. **The parameter must stay optional and only
+`build_hepatakakupu` may pass it** — the other six tally in their readers, and
+passing it from them too would double-count.
 - Produces: ~22,882 `form` rows with `source_id = 'hepatakakupu'`.
 
 **The headword needs no stripping.** hepatakakupu writes its suffixes in a
@@ -565,15 +582,38 @@ class HepatakakupuSuffixes(unittest.TestCase):
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `py -m pytest tests/test_hepataka_wiring.py -v`
-Expected: `test_a_malformed_suffix_writes_nothing_but_is_counted` FAILS —
-`_add_suffix_forms` does not populate a tally the test can read, or the
-attribute name differs.
+Expected: `test_a_malformed_suffix_writes_nothing_but_is_counted` FAILS,
+because nothing tallies — `_add_suffix_forms` has no `tally` parameter yet.
+The other three tests should pass already.
 
-**Before changing anything, read `_add_suffix_forms` and the `Tally` class in
-`scripts/50_build_unified.py` and `scripts/suffix_forms.py`.** They shipped on
-2026-09-18. Adjust this test to the real attribute names rather than changing
-the shipped helper — the other three tests must pass as written. Say in your
-report what the real names are.
+- [ ] **Step 2a: Add the optional tally to `_add_suffix_forms`**
+
+In `scripts/50_build_unified.py`, change the signature and the loop:
+
+```python
+def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
+```
+
+and inside the loop, immediately after `form_type` is computed:
+
+```python
+    for suffix in suffixes or []:
+        form_type = suffix_forms.classify(suffix_forms.fold(suffix))
+        # Only hepatakakupu passes a tally. The other six sources count their
+        # tokens inside the reader that produced them; hepatakakupu has no
+        # reader here, because its suffixes arrive already parsed in the
+        # `suffixes` column. Passing a tally from the other six would
+        # double-count.
+        if tally is not None:
+            if form_type:
+                tally.keep()
+            else:
+                tally.refuse(suffix)
+        if not form_type:
+            continue
+```
+
+Leave the rest of the function, and every existing call site, untouched.
 
 - [ ] **Step 3: Add `suffixes` to the SELECT**
 
@@ -604,7 +644,8 @@ Immediately after the existing `eid = b.add_entry(...)` call in that loop:
         # already bare — no strip_suffix_notation, unlike paekupu. Each row
         # here is one SENSE and mints its own entry, so these forms do not
         # collapse across a word's senses.
-        _add_suffix_forms(b, eid, hw, jload(suffixes), "hepatakakupu")
+        _add_suffix_forms(b, eid, hw, jload(suffixes), "hepatakakupu",
+                          b.suffix_tally)
 ```
 
 - [ ] **Step 5: Run the wiring tests**
