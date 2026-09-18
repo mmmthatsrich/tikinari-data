@@ -57,6 +57,7 @@ from temarareo_gloss import build_raw, clean_definition, dedupe_species
 from wakareo_records import (drop_truncated_tail, example_owners,
                             parse_derivation, parse_tregear)
 from sweep_patch import apply_patches
+import suffix_forms
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -141,6 +142,30 @@ def _merge_form_note(existing, incoming):
         if source and source not in sources:
             sources.append(source)
     return f"{old.group(1)} ({', '.join(sources)})"
+
+
+def _add_suffix_forms(b, entry_id, headword, suffixes, source):
+    """Write one form row per known suffix, composed against *headword*.
+
+    An unrecognised suffix writes nothing: classify() is the only thing
+    separating a real ending from kimikupu_hou's chemistry and the typos in
+    the sources' own text.
+    """
+    for suffix in suffixes or []:
+        form_type = suffix_forms.classify(suffix)
+        if not form_type:
+            continue
+        b.add_form(entry_id, suffix_forms.compose(headword, suffix),
+                   form_type, f"{suffix} ({source})")
+
+
+def _add_derived_forms(b, entry_id, triples, source):
+    """Write form rows for (base, derived, suffix) triples, stored whole."""
+    for _base, derived, suffix in triples or []:
+        form_type = suffix_forms.classify(suffix)
+        if not form_type:
+            continue
+        b.add_form(entry_id, derived, form_type, f"{suffix} ({source})")
 
 
 class Builder:
@@ -351,6 +376,9 @@ def build_williams(con, b):
                           locator=f"p{pg}/{sec}" if pg else sec,
                           material={"hw": hw, "pos": pos, "def": d,
                                     "ex": examples, "xr": jload(xr)})
+        _add_derived_forms(
+            b, eid, suffix_forms.read_williams_passives(hw, d or ""),
+            "williams")
         # Williams marks a variant with '=' at the head of an entry
         # ('Ahine. = wahine.'). 611 such entries carried no relation at all and
         # the POS behind the marker stayed stranded in the gloss.
@@ -450,6 +478,10 @@ def build_te_aka(con, b):
                           locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def": d, "ex": examples,
                                     "syn": jload(syn), "filt": jload(filt)})
+        # te_aka marks the suffix after the POS and again at the head of each
+        # sense's definition. Both name the same forms; add_form dedups.
+        _add_suffix_forms(b, eid, suffix_forms.strip_suffix_notation(hw),
+                          suffix_forms.read_paren_suffixes(hw), "te_aka")
 
         # Explode the structured senses into per-sense rows, each with its own POS
         # and examples. Drop exact-duplicate senses (some source entries repeat the
@@ -471,6 +503,10 @@ def build_te_aka(con, b):
             sid = b.add_sense(eid, out_no, s.get("gloss_en"), None,
                               s.get("definition_raw"),
                               part_of_speech=s.get("part_of_speech"))
+            _add_suffix_forms(
+                b, eid, suffix_forms.strip_suffix_notation(hw),
+                suffix_forms.read_paren_suffixes(s.get("definition_raw") or ""),
+                "te_aka")
             if first_sid is None:
                 first_sid = sid
             for i, ex in enumerate(s.get("examples") or []):
@@ -591,6 +627,10 @@ def build_paekupu(con, b):
         # the Māori term was coined for. That headword IS the gloss; without this
         # projection 13,050 senses hold POS and nothing else (D1).
         sid = b.add_sense(eid, None, d or hen, dmi, raw, part_of_speech=pos)
+        # The suffix is written into the headword ('ahu ~nga'); compose against
+        # the bare word, which is also what the importer now keys on.
+        _add_suffix_forms(b, eid, suffix_forms.strip_suffix_notation(hw),
+                          suffix_forms.read_tilde_suffixes(hw), "paekupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         # alternative_words are not alternative spellings. A dashed item is a
@@ -637,6 +677,11 @@ def build_papakupu(con, b):
         # first example onward so example text never bleeds into the gloss.
         gloss = clean_gloss(d, [e.get("text_mi") for e in examples])
         sid = b.add_sense(eid, sn, gloss, None, d, part_of_speech=pos)
+        base = suffix_forms.strip_suffix_notation(hw)
+        _add_suffix_forms(b, eid, base,
+                          suffix_forms.read_bracket_suffixes(hw), "papakupu")
+        _add_suffix_forms(b, eid, base,
+                          suffix_forms.read_tilde_suffixes(d or ""), "papakupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)
@@ -743,9 +788,10 @@ def _wakareo_en_mi(con, b, table):
     # body_text, not body_raw: the archive keeps the source HTML, the app surface
     # must not. NULL there means the body held nothing but the lemma.
     sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
-           f"equivalents, qualifier, example_en, example_mi, body_text "
+           f"equivalents, qualifier, example_en, example_mi, body_text, body_raw "
            f"FROM {table} ORDER BY id")
-    for (seid, wid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw) in con.execute(sql):
+    for (seid, wid, lemma_en, pos, scope, equivs, qual, ex_en, ex_mi, raw,
+         body_raw) in con.execute(sql):
         # Wakareo caps this run at 50 characters, so the last equivalent can be
         # a fragment: 'atawhai, atawhait' is 'atawhaitia' cut short. Minting an
         # entry for 'whakah' asserts a word the source never did (D31).
@@ -761,6 +807,12 @@ def _wakareo_en_mi(con, b, table):
         # entry whose headword it never contains.
         owners = set(example_owners(equivalents, ex_mi))
         siblings = []
+        # ngata prints a base and its derived form in one comma-separated run;
+        # the equivalents list is already that run, parsed. Only the spellings
+        # say which pairs are derivations rather than synonyms.
+        source = table.replace("_entries", "")
+        pairs = suffix_forms.derived_from_list(equivalents)
+        raw_suffixes = suffix_forms.read_paren_suffixes(body_raw or "")
         for i, mi in enumerate(equivalents, start=1):
             # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
             eid = b.add_entry(
@@ -772,6 +824,15 @@ def _wakareo_en_mi(con, b, table):
                 b.add_example(sid, eid, ex_mi, ex_en, None, None, 0)
             for v in variants:
                 b.add_form(eid, v, "variant")
+            for base, derived, suffix in pairs:
+                if base == mi:
+                    form_type = suffix_forms.classify(suffix)
+                    if form_type:
+                        b.add_form(eid, derived, form_type,
+                                   f"{suffix} ({source})")
+            # kimikupu_hou marks the suffix inside <B> in the raw body; its
+            # body_text column is empty for 2,823 of 2,831 rows.
+            _add_suffix_forms(b, eid, mi, raw_suffixes, source)
             siblings.append((eid, mi))
         for eid, _ in siblings:
             for other_eid, other_mi in siblings:
