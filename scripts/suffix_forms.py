@@ -116,6 +116,14 @@ _TILDE_TOKEN = re.compile(r"~\s*([a-zāēīōū]+)", re.I)
 _BRACKET_GROUP = re.compile(r"\[\s*((?:-\s*[a-zāēīōū]+\s*,?\s*)+)\]", re.I)
 _HYPHEN_TOKEN = re.compile(r"-\s*([a-zāēīōū]+)", re.I)
 
+# A tilde run reaching to the next tilde or the end of the string. The whole
+# form may be several words ('~kawea atu') or hyphenated ('~tāpiritia-atu'),
+# so _TILDE_TOKEN — which stops at the first non-letter — cannot express it.
+_TILDE_RUN = re.compile(r"~\s*([^~]+)")
+# papakupu separates its runs with commas and at least once a semicolon; a
+# run must never swallow the word after the separator.
+_RUN_TAIL = re.compile(r"\s*[,;].*$", re.S)
+
 
 def _keep_known(raw_tokens, tally=None):
     """Normalise to '-xxx' for the vocabulary LOOKUP only; drop everything
@@ -189,6 +197,69 @@ def read_bracket_suffixes(text, tally=None):
     out = []
     for group in _BRACKET_GROUP.finditer(text or ""):
         out.extend(_keep_known(_HYPHEN_TOKEN.findall(group.group(1)), tally))
+    return out
+
+
+def _classify_whole(word):
+    """The longest vocabulary suffix *word* ends with, and its class.
+
+    Unlike _keep_known, which matches a whole token against the vocabulary,
+    this asks what a COMPLETE word ends with: 'kūtia' is not the suffix
+    '-tia' but a word carrying it. Longest match first, so 'tākina' reads
+    '-kina' rather than '-ina'.
+
+    A word that is nothing but the suffix is refused: a bare '~ia' has no
+    stem in front of it, so there is no word for it to be a derivation of.
+    """
+    folded = fold(word)
+    for suffix in sorted(PASSIVE + NOMINALISATION, key=len, reverse=True):
+        ending = suffix[1:]
+        if len(folded) > len(ending) and folded.endswith(ending):
+            return suffix, classify(suffix)
+    return None, None
+
+
+def read_whole_forms(headword):
+    """[(form, suffix, form_type)] for each tilde run naming a WHOLE word.
+
+    paekupu prints a whole irregular derivation after a tilde where no
+    fragment could express it — the stem itself changes:
+
+        hau    -> hāua      the vowel lengthens
+        kukuti -> kūtia     the stem contracts
+        momotu -> motukia   the reduplication is undone
+
+    A run whose first element IS a known suffix is left alone:
+    read_tilde_suffixes owns those, and returning '-nga' here would write a
+    fragment into the form column as though it were a word.
+
+    The suffix is read off the run's FIRST element, split on whitespace or
+    hyphen, because the form may carry a directional particle: 'kawea atu'
+    ends in 'tu', which is not a suffix, while its first element 'kawea'
+    ends in '-a', which is.
+
+    Takes no tally, deliberately. Every run here has already been seen and
+    refused by read_tilde_suffixes on the same headword — _TILDE_TOKEN
+    matches '~hāua' and _keep_known refuses it — so tallying again would
+    count each token twice. The consequence is that the refusal report still
+    lists these sixteen as refused; the report is a diagnostic, not data,
+    and reconciling it belongs with the known Tally defect rather than here.
+
+    See docs/superpowers/specs/2026-09-19-irregular-whole-forms-design.md.
+    """
+    out = []
+    for match in _TILDE_RUN.finditer(headword or ""):
+        run = _RUN_TAIL.sub("", match.group(1)).strip()
+        if not run:
+            continue
+        # '(~nga)' leaves the paren riding on the token; strip it before the
+        # vocabulary lookup or a known suffix reads as an unknown word.
+        head = re.split(r"[\s\-]", run)[0].strip("().,;")
+        if classify("-" + fold(head)):
+            continue
+        suffix, form_type = _classify_whole(head)
+        if form_type:
+            out.append((run, suffix, form_type))
     return out
 
 
