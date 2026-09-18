@@ -3,9 +3,16 @@
 **Status:** design, 2026-09-17
 **Amends:** `05_hepataka_parse.py`; the `hepatakakupu_entries` schema
 **Depends on:** `2026-09-17-suffix-forms-design.md` §2 — the storage
-contract, the 22-suffix vocabulary, and the refusal rule are defined there
-and are not restated here. **That spec ships first**; this one writes into
-the `form_type` values it establishes.
+contract, the vocabulary, and the refusal rule are defined there and are
+not restated here. **That spec has shipped** (12,095 rows from six sources,
+merged 2026-09-18); this one writes into the `form_type` values it
+established, reusing `scripts/suffix_forms.py` — `classify`, `compose`,
+`fold` — and the `Tally` refusal report built alongside it.
+
+The shipped vocabulary is **23** suffixes, not the 22 this document was
+drafted against: `-hina` was added after the refusal report exposed it in
+te_aka. It does not occur in hepatakakupu, so every count below is
+unaffected — hepatakakupu exercises 22 of the 23.
 **Why separate:** hepatakakupu is 71% of the corpus-wide suffix data and the
 only source whose recovery needs a parser rewrite and a re-parse. Its six
 siblings need neither. Bundling them would have made one plan where the
@@ -37,8 +44,9 @@ The element it is reading looks like this, from `sources/hepataka/raw/100.html`:
 
 The regex takes `[Tūmatauenga]` and the five suffixes in front of it are
 discarded. **Every suffix hepatakakupu records is lost at this line.** Of
-24,941 rows in `hepatakakupu_entries`, 24 carry anything resembling a suffix,
-and those arrived by other accidents.
+24,941 rows in `hepatakakupu_entries`, **3** contain a known suffix token
+anywhere, and all three are incidental hyphenated text inside a definition —
+not one recorded suffix survives the parse.
 
 The data is not gone. All 14,996 raw pages are on disk and intact — **no
 re-scrape is needed**, only a re-parse.
@@ -116,8 +124,10 @@ re-import. No network access.
 
 **Extraction.** `50_build_unified.py` reads `suffixes`, composes each token
 against the headword, classifies it per the companion spec's §2, and writes
-`form` rows — the same code path the six sibling sources use. hepatakakupu
-contributes a reader and nothing more.
+`form` rows through `_add_suffix_forms` — the same code path the six sibling
+sources already use, including the `Tally` that reports tokens seen, rows
+written and tokens refused. hepatakakupu contributes a reader and nothing
+more.
 
 ---
 
