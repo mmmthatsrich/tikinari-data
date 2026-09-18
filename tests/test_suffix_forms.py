@@ -227,6 +227,22 @@ class NgataEquivalentList(unittest.TestCase):
     def test_a_single_item_run_yields_nothing(self):
         self.assertEqual(derived_from_list(["whakaranu"]), [])
 
+    def test_a_shorter_base_does_not_steal_a_later_candidate(self):
+        # ngata_entries id 66052, 'Assault'. 'patu' + '-kia' also fits
+        # 'pātukia', but that word is really 'pātuki' + '-a'; only the
+        # longest matching base is kept.
+        self.assertEqual(
+            derived_from_list(["patu", "patua", "pātuki", "pātukia"]),
+            [("patu", "patua", "-a"), ("pātuki", "pātukia", "-a")])
+
+    def test_a_tie_in_base_length_keeps_both(self):
+        # ngata_entries id 82648. 'kī' and 'ki' are the same word spelled
+        # two ways, both equally long, so both derivations of 'kiia' stand.
+        result = derived_from_list(["kī", "ki", "kiia"])
+        self.assertIn(("kī", "kiia", "-ia"), result)
+        self.assertIn(("ki", "kiia", "-ia"), result)
+        self.assertEqual(len(result), 2)
+
 
 class WilliamsProse(unittest.TestCase):
     """williams_entries.definition marks the passive in running prose."""

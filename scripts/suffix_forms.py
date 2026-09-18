@@ -152,14 +152,28 @@ def derived_from_list(forms):
 
     The run is NOT assumed to be ordered base-then-derived, because ngata
     interleaves pairs; each earlier form is tested against each later one.
+
+    A shorter, unrelated base can still accidentally fit a later candidate:
+    in 'patu, patua, pātuki, pātukia' (WR-HMN, 'Assault'), 'patu' + '-kia'
+    also matches 'pātukia', but that word is really 'pātuki' + '-a' — a
+    derivation the source never recorded. When more than one base matches
+    the same candidate, only the LONGEST base is kept, the same
+    longest-match principle the module already applies to suffixes. Bases
+    tied in length ('kī' and 'ki', the same word spelled two ways) are both
+    kept rather than picking one arbitrarily.
     """
     out = []
     items = [f for f in (forms or []) if isinstance(f, str) and f.strip()]
+    by_candidate = {}
     for i, base in enumerate(items):
-        for candidate in items[i + 1:]:
+        for j in range(i + 1, len(items)):
+            candidate = items[j]
             suffix = derived_pair(base, candidate)
             if suffix:
-                out.append((base, candidate, suffix))
+                by_candidate.setdefault(j, []).append((base, candidate, suffix))
+    for group in by_candidate.values():
+        longest = max(len(base) for base, _, _ in group)
+        out.extend(triple for triple in group if len(triple[0]) == longest)
     return out
 
 
