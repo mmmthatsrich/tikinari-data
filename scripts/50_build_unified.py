@@ -114,6 +114,30 @@ def split_cite(s):
     return (s[:m.start()].strip() + (m.group(2) or "")), m.group(1)
 
 
+_FORM_NOTE = re.compile(r"^(.*?)\s*\(([^)]*)\)\s*$")
+
+
+def _merge_form_note(existing, incoming):
+    """Fold a second sighting's provenance into '-tia (te_aka, ngata)'.
+
+    Both notes carry the same suffix, so only the source list grows. A note
+    that does not match the '<suffix> (<sources>)' shape is left alone rather
+    than reformatted — the variant and plural rows predate this convention.
+    """
+    if not incoming or incoming == existing:
+        return existing
+    if not existing:
+        return incoming
+    old, new = _FORM_NOTE.match(existing), _FORM_NOTE.match(incoming)
+    if not (old and new) or old.group(1) != new.group(1):
+        return existing
+    sources = [s.strip() for s in old.group(2).split(",") if s.strip()]
+    for source in (s.strip() for s in new.group(2).split(",")):
+        if source and source not in sources:
+            sources.append(source)
+    return f"{old.group(1)} ({', '.join(sources)})"
+
+
 class Builder:
     """Inserts into the unified core, using autoincrement rowids for FK wiring."""
 
@@ -125,6 +149,7 @@ class Builder:
         self.counts = {t: 0 for t in CORE_TABLES}
         self._lemmas = {}                         # {entry_id: {headword, sort}} for add_form
         self._examples = set()                    # (sense_id, mi, en) already inserted
+        self._forms = {}                          # (entry_id, form_cf, type) -> (rowid, note)
 
     def add_entry(self, source_entry_id, headword, headword_sort, headword_search,
                   pos=None, headword_en=None, loan_marker=None, audio_url=None,
@@ -188,10 +213,24 @@ class Builder:
         # row adds nothing and inflates the app's "has variants" signal.
         if form.casefold() in self._lemmas.get(entry_id, ()):
             return
-        self.con.execute(
+        # One row per (entry, form, type). A derived form is routinely recorded
+        # by several sources, and by several senses within one source; writing
+        # it once per sighting would make the corpus-wide suffix counts report
+        # how often a form was mentioned, not how many forms there are.
+        key = (entry_id, form.casefold(), form_type)
+        if key in self._forms:
+            rowid, existing = self._forms[key]
+            merged = _merge_form_note(existing, note)
+            if merged != existing:
+                self.con.execute("UPDATE form SET note = ? WHERE id = ?",
+                                 (merged, rowid))
+                self._forms[key] = (rowid, merged)
+            return
+        cur = self.con.execute(
             "INSERT INTO form (entry_id, form, form_search, form_type, note) "
             "VALUES (?,?,?,?,?)",
             (entry_id, form, normalise_search_key(form), form_type, note))
+        self._forms[key] = (cur.lastrowid, note)
         self.counts["form"] += 1
 
     def add_relation(self, entry_id, rel_type, target_headword, target_entry_id=None,
