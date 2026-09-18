@@ -22,6 +22,9 @@ from pathlib import Path
 
 from lxml import etree
 
+sys.path.insert(0, str(Path(__file__).parent))
+from hepataka_suffixes import split_strong
+
 sys.stdout.reconfigure(encoding="utf-8")
 
 RAW_DIR    = Path(__file__).parent.parent / "sources" / "hepataka" / "raw"
@@ -91,6 +94,7 @@ def parse_page(html_bytes: bytes, word_id: int) -> list[dict]:
         # ── POS + semantic domain ─────────────────────────────────────────────
         pos: str | None = None
         semantic_domain: str | None = None
+        suffixes: list[str] = []
         def_span = div.find('.//span[@class="def"]')
         if def_span is not None:
             cls_span = def_span.find('.//span[@class="class"]')
@@ -98,9 +102,11 @@ def parse_page(html_bytes: bytes, word_id: int) -> list[dict]:
                 pos = _ws(cls_span.text or "").rstrip(".").strip() or None
             strong = def_span.find("strong")
             if strong is not None:
-                m = re.search(r"\[([^\]]+)\]", strong.text or "")
-                if m:
-                    semantic_domain = m.group(1).strip()
+                # .text, not itertext(): <strong> has a child <span> holding
+                # the part of speech, and .text stops before it. The suffixes
+                # sit in front of the bracketed domain and were discarded
+                # here until now — 22,911 tokens across 14,996 pages.
+                suffixes, semantic_domain = split_strong(strong.text)
 
         # ── definition (Maori description) ────────────────────────────────────
         desc_span = div.find('.//span[@class="description"]')
@@ -160,6 +166,7 @@ def parse_page(html_bytes: bytes, word_id: int) -> list[dict]:
             "headword":        headword,
             "sense_number":    sense_num,
             "semantic_domain": semantic_domain,
+            "suffixes":        suffixes,
             "part_of_speech":  pos,
             "definition":      definition,
             "usage_examples":  usage_examples,
