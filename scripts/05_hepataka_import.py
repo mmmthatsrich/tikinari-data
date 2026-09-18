@@ -49,6 +49,7 @@ _CREATE_SQL = """
         master_word_id   INTEGER,                -- word holding this sense's master definition
         master_sense     INTEGER,                -- which sense of that word
         semantic_domain  TEXT,
+        suffixes         TEXT DEFAULT '[]',      -- JSON array of '-tia' tokens
         definition_mi    TEXT,                   -- unused (no English gloss)
         created_at       TEXT DEFAULT (datetime('now')),
         last_updated     TEXT DEFAULT (datetime('now'))
@@ -84,8 +85,8 @@ _INSERT_SQL = """
         (id, word_id, headword, headword_sort, headword_search,
          part_of_speech, definition, usage_examples,
          sense_number, synonyms, synonym_senses,
-         master_word_id, master_sense, semantic_domain)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         master_word_id, master_sense, semantic_domain, suffixes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 """
 
 
@@ -134,6 +135,7 @@ def main() -> None:
                     r.get("master_word_id"),
                     r.get("master_sense"),
                     r.get("semantic_domain"),
+                    json.dumps(r.get("suffixes") or [], ensure_ascii=False),
                 ))
 
             conn.executemany(_INSERT_SQL, rows)
