@@ -69,7 +69,14 @@ def compose(headword, suffix):
 # Macrons are allowed because papakupu occasionally marks one.
 _TOKEN = r"[-~]\s*([a-zāēīōū]+)"
 
-_PAREN_GROUP = re.compile(r"\(\s*((?:" + _TOKEN + r"\s*,?\s*)+)\)", re.I)
+# A token may carry a trailing '?' (te_aka hedging that the form is not
+# attested: '(-tia?)') and tokens may be joined by ',' or by '/' (te_aka
+# listing attested alternatives: '(-tia / -ngia)'). A parenthetical whose
+# content does not start with '-' or '~' — a qualifier like '(whaka)' or
+# '(rorohiko)' — never matches this pattern at all, hedge-tolerant or not,
+# because the first required character is the marker itself.
+_PAREN_GROUP = re.compile(
+    r"\(\s*((?:" + _TOKEN + r"\??\s*[,/]?\s*)+)\)", re.I)
 _TILDE_TOKEN = re.compile(r"~\s*([a-zāēīōū]+)", re.I)
 _BRACKET_GROUP = re.compile(r"\[\s*((?:-\s*[a-zāēīōū]+\s*,?\s*)+)\]", re.I)
 _HYPHEN_TOKEN = re.compile(r"-\s*([a-zāēīōū]+)", re.I)
@@ -91,8 +98,19 @@ def _keep_known(raw_tokens):
 
 
 def read_paren_suffixes(text):
-    """['-a', '-hia'] from '(-a,-hia) to be able' or 'āmine (-tia)'."""
+    """['-a', '-hia'] from '(-a,-hia) to be able' or 'āmine (-tia)'.
+
+    A '?' inside the group is te_aka hedging that it is not sure the form is
+    attested ('hakarameta (-tia?)'): the group still counts as suffix
+    notation for stripping the search key (strip_suffix_notation removes it
+    either way), but no form is asserted here — this module reports only
+    what the source shows, and a hedge is not a claim. A '/' separates
+    alternatives the source DOES assert ('kihi (-tia / -ngia)'), and both
+    are returned.
+    """
     for group in _PAREN_GROUP.finditer(text or ""):
+        if "?" in group.group(1):
+            continue
         found = _keep_known(_HYPHEN_TOKEN.findall(group.group(1)))
         if found:
             return found

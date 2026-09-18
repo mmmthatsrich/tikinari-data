@@ -125,6 +125,22 @@ class ParenNotation(unittest.TestCase):
     def test_an_english_gloss_mentioning_pass_is_not_a_suffix(self):
         self.assertEqual(read_paren_suffixes("to pass. (see also)"), [])
 
+    def test_a_hedged_suffix_strips_but_asserts_nothing(self):
+        # te_aka marks '(-tia?)' where it is not sure the passive is
+        # attested. The key must still be built from the bare word (spec
+        # §5), but no form is recorded: reporting 'hakarametatia' as a
+        # passive would assert something the source declined to.
+        self.assertEqual(
+            strip_suffix_notation("hakarameta (-tia?)"), "hakarameta")
+        self.assertEqual(read_paren_suffixes("hakarameta (-tia?)"), [])
+
+    def test_slash_separated_alternatives_are_both_asserted(self):
+        # 'kihi (-tia / -ngia)' lists two attested alternatives, with no
+        # hedge, so both are returned.
+        self.assertEqual(strip_suffix_notation("kihi (-tia / -ngia)"), "kihi")
+        self.assertEqual(
+            read_paren_suffixes("kihi (-tia / -ngia)"), ["-tia", "-ngia"])
+
 
 class TildeNotation(unittest.TestCase):
     """paekupu and papakupu: '~nga' standing for headword + -nga. Verbatim
@@ -216,6 +232,20 @@ class StripNotation(unittest.TestCase):
         self.assertEqual(strip_suffix_notation("kukuti ~nga ~kūtia"),
                          "kukuti")
         self.assertEqual(read_tilde_suffixes("kukuti ~nga ~kūtia"), ["-nga"])
+
+    def test_a_parenthetical_qualifier_is_not_suffix_notation(self):
+        # '(whaka)' is a causative prefix marker, not a suffix group -- its
+        # content does not start with '-' or '~', so it must never match the
+        # paren-suffix pattern. Stripping it would key 'whakamoe' (a
+        # causative) the same as its base 'moe': a different word wrongly
+        # merged, exactly what this module must not do.
+        self.assertEqual(strip_suffix_notation("(whaka) moe ~a"),
+                         "(whaka) moe")
+        self.assertEqual(read_paren_suffixes("(whaka) moe ~a"), [])
+
+    def test_a_parenthetical_domain_note_is_not_suffix_notation(self):
+        self.assertEqual(strip_suffix_notation("tāhono (rorohiko) ~a"),
+                         "tāhono (rorohiko)")
 
 
 from suffix_forms import composition_bases
