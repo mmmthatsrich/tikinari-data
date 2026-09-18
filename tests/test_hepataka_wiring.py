@@ -82,3 +82,175 @@ class HepatakakupuSuffixes(unittest.TestCase):
                                         "hepatakakupu")
         self.assertIn(("tūkinotia", "passive", "-tia (hepatakakupu)"),
                       self._rows())
+
+
+class HepatakaBases(unittest.TestCase):
+    """_hepataka_bases: split a multi-spelling headword, refuse a phrase.
+
+    A comma joins alternative spellings ('tīkona, tīkoina'), both real
+    bases. A parenthesis is different: composition_bases (paekupu's reader)
+    would drop it as a droppable qualifier, but 'hohou (i te) rongo' is the
+    phrase "to make peace" — dropping '(i te)' silently ships a different,
+    wrong word. So a base still carrying a parenthesis after the comma split
+    is refused outright rather than repaired.
+    """
+    def setUp(self):
+        self.tally = build_unified.suffix_forms.Tally()
+
+    def test_a_single_word_is_one_base(self):
+        self.assertEqual(build_unified._hepataka_bases("kake", self.tally),
+                         ["kake"])
+        self.assertEqual(self.tally.refused, [])
+
+    def test_two_comma_joined_spellings_are_two_bases(self):
+        self.assertEqual(
+            build_unified._hepataka_bases("tīkona, tīkoina", self.tally),
+            ["tīkona", "tīkoina"])
+        self.assertEqual(self.tally.refused, [])
+
+    def test_a_parenthesised_sibling_is_refused_but_the_clean_one_survives(self):
+        self.assertEqual(
+            build_unified._hepataka_bases("tautō, tauto(ria)", self.tally),
+            ["tautō"])
+        self.assertEqual(self.tally.refused, ["tauto(ria)"])
+
+    def test_a_phrase_with_a_parenthetical_is_refused_entirely(self):
+        self.assertEqual(
+            build_unified._hepataka_bases("hohou (i te) rongo", self.tally), [])
+        self.assertEqual(self.tally.refused, ["hohou (i te) rongo"])
+
+    def test_a_short_parenthetical_qualifier_is_also_refused(self):
+        self.assertEqual(
+            build_unified._hepataka_bases("mataono (rite)", self.tally), [])
+        self.assertEqual(self.tally.refused, ["mataono (rite)"])
+
+
+def _hepataka_entries_db():
+    """A minimal hepatakakupu_entries table plus the unified-core tables
+    build_hepatakakupu writes through, so build_hepatakakupu itself can be
+    driven end to end — not just _add_suffix_forms in isolation.
+    """
+    con = _memory_db()
+    con.executescript("""
+        CREATE TABLE hepatakakupu_entries (
+            id INTEGER PRIMARY KEY, word_id INTEGER, headword TEXT,
+            headword_sort TEXT, headword_search TEXT, part_of_speech TEXT,
+            definition TEXT, usage_examples TEXT, sense_number INTEGER,
+            synonyms TEXT, synonym_senses TEXT, master_word_id INTEGER,
+            master_sense INTEGER, semantic_domain TEXT, suffixes TEXT);
+        CREATE TABLE sense (
+            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
+            parent_sense_id INTEGER, gloss_en TEXT, gloss_mi TEXT,
+            definition_raw TEXT, register TEXT, part_of_speech TEXT,
+            note TEXT);
+        CREATE TABLE example (
+            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
+            text_mi TEXT, text_en TEXT, source_abbrev TEXT, citation TEXT,
+            sort_no INTEGER);
+        CREATE TABLE relation (
+            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
+            target_headword TEXT, target_entry_id INTEGER, note TEXT,
+            target_sense_id INTEGER);
+        CREATE TABLE entry_domain (
+            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
+            domain TEXT, domain_lang TEXT);
+    """)
+    return con
+
+
+class BuildHepatakakupuEndToEnd(unittest.TestCase):
+    """Drives build_hepatakakupu itself, end to end, against an in-memory
+    hepatakakupu_entries table — not just _add_suffix_forms in isolation.
+
+    Every other test in this file calls _add_suffix_forms directly, so none
+    of them would notice a reordered SELECT, a suffixes column landing in
+    the wrong tuple position, a dropped b.suffix_tally at the call site, or
+    hw accidentally routed through strip_suffix_notation. This is the one
+    test where build_hepatakakupu's own code runs.
+    """
+    def setUp(self):
+        self.con = _hepataka_entries_db()
+        self.con.executemany(
+            "INSERT INTO hepatakakupu_entries "
+            "(id, word_id, headword, headword_sort, headword_search, "
+            "part_of_speech, definition, usage_examples, sense_number, "
+            "synonyms, synonym_senses, master_word_id, master_sense, "
+            "semantic_domain, suffixes) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [(10281, 500, "kake", "kake", "kake", None, "to climb", "[]",
+              1, "[]", "[]", None, None, None, '["-a", "-nga"]'),
+             (25391, 500, "kake", "kake", "kake", None, "to ascend by", "[]",
+              2, "[]", "[]", None, None, None, "[]")])
+        self.b = build_unified.Builder(self.con, "hepatakakupu", None, {})
+
+    def test_suffixes_reach_the_form_table_through_the_real_builder(self):
+        build_unified.build_hepatakakupu(self.con, self.b)
+        rows = self.con.execute(
+            "SELECT e.source_entry_id, f.form, f.form_type, f.note "
+            "FROM form f JOIN entry e ON e.id = f.entry_id ORDER BY 1, 2"
+        ).fetchall()
+        self.assertEqual(rows, [
+            ("10281", "kakea", "passive", "-a (hepatakakupu)"),
+            ("10281", "kakenga", "nominalisation", "-nga (hepatakakupu)"),
+        ])
+
+    def test_the_second_sense_carries_no_forms_of_its_own(self):
+        build_unified.build_hepatakakupu(self.con, self.b)
+        n = self.con.execute(
+            "SELECT COUNT(*) FROM form f JOIN entry e ON e.id = f.entry_id "
+            "WHERE e.source_entry_id = ?", ("25391",)).fetchone()[0]
+        self.assertEqual(n, 0)
+
+    def test_the_tally_is_threaded_through_not_dropped(self):
+        # This is the assertion the brief's own broken test could not make:
+        # it is the one thing a missing b.suffix_tally at the call site
+        # would break while every other assertion in this file stayed green.
+        build_unified.build_hepatakakupu(self.con, self.b)
+        self.assertEqual(self.b.suffix_tally.seen, 2)
+        self.assertEqual(self.b.suffix_tally.refused, [])
+
+
+class BuildHepatakakupuMultiBaseHeadwords(unittest.TestCase):
+    """Regression coverage for the malformed rows a multi-base or
+    parenthetical headword used to ship before _hepataka_bases: a comma or
+    a phrase's parenthesis composing straight into the stored form
+    ('tīkona, tīkoinanga', 'hohou (i te) rongohia').
+    """
+    def setUp(self):
+        self.con = _hepataka_entries_db()
+        self.con.executemany(
+            "INSERT INTO hepatakakupu_entries "
+            "(id, word_id, headword, headword_sort, headword_search, "
+            "part_of_speech, definition, usage_examples, sense_number, "
+            "synonyms, synonym_senses, master_word_id, master_sense, "
+            "semantic_domain, suffixes) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [(99001, 600, "tīkona, tīkoina", "tikona, tikoina",
+              "tikona, tikoina", None, "to totter", "[]", 1, "[]", "[]",
+              None, None, None, '["-nga"]'),
+             (99002, 601, "hohou (i te) rongo", "hohou (i te) rongo",
+              "hohou i te rongo", None, "to make peace", "[]", 1, "[]", "[]",
+              None, None, None, '["-hia"]')])
+        self.b = build_unified.Builder(self.con, "hepatakakupu", None, {})
+        build_unified.build_hepatakakupu(self.con, self.b)
+
+    def _rows(self):
+        return self.con.execute(
+            "SELECT form, form_type, note FROM form ORDER BY form").fetchall()
+
+    def test_the_comma_joined_headword_composes_onto_each_spelling_cleanly(self):
+        self.assertEqual(self._rows(), [
+            ("tīkoinanga", "nominalisation", "-nga (hepatakakupu)"),
+            ("tīkonanga", "nominalisation", "-nga (hepatakakupu)"),
+        ])
+
+    def test_no_stored_form_carries_a_comma_or_a_parenthesis(self):
+        bad = [r for r in self._rows() if "," in r[0] or "(" in r[0]]
+        self.assertEqual(bad, [])
+
+    def test_the_phrase_headword_writes_nothing_and_is_refused(self):
+        n = self.con.execute(
+            "SELECT COUNT(*) FROM form f JOIN entry e ON e.id = f.entry_id "
+            "WHERE e.source_entry_id = ?", ("99002",)).fetchone()[0]
+        self.assertEqual(n, 0)
+        self.assertIn("hohou (i te) rongo", self.b.suffix_tally.refused)

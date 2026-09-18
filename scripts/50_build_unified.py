@@ -178,6 +178,35 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
             b.derived_forms_written += 1
 
 
+def _hepataka_bases(headword, tally):
+    """The base(s) hepatakakupu's own `suffixes` column composes onto.
+
+    Almost every hepatakakupu headword is a single word ('kake'), but a
+    handful list alternative spellings joined by a comma ('tīkona,
+    tīkoina') or carry a parenthetical. Unlike paekupu's
+    suffix_forms.composition_bases, a parenthetical here is not a droppable
+    qualifier in general — 'hohou (i te) rongo' is the phrase "to make
+    peace", and composition_bases's rule of dropping '(...)' outright would
+    turn it into 'hohou rongo', a confidently wrong word rather than a
+    visibly malformed one. So: split on commas, and refuse — rather than
+    repair — any resulting base that still carries a parenthesis. This
+    module's rule is to report what the spellings show and return nothing
+    rather than guess, and a phrase passive is exactly the irregular/
+    suppletive case spec §7 carves out.
+
+    Each refused base is tallied the same way an unrecognised suffix is.
+    """
+    bases = []
+    for base in (part.strip() for part in headword.split(",")):
+        if not base:
+            continue
+        if "(" in base or ")" in base:
+            tally.refuse(base)
+            continue
+        bases.append(base)
+    return bases
+
+
 def _add_derived_forms(b, entry_id, triples, source):
     """Write form rows for (base, derived, suffix) triples, stored whole."""
     for _base, derived, suffix in triples or []:
@@ -585,12 +614,21 @@ def build_hepatakakupu(con, b):
         eid = b.add_entry(seid, hw, hs, hse, pos=pos, locator=f"word_id={wid}",
                           material={"hw": hw, "pos": pos, "def_mi": d, "sn": sn,
                                     "ex": examples, "syn": jload(syn), "dom": dom})
-        # hepatakakupu records its suffixes in a separate element, so hw is
-        # already bare — no strip_suffix_notation, unlike paekupu. Each row
-        # here is one SENSE and mints its own entry, so these forms do not
-        # collapse across a word's senses.
-        _add_suffix_forms(b, eid, hw, jload(suffixes), "hepatakakupu",
-                          b.suffix_tally)
+        # hepatakakupu records its suffixes in a separate element, so hw
+        # needs no strip_suffix_notation, unlike paekupu. Each row here is
+        # one SENSE and mints its own entry, so these forms do not collapse
+        # across a word's senses. A headword can still list more than one
+        # base spelling ('tīkona, tīkoina') or carry a phrase's parenthetical
+        # ('hohou (i te) rongo'); _hepataka_bases splits the former and
+        # refuses the latter rather than composing onto it wrongly.
+        suffix_tokens = jload(suffixes)
+        # Tally the suffix tokens once per entry, not once per base: a
+        # second valid base composes the SAME suffix list again, and passing
+        # the tally on every iteration would double-count a kept/refused
+        # suffix for the rare entry with more than one base.
+        for i, base in enumerate(_hepataka_bases(hw, b.suffix_tally)):
+            _add_suffix_forms(b, eid, base, suffix_tokens, "hepatakakupu",
+                              b.suffix_tally if i == 0 else None)
         sid = b.add_sense(eid, sn, None, d, d, part_of_speech=pos)  # monolingual Māori -> gloss_mi
         for i, ex in enumerate(examples):
             text, src = split_src(ex)
