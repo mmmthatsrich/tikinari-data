@@ -299,6 +299,7 @@ He Pātaka Kupu — monolingual Māori dictionary. One row per **sense**, not pe
 | `sense_number` | INTEGER | 1-based; max 19 for highly polysemous words |
 | `synonyms` | TEXT | JSON array of synonym strings |
 | `semantic_domain` | TEXT | Māori deity domain (see below) |
+| `suffixes` | TEXT | `DEFAULT '[]'`; JSON array of suffix tokens as the source wrote them |
 | `definition_mi` | TEXT | NULL — field reserved for future use |
 | `created_at` | TEXT | ISO datetime |
 | `last_updated` | TEXT | ISO datetime |

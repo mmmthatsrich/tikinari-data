@@ -5,9 +5,9 @@ See docs/superpowers/specs/2026-09-17-suffix-forms-design.md.
 
 The vocabulary below was measured, not recalled. It is the complete set of
 well-formed suffix types across hepatakakupu's 22,911 raw tokens, the largest
-sample in the corpus; the nine malformed tokens that measurement also found
-(-bga, -pukenga and friends) are why an unrecognised suffix is refused here
-rather than coerced to the nearest real one.
+sample in the corpus; the eight malformed tokens across seven types that
+measurement also found (-bga, -pukenga and friends) are why an unrecognised
+suffix is refused here rather than coerced to the nearest real one.
 
 This module decides what a string SAYS. It never decides whether a derived
 form exists — the source's own filing does that.
