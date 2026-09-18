@@ -60,7 +60,8 @@ Measured by walking every `span.def > strong` in all 14,996 files:
 | | |
 |---|---|
 | suffix tokens (sense level) | **22,911** |
-| distinct word+suffix pairs (`form` rows) | **14,775** |
+| distinct (sense, suffix) pairs (`form` rows) | **22,881** |
+| distinct (word, suffix) pairs, for comparison | 14,767 |
 | pages carrying at least one suffix | **6,628** of 14,996 (44%) |
 | distinct suffix types | **30** — 22 well-formed, 8 malformed |
 | tokens the 22 well-formed types account for | **22,902** of 22,911 (99.96%) |
@@ -81,11 +82,15 @@ Three facts in that table drive the design.
 where the nominalisation half of the user's counting requirement will
 actually come from.
 
-**The count in the table is not the row count.** 22,911 tokens collapse to
-14,775 distinct word+suffix pairs, because a word's senses repeat its
-suffixes: `kake` has five senses, three of which carry `-a -nga`. `form` is
-keyed on the entry, so the same pair must be written once. **A 36% fall
-between tokens and rows is expected, not a bug** — see §5.
+**The tokens barely collapse, because hepatakakupu mints one entry per
+SENSE.** An earlier draft of this document assumed a 36% fall to 14,767
+word+suffix pairs, reasoning that `form` is keyed on the entry and a word's
+senses repeat its suffixes — `kake` has five senses, three carrying `-a
+-nga`. That reasoning is wrong for this source. `build_hepatakakupu` sets
+`seid = str(id_)`, the sense-row primary key, so each of `kake`'s five
+senses becomes its own `entry` row and each carries its own forms. The
+expected output is therefore **22,881** rows, not 14,767 — the only
+collapse is 30 tokens repeated within a single sense. See §5.
 
 **Fewer than half the pages carry anything.** 8,368 pages have an empty
 `<strong>` or none at all. That is hepatakakupu's own editorial choice, and
@@ -140,7 +145,7 @@ This is the same composition the companion spec defines for te_aka,
 paekupu, papakupu and kimikupu_hou, and it is checked the same way: where
 a hepatakakupu word also appears in ngata or williams — which record the
 derived word whole — the composed form must equal the recorded one.
-hepatakakupu's 14,775 pairs make it the largest contributor to that
+hepatakakupu's 22,881 rows make it the largest contributor to that
 cross-check, so it is the source most likely to expose an irregular form
 that concatenation gets wrong.
 
@@ -161,9 +166,11 @@ supposed to leave alone. **This check comes first**; the suffix counts are
 worthless if the rest of the parse regressed.
 
 **Then the suffix counts**, reported as three numbers per the companion
-spec's §6: 22,911 tokens seen, 14,775 rows written, 9 refused. The gap
-between the first two is the expected sense-level duplication — if tokens
-and rows come out equal, the dedup is not running.
+spec's §6: **22,911 tokens seen, 22,881 rows written, 9 refused.** Because
+each sense mints its own entry, seen and written are expected to be very
+nearly equal here — the 30-row gap is tokens repeated inside one sense. A
+large gap would mean entries are being shared across senses, which would be
+a regression in `build_hepatakakupu`, not a dedup success.
 
 **The empty case is not an error.** 8,368 pages carry no suffix. The reader
 reports that as a count, not as 8,368 warnings.
