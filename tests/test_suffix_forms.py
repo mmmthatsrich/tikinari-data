@@ -197,6 +197,36 @@ class StripNotation(unittest.TestCase):
         self.assertEqual(strip_suffix_notation("ahu ~hīa"), "ahu")
 
 
+from suffix_forms import composition_bases
+
+
+class CompositionBases(unittest.TestCase):
+    """paekupu headwords: one, two, or a compound base, plus a qualifier or
+    note in parens that is never part of the base. Verbatim samples from
+    paekupu_entries.headword."""
+
+    def test_a_single_base(self):
+        self.assertEqual(composition_bases("ahu ~nga"), ["ahu"])
+
+    def test_a_comma_joined_pair_of_spellings_gives_two_bases(self):
+        self.assertEqual(composition_bases("hae, hahae ~a ~nga"),
+                         ["hae", "hahae"])
+
+    def test_a_parenthetical_qualifier_is_not_part_of_the_base(self):
+        self.assertEqual(composition_bases("tāhono (rorohiko) ~a"),
+                         ["tāhono"])
+
+    def test_a_compound_base_keeps_its_internal_space(self):
+        # Māori compounds take the suffix on the whole compound, not on the
+        # last word alone: 'ārai hapū' is one base, not two.
+        self.assertEqual(composition_bases("ārai hapū ~tanga"),
+                         ["ārai hapū"])
+
+    def test_a_parenthetical_note_is_not_part_of_the_base(self):
+        self.assertEqual(composition_bases("āhukahuka (ki te kupu) ~tia"),
+                         ["āhukahuka"])
+
+
 from suffix_forms import derived_from_list, read_williams_passives
 
 

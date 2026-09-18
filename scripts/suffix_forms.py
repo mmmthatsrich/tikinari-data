@@ -177,6 +177,33 @@ def derived_from_list(forms):
     return out
 
 
+def composition_bases(headword):
+    """The base form(s) a suffix composes onto, for a headword that may hold
+    more than one.
+
+    paekupu's headword field mixes three shapes that all end in suffix
+    notation but need different handling:
+      - a single word ('ahu ~nga') -> one base.
+      - a comma-joined pair of spellings ('hae, hahae ~a ~nga') -> the
+        entry has two base spellings, each taking each suffix.
+      - a compound ('ārai hapū ~tanga') -> ONE base that happens to contain
+        a space; Māori compounds take the suffix on the whole compound, not
+        on its last word alone, so the internal space must survive.
+      - a parenthetical qualifier ('tāhono (rorohiko) ~a') or note
+        ('āhukahuka (ki te kupu) ~tia') -> not part of the base at all, and
+        removed outright rather than filtered against the suffix vocabulary
+        the way strip_suffix_notation filters tildes.
+
+    Order matters: strip the suffix notation first (so a tilde/paren/bracket
+    suffix marker is gone), then drop any remaining '(...)' qualifier, then
+    split what is left on commas.
+    """
+    text = strip_suffix_notation(headword)
+    text = re.sub(r"\([^)]*\)", " ", text)
+    return [re.sub(r"\s+", " ", base).strip()
+            for base in text.split(",") if base.strip()]
+
+
 def read_williams_passives(headword, definition):
     """(base, derived, suffix) for each 'Pass. <form>' in *definition*.
 

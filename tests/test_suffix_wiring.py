@@ -65,3 +65,34 @@ class AddSuffixForms(unittest.TestCase):
         build_unified._add_suffix_forms(self.b, eid, "tūkino",
                                         ["-tia"], "ngata")
         self.assertIn(("tūkinotia", "passive", "-tia (ngata)"), self._rows())
+
+
+class AddDerivedForms(unittest.TestCase):
+    """_add_derived_forms has a different contract from _add_suffix_forms:
+    it stores the (base, derived, suffix) triple's DERIVED spelling whole,
+    rather than composing headword + suffix — williams's irregular
+    reduplicated passives ('amuamu' -> 'amuamutia') are not headword+suffix
+    concatenations, so composing here would silently corrupt them."""
+
+    def setUp(self):
+        self.con = _memory_db()
+        self.b = build_unified.Builder(self.con, "williams", None, {})
+        self.eid = self.b.add_entry("e1", "Amu", "amu", "amu")
+
+    def _rows(self):
+        return self.con.execute(
+            "SELECT form, form_type, note FROM form ORDER BY form").fetchall()
+
+    def test_the_derived_spelling_is_stored_whole_not_composed(self):
+        # compose("Amu", "-tia") would be 'Amutia'; the real passive is the
+        # reduplicated 'amuamutia', which only survives if it is stored as
+        # given rather than rebuilt from the headword.
+        build_unified._add_derived_forms(
+            self.b, self.eid, [("amu", "amuamutia", "-tia")], "williams")
+        self.assertEqual(self._rows(),
+                         [("amuamutia", "passive", "-tia (williams)")])
+
+    def test_an_unknown_suffix_writes_nothing(self):
+        build_unified._add_derived_forms(
+            self.b, self.eid, [("amu", "amubga", "-bga")], "williams")
+        self.assertEqual(self._rows(), [])

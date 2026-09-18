@@ -627,10 +627,13 @@ def build_paekupu(con, b):
         # the Māori term was coined for. That headword IS the gloss; without this
         # projection 13,050 senses hold POS and nothing else (D1).
         sid = b.add_sense(eid, None, d or hen, dmi, raw, part_of_speech=pos)
-        # The suffix is written into the headword ('ahu ~nga'); compose against
-        # the bare word, which is also what the importer now keys on.
-        _add_suffix_forms(b, eid, suffix_forms.strip_suffix_notation(hw),
-                          suffix_forms.read_tilde_suffixes(hw), "paekupu")
+        # The suffix is written into the headword ('ahu ~nga'). A headword can
+        # hold more than one base spelling ('hae, hahae ~a ~nga') or be a
+        # compound whose suffix lands on the whole thing ('ārai hapū ~tanga');
+        # composition_bases tells the two apart.
+        suffixes = suffix_forms.read_tilde_suffixes(hw)
+        for base in suffix_forms.composition_bases(hw):
+            _add_suffix_forms(b, eid, base, suffixes, "paekupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         # alternative_words are not alternative spellings. A dashed item is a
@@ -785,8 +788,11 @@ def _fold_qualifier(lemma_en, qual):
 
 
 def _wakareo_en_mi(con, b, table):
-    # body_text, not body_raw: the archive keeps the source HTML, the app surface
-    # must not. NULL there means the body held nothing but the lemma.
+    # body_text feeds definition_raw (`raw` below), the app-facing text; the
+    # archive's body_raw HTML must never land there. body_raw is read only to
+    # recover kimikupu_hou's suffix marker, which body_text's stripped
+    # version usually loses (empty for 2,823 of 2,831 rows) — it is used for
+    # that lookup alone and never stored in raw/definition_raw.
     sql = (f"SELECT source_entry_id, wakareo_id, headword, part_of_speech, search_scope, "
            f"equivalents, qualifier, example_en, example_mi, body_text, body_raw "
            f"FROM {table} ORDER BY id")
@@ -831,8 +837,12 @@ def _wakareo_en_mi(con, b, table):
                         b.add_form(eid, derived, form_type,
                                    f"{suffix} ({source})")
             # kimikupu_hou marks the suffix inside <B> in the raw body; its
-            # body_text column is empty for 2,823 of 2,831 rows.
-            _add_suffix_forms(b, eid, mi, raw_suffixes, source)
+            # body_text column is empty for 2,823 of 2,831 rows. mi itself
+            # can still carry its own paren notation ('tūtōkai (-tia)'), so
+            # compose against the bare form or the suffix glues onto the
+            # closing paren instead of the word.
+            _add_suffix_forms(b, eid, suffix_forms.strip_suffix_notation(mi),
+                              raw_suffixes, source)
             siblings.append((eid, mi))
         for eid, _ in siblings:
             for other_eid, other_mi in siblings:
