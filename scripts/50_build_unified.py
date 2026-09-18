@@ -150,22 +150,29 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source):
     An unrecognised suffix writes nothing: classify() is the only thing
     separating a real ending from kimikupu_hou's chemistry and the typos in
     the sources' own text.
+
+    *suffixes* may carry a macron the vocabulary is keyed without (paekupu's
+    '~hangā'), so classify() is looked up on the FOLDED suffix — classify()
+    itself never folds, by design (suffix_forms.classify's own contract) —
+    while the suffix passed to compose()/note keeps its original spelling.
     """
     for suffix in suffixes or []:
-        form_type = suffix_forms.classify(suffix)
+        form_type = suffix_forms.classify(suffix_forms.fold(suffix))
         if not form_type:
             continue
         b.add_form(entry_id, suffix_forms.compose(headword, suffix),
                    form_type, f"{suffix} ({source})")
+        b.derived_forms_written += 1
 
 
 def _add_derived_forms(b, entry_id, triples, source):
     """Write form rows for (base, derived, suffix) triples, stored whole."""
     for _base, derived, suffix in triples or []:
-        form_type = suffix_forms.classify(suffix)
+        form_type = suffix_forms.classify(suffix_forms.fold(suffix))
         if not form_type:
             continue
         b.add_form(entry_id, derived, form_type, f"{suffix} ({source})")
+        b.derived_forms_written += 1
 
 
 class Builder:
@@ -180,6 +187,11 @@ class Builder:
         self._lemmas = {}                         # {entry_id: {headword, sort}} for add_form
         self._examples = set()                    # (sense_id, mi, en) already inserted
         self._forms = {}                          # (entry_id, form_cf, type) -> (rowid, note)
+        # Spec §6's refusal report: tokens seen/refused (suffix_forms.Tally,
+        # populated by the reader calls below) and rows actually written
+        # (tallied here, at the one place every derived form passes through).
+        self.suffix_tally = suffix_forms.Tally()
+        self.derived_forms_written = 0
 
     def add_entry(self, source_entry_id, headword, headword_sort, headword_search,
                   pos=None, headword_en=None, loan_marker=None, audio_url=None,
@@ -377,7 +389,7 @@ def build_williams(con, b):
                           material={"hw": hw, "pos": pos, "def": d,
                                     "ex": examples, "xr": jload(xr)})
         _add_derived_forms(
-            b, eid, suffix_forms.read_williams_passives(hw, d or ""),
+            b, eid, suffix_forms.read_williams_passives(hw, d or "", b.suffix_tally),
             "williams")
         # Williams marks a variant with '=' at the head of an entry
         # ('Ahine. = wahine.'). 611 such entries carried no relation at all and
@@ -481,7 +493,8 @@ def build_te_aka(con, b):
         # te_aka marks the suffix after the POS and again at the head of each
         # sense's definition. Both name the same forms; add_form dedups.
         _add_suffix_forms(b, eid, suffix_forms.strip_suffix_notation(hw),
-                          suffix_forms.read_paren_suffixes(hw), "te_aka")
+                          suffix_forms.read_paren_suffixes(hw, b.suffix_tally),
+                          "te_aka")
 
         # Explode the structured senses into per-sense rows, each with its own POS
         # and examples. Drop exact-duplicate senses (some source entries repeat the
@@ -505,7 +518,8 @@ def build_te_aka(con, b):
                               part_of_speech=s.get("part_of_speech"))
             _add_suffix_forms(
                 b, eid, suffix_forms.strip_suffix_notation(hw),
-                suffix_forms.read_paren_suffixes(s.get("definition_raw") or ""),
+                suffix_forms.read_paren_suffixes(
+                    s.get("definition_raw") or "", b.suffix_tally),
                 "te_aka")
             if first_sid is None:
                 first_sid = sid
@@ -631,7 +645,7 @@ def build_paekupu(con, b):
         # hold more than one base spelling ('hae, hahae ~a ~nga') or be a
         # compound whose suffix lands on the whole thing ('ārai hapū ~tanga');
         # composition_bases tells the two apart.
-        suffixes = suffix_forms.read_tilde_suffixes(hw)
+        suffixes = suffix_forms.read_tilde_suffixes(hw, b.suffix_tally)
         for base in suffix_forms.composition_bases(hw):
             _add_suffix_forms(b, eid, base, suffixes, "paekupu")
         for i, ex in enumerate(examples):
@@ -681,10 +695,12 @@ def build_papakupu(con, b):
         gloss = clean_gloss(d, [e.get("text_mi") for e in examples])
         sid = b.add_sense(eid, sn, gloss, None, d, part_of_speech=pos)
         base = suffix_forms.strip_suffix_notation(hw)
-        _add_suffix_forms(b, eid, base,
-                          suffix_forms.read_bracket_suffixes(hw), "papakupu")
-        _add_suffix_forms(b, eid, base,
-                          suffix_forms.read_tilde_suffixes(d or ""), "papakupu")
+        _add_suffix_forms(
+            b, eid, base,
+            suffix_forms.read_bracket_suffixes(hw, b.suffix_tally), "papakupu")
+        _add_suffix_forms(
+            b, eid, base,
+            suffix_forms.read_tilde_suffixes(d or "", b.suffix_tally), "papakupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)
@@ -817,8 +833,9 @@ def _wakareo_en_mi(con, b, table):
         # the equivalents list is already that run, parsed. Only the spellings
         # say which pairs are derivations rather than synonyms.
         source = table.replace("_entries", "")
-        pairs = suffix_forms.derived_from_list(equivalents)
-        raw_suffixes = suffix_forms.read_paren_suffixes(body_raw or "")
+        pairs = suffix_forms.derived_from_list(equivalents, b.suffix_tally)
+        raw_suffixes = suffix_forms.read_paren_suffixes(
+            body_raw or "", b.suffix_tally)
         for i, mi in enumerate(equivalents, start=1):
             # seid alone is NOT unique (shared print reference); wakareo_id makes it so.
             eid = b.add_entry(
@@ -832,10 +849,11 @@ def _wakareo_en_mi(con, b, table):
                 b.add_form(eid, v, "variant")
             for base, derived, suffix in pairs:
                 if base == mi:
-                    form_type = suffix_forms.classify(suffix)
+                    form_type = suffix_forms.classify(suffix_forms.fold(suffix))
                     if form_type:
                         b.add_form(eid, derived, form_type,
                                    f"{suffix} ({source})")
+                        b.derived_forms_written += 1
             # kimikupu_hou marks the suffix inside <B> in the raw body; its
             # body_text column is empty for 2,823 of 2,831 rows. mi itself
             # can still carry its own paren notation ('tūtōkai (-tia)'), so
@@ -1275,6 +1293,13 @@ def unify_source(con, source_id) -> dict:
                 (NOW, source_id))
     b.counts["_deleted"] = deleted
     b.counts["_dialect"] = dialect
+    # Spec §6's refusal report. Silent only for sources with no suffix
+    # notation at all (taikupu, temarareo, ...) — nothing to tally there.
+    if b.suffix_tally.seen or b.derived_forms_written:
+        refused = b.suffix_tally.refused
+        print(f"  [{source_id}] suffix-forms: {b.suffix_tally.seen} seen, "
+              f"{b.derived_forms_written} written, {len(refused)} refused"
+              + (f" {refused}" if refused else ""))
     return b.counts
 
 

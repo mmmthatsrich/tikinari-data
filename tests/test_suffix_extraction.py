@@ -68,10 +68,14 @@ class DerivedForms(unittest.TestCase):
         # A tilde or a '(-' surviving into a form means a reader composed
         # onto a headword it should have stripped first. Scoped to the
         # derived rows: paekupu's own variant rows legitimately hold
-        # parenthetical qualifiers like '(whaka)'.
+        # parenthetical qualifiers like '(whaka)'. A literal '.' catches the
+        # paekupu counting-word headwords ('pūrua ~tia, pūtoru ~tia ...')
+        # whose trailing ellipsis composition_bases must now strip — see
+        # scripts/suffix_forms.py's composition_bases.
         bad = self.con.execute(
             "SELECT form FROM form WHERE form_type IN (?, ?) AND "
-            "(form LIKE '%~%' OR form LIKE '%(-%' OR form LIKE '%,%')",
+            "(form LIKE '%~%' OR form LIKE '%(-%' OR form LIKE '%,%' OR "
+            "form LIKE '%.%')",
             DERIVED).fetchall()
         self.assertEqual(bad, [], f"malformed derived forms: {bad[:5]}")
 

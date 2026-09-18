@@ -20,11 +20,14 @@ from suffix_forms import (PASSIVE, NOMINALISATION, classify, compose,
 
 class Vocabulary(unittest.TestCase):
     def test_the_vocabulary_is_complete(self):
-        # Measured from 22,911 hepatakakupu tokens. Removing any of these
-        # discards real data; -ia alone accounts for 236 occurrences.
-        self.assertEqual(len(PASSIVE), 13)
+        # Measured from 22,911 hepatakakupu tokens, plus one later addition:
+        # -hina, refused 5 times in te_aka's own suffix groups ('uru
+        # (-a,-hina)', 'taiapo (-hia,-hina,-tia)') before it was added.
+        # Removing any of these discards real data; -ia alone accounts for
+        # 236 occurrences.
+        self.assertEqual(len(PASSIVE), 14)
         self.assertEqual(len(NOMINALISATION), 9)
-        for suffix in ("-ia", "-kina", "-whina"):
+        for suffix in ("-ia", "-kina", "-whina", "-hina"):
             self.assertIn(suffix, PASSIVE)
         for suffix in ("-kanga", "-inga", "-unga"):
             self.assertIn(suffix, NOMINALISATION)
@@ -141,6 +144,20 @@ class ParenNotation(unittest.TestCase):
         self.assertEqual(
             read_paren_suffixes("kihi (-tia / -ngia)"), ["-tia", "-ngia"])
 
+    def test_hina_is_recognised_inside_a_group(self):
+        # te_aka's own suffix groups use '-hina' — 'uru (-a,-hina)',
+        # 'taiapo (-hia,-hina,-tia)' — refused 5 times before it was added
+        # to PASSIVE.
+        self.assertEqual(read_paren_suffixes("uru (-a,-hina)"), ["-a", "-hina"])
+
+    def test_a_second_group_is_not_lost(self):
+        # te_aka's 'inihua (-tia) (-ngia)': the reader used to return on the
+        # FIRST group that yielded a known suffix, so only '-tia' was ever
+        # read and the database never got 'inihuangia'. Both groups must
+        # contribute.
+        self.assertEqual(
+            read_paren_suffixes("inihua (-tia) (-ngia)"), ["-tia", "-ngia"])
+
 
 class TildeNotation(unittest.TestCase):
     """paekupu and papakupu: '~nga' standing for headword + -nga. Verbatim
@@ -169,9 +186,20 @@ class TildeNotation(unittest.TestCase):
 
     def test_a_macrond_tilde_token_is_read(self):
         # paekupu headword 'hanga ~ia ~hangā ~nga': the vocabulary only holds
-        # ASCII forms, so a macron'd token must be folded before classifying.
+        # ASCII forms, so a macron'd token must be folded before classifying
+        # — but the returned suffix keeps its ORIGINAL spelling, macron and
+        # all. Folding the return value too used to compose 'hangahanga', a
+        # real but different word ('trifling'), instead of 'hangahangā'.
         self.assertEqual(read_tilde_suffixes("hanga ~ia ~hangā ~nga"),
-                         ["-ia", "-hanga", "-nga"])
+                         ["-ia", "-hangā", "-nga"])
+
+    def test_a_macrond_suffix_composes_with_its_macron_intact(self):
+        # The live consequence of the bug above: composing the base against
+        # the returned suffix must land on 'hangahangā', not the folded
+        # 'hangahanga'.
+        suffixes = read_tilde_suffixes("hanga ~ia ~hangā ~nga")
+        self.assertIn("-hangā", suffixes)
+        self.assertEqual(compose("hanga", "-hangā"), "hangahangā")
 
 
 class BracketNotation(unittest.TestCase):
@@ -183,6 +211,12 @@ class BracketNotation(unittest.TestCase):
     def test_a_bracketed_domain_is_not_a_suffix(self):
         # hepatakakupu files semantic domains this way: '[Tāne]'.
         self.assertEqual(read_bracket_suffixes("kake [Tāne]"), [])
+
+    def test_a_second_bracket_group_is_not_lost(self):
+        # Same early-return bug read_paren_suffixes had: every group must
+        # contribute, not just the first that yields a known suffix.
+        self.assertEqual(
+            read_bracket_suffixes("tāpiri [-tia] [-ngia]"), ["-tia", "-ngia"])
 
 
 class StripNotation(unittest.TestCase):
@@ -277,6 +311,21 @@ class CompositionBases(unittest.TestCase):
         self.assertEqual(composition_bases("āhukahuka (ki te kupu) ~tia"),
                          ["āhukahuka"])
 
+    def test_a_trailing_ellipsis_is_dropped_from_the_base(self):
+        # paekupu 'pūrua ~tia, pūtoru ~tia ...': the trailing '...' means
+        # "and so on" and shipped as a literal 'pūtoru ...tia' before this
+        # fix. The first base in the run is already clean.
+        self.assertEqual(composition_bases("pūrua ~tia, pūtoru ~tia ..."),
+                         ["pūrua", "pūtoru"])
+
+    def test_a_trailing_ellipsis_after_an_irregular_tilde_is_dropped(self):
+        # paekupu 'tatau mawhiti-rua,tatau mawhiti-toru ~ria ...': no space
+        # after the comma, and the compound base must survive intact.
+        self.assertEqual(
+            composition_bases(
+                "tatau mawhiti-rua,tatau mawhiti-toru ~ria ..."),
+            ["tatau mawhiti-rua", "tatau mawhiti-toru"])
+
 
 from suffix_forms import derived_from_list, read_williams_passives
 
@@ -351,6 +400,54 @@ class WilliamsProse(unittest.TestCase):
         self.assertEqual(
             read_williams_passives("Āianei", "ad. Now, presently, to pass. Be"),
             [])
+
+
+from suffix_forms import Tally
+
+
+class RefusalReport(unittest.TestCase):
+    """Spec §6: each reader must report tokens seen and tokens refused, with
+    the values — a silent drop is exactly how '-hina' stayed hidden. Tally is
+    optional and pure (no printing, no DB); a reader populates it only when
+    the caller passes one in.
+    """
+
+    def test_unset_by_default(self):
+        # Existing callers that pass no tally must see no behaviour change.
+        self.assertEqual(read_paren_suffixes("(-tia)"), ["-tia"])
+
+    def test_a_known_suffix_is_kept(self):
+        tally = Tally()
+        read_paren_suffixes("(-tia)", tally)
+        self.assertEqual(tally.seen, 1)
+        self.assertEqual(tally.refused, [])
+
+    def test_an_unknown_suffix_is_refused_and_named(self):
+        # kimikupu_hou's chemistry: '(-waro)' is not a suffix.
+        tally = Tally()
+        read_paren_suffixes("hauhā (-waro)", tally)
+        self.assertEqual(tally.seen, 1)
+        self.assertEqual(tally.refused, ["-waro"])
+
+    def test_tilde_and_bracket_readers_also_populate_it(self):
+        tally = Tally()
+        read_tilde_suffixes("Proto-Polynesian ~ kainga", tally)
+        # 'kake [Tāne]' never reaches the vocabulary check at all — its
+        # content does not start with '-', so it never matches the bracket
+        # group and is not counted as a token seen (same contract as
+        # read_paren_suffixes's '(whaka)' qualifier). A synthetic '[-xyz]'
+        # demonstrates the bracket reader also populates a passed-in tally.
+        read_bracket_suffixes("tāpiri [-xyz]", tally)
+        self.assertEqual(tally.seen, 2)
+        self.assertEqual(tally.refused, ["-kainga", "-xyz"])
+
+    def test_a_tally_accumulates_across_several_calls(self):
+        # 50_build_unified.py shares one Tally per source across many entries.
+        tally = Tally()
+        read_paren_suffixes("(-tia)", tally)
+        read_paren_suffixes("hauhā (-waro)", tally)
+        self.assertEqual(tally.seen, 2)
+        self.assertEqual(tally.refused, ["-waro"])
 
     def test_a_definition_with_no_marker_yields_nothing(self):
         self.assertEqual(read_williams_passives("Kake", "Ascend, climb."), [])
