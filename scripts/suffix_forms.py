@@ -84,7 +84,7 @@ def _keep_known(raw_tokens):
     """
     out = []
     for token in raw_tokens:
-        suffix = "-" + token.strip().lower()
+        suffix = "-" + fold(token.strip())
         if classify(suffix):
             out.append(suffix)
     return out
@@ -133,6 +133,6 @@ def strip_suffix_notation(headword):
     # Only strip a tilde run that the vocabulary recognises, so a stray tilde
     # in an unrelated headword does not truncate it.
     for match in reversed(list(_TILDE_TOKEN.finditer(text))):
-        if classify("-" + match.group(1).lower()):
+        if classify("-" + fold(match.group(1))):
             text = text[:match.start()] + text[match.end():]
     return re.sub(r"\s+", " ", text).strip()

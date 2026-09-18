@@ -42,6 +42,14 @@ class Vocabulary(unittest.TestCase):
         self.assertIsNone(classify("-bga"))
         self.assertIsNone(classify("-pukenga"))
 
+    def test_classify_does_not_fold(self):
+        # classify is the public vocabulary predicate, not a fuzzy match. The
+        # corpus has 167 instances of '-ā' inside hyphenated compounds
+        # ('tū-ā-nuku', 'matemate-ā-one') that are not suffixes; a folding
+        # classify would misclassify them wherever it is called. Folding
+        # belongs in the readers that call classify, not in classify itself.
+        self.assertIsNone(classify("-ā"))
+
 
 class MorphologicalTest(unittest.TestCase):
     def test_a_plain_pair(self):
@@ -143,6 +151,12 @@ class TildeNotation(unittest.TestCase):
         # temarareo uses '~' for 'reflects as', followed by a whole word.
         self.assertEqual(read_tilde_suffixes("Proto-Polynesian ~ kainga"), [])
 
+    def test_a_macrond_tilde_token_is_read(self):
+        # paekupu headword 'hanga ~ia ~hangā ~nga': the vocabulary only holds
+        # ASCII forms, so a macron'd token must be folded before classifying.
+        self.assertEqual(read_tilde_suffixes("hanga ~ia ~hangā ~nga"),
+                         ["-ia", "-hanga", "-nga"])
+
 
 class BracketNotation(unittest.TestCase):
     """papakupu headword: 'tāpiri [-tia]'."""
@@ -176,3 +190,8 @@ class StripNotation(unittest.TestCase):
     def test_a_multi_word_headword_is_unchanged(self):
         # 'tiki ake' is two words, not a word plus a suffix.
         self.assertEqual(strip_suffix_notation("tiki ake"), "tiki ake")
+
+    def test_a_macrond_suffix_is_stripped(self):
+        # The tilde loop's classify guard must fold the same way the reader
+        # does, or a macron'd suffix is read but never stripped.
+        self.assertEqual(strip_suffix_notation("ahu ~hīa"), "ahu")
