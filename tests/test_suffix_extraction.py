@@ -79,7 +79,7 @@ class DerivedForms(unittest.TestCase):
         bad = self.con.execute(
             "SELECT form FROM form WHERE form_type IN (?, ?) AND "
             "(form LIKE '%~%' OR form LIKE '%(-%' OR form LIKE '%,%' OR "
-            "form LIKE '%.%')",
+            "form LIKE '%.%' OR form LIKE '%(%')",
             DERIVED).fetchall()
         self.assertEqual(bad, [], f"malformed derived forms: {bad[:5]}")
 

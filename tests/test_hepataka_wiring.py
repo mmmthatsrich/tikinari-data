@@ -254,3 +254,14 @@ class BuildHepatakakupuMultiBaseHeadwords(unittest.TestCase):
             "WHERE e.source_entry_id = ?", ("99002",)).fetchone()[0]
         self.assertEqual(n, 0)
         self.assertIn("hohou (i te) rongo", self.b.suffix_tally.refused)
+
+    def test_the_multi_base_entry_tallies_its_suffix_tokens_once(self):
+        # build_hepatakakupu passes b.suffix_tally only on the first base
+        # (`b.suffix_tally if i == 0 else None`) so a multi-base entry does
+        # not double-count: 'tīkona, tīkoina' contributes exactly one kept
+        # token for its single '-nga' suffix, and 'hohou (i te) rongo'
+        # contributes one refused base (its '-hia' token never reaches the
+        # tally at all, since the phrase headword leaves zero bases). A
+        # bare `b.suffix_tally` on every base would tally '-nga' twice and
+        # push this to 3.
+        self.assertEqual(self.b.suffix_tally.seen, 2)
