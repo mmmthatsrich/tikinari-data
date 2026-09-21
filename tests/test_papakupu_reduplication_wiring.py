@@ -146,6 +146,59 @@ class Skipped(unittest.TestCase):
         self.assertEqual(_relations(con), [])
 
 
+class StatedSenseMustExist(unittest.TestCase):
+    """A sense the source names but this extract does not hold is refused.
+
+    resolve() used one fallback for two different situations. When papakupu
+    states no sense number it has made no claim, and defaulting to the
+    lowest sense is right. When it states '[2]' and no sense 2 exists, the
+    same fallback attaches the derivation to a DIFFERENT sense of the right
+    word — and 53_build_word_origin then stamps it confidence='certain'.
+    That is an assertion nobody made, so the pair is dropped instead, the
+    way pick_target already refuses to guess (D32).
+
+    Nothing in the corpus reaches this today; all twelve stated senses
+    exist. It is a guard against a refresh, not a fix to live data.
+    """
+
+    def test_a_stated_sense_that_exists_is_used(self):
+        con = _db([(1, "ekeeke", 1, "movement (Reduplicated form of eke [2])"),
+                   (2, "eke", 1, "get on board"),
+                   (3, "eke", 2, "mount")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        target = con.execute(
+            "SELECT target_entry_id FROM relation "
+            "WHERE rel_type = 'derived_from'").fetchone()[0]
+        self.assertEqual(con.execute(
+            "SELECT source_entry_id FROM entry WHERE id = ?",
+            (target,)).fetchone()[0], "3")
+
+    def test_a_stated_sense_that_is_missing_drops_the_pair(self):
+        # The source points at eke [2]; this extract holds only sense 1.
+        # Attaching to sense 1 would be a claim the source never made.
+        con = _db([(1, "ekeeke", 1, "movement (Reduplicated form of eke [2])"),
+                   (2, "eke", 1, "get on board")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        self.assertEqual(_relations(con), [])
+
+    def test_an_unstated_sense_still_falls_back_to_the_first(self):
+        # No number means no claim, so the lowest sense is the right
+        # default — the same one _first_sense uses elsewhere.
+        con = _db([(1, "roroa", 1, "very long (Reduplicated form of roa)"),
+                   (2, "roa", 2, "tall"),
+                   (3, "roa", 1, "long")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        target = con.execute(
+            "SELECT target_entry_id FROM relation "
+            "WHERE rel_type = 'derived_from'").fetchone()[0]
+        self.assertEqual(con.execute(
+            "SELECT source_entry_id FROM entry WHERE id = ?",
+            (target,)).fetchone()[0], "3")
+
+
 class NotDuplicated(unittest.TestCase):
     def test_the_stated_sense_survives_an_inverse_statement_read_first(self):
         # nao's own row is read first and states the pair with no sense

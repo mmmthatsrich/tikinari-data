@@ -837,8 +837,15 @@ def _papakupu_reduplications(con, b):
         by_sense = index.get(normalise_search_key(word))
         if not by_sense:
             return None
-        if sense is not None and sense in by_sense:
-            return by_sense[sense]
+        if sense is not None:
+            # Stated but absent: papakupu pointed at a sense this extract
+            # does not hold. Falling through to another sense of the right
+            # word would attach the derivation somewhere the source never
+            # named, and 53_build_word_origin stamps these 'certain'. Refuse
+            # instead, the way pick_target refuses to guess (D32).
+            return by_sense.get(sense)
+        # No number is no claim, so the lowest sense is the honest default —
+        # the same one _first_sense applies everywhere else.
         return by_sense[sorted(by_sense, key=lambda s: (s is None, s))[0]]
 
     # A pair can be stated from both ends, and only the forward statement
