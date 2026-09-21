@@ -174,6 +174,92 @@ def compose(headword, suffix):
     return (headword or "").strip() + (suffix or "").lstrip("-")
 
 
+# Directional and manner particles. These FOLLOW a verb and cannot carry a
+# passive or nominalisation themselves, so a phrase ending in one takes its
+# suffix on the word in front: 'mahi anō' ("redo") passivises to 'mahia
+# anō', never 'mahi anōtia'.
+#
+# Deliberately short. 'kau' is excluded although it trails two phrases here:
+# in 'hopu kau' ("dry record (audio)") and 'whana kau' ("punt kick") the
+# glosses show it modifying the verb rather than following it, so the tail
+# may well be right and this rule has no business claiming them.
+_TRAILING_PARTICLES = frozenset(("ano", "ake", "atu", "mai", "iho"))
+
+# A suffix mark the source placed after the element that takes it —
+# paekupu's 'heke (~nga) atu', papakupu's 'tau [-ria] mai'.
+_MARK = re.compile(r"\(?~\s*[a-zāēīōū]+\)?|\[\s*-[a-zāēīōū,\s-]+\]", re.I)
+
+
+def compose_phrase(base, suffix, marked_headword=None):
+    """Append *suffix* to the word of *base* that actually takes it.
+
+    compose() puts it on the end, which is right for a single word and for
+    a fixed compound whose last word is the one inflected ('tangata whenua'
+    -> 'tangata whenuatia'). Two shapes break that, and this function is
+    the rule for both.
+
+    First, the source may MARK the element, by writing the notation after
+    it. 'heke (~nga) atu' is 'hekenga atu', and composing on the tail gave
+    'heke atunga', which is not a word. Pass the original notation-bearing
+    headword as *marked_headword* and the mark's position decides.
+
+    Second, a phrase may end in a directional or manner particle, which
+    cannot be inflected at all. Where the source marked nothing, the suffix
+    goes on the last word that is not one of those.
+
+    The mark wins when both apply: it is the source's statement, while the
+    particle list is our grammar.
+
+    A base of one word is returned exactly as compose() would return it,
+    which is the overwhelming majority of the corpus.
+    """
+    base = (base or "").strip()
+    words = base.split()
+    if len(words) < 2:
+        return compose(base, suffix)
+
+    index = None
+    if marked_headword:
+        index = _marked_index(marked_headword, words)
+    # A mark landing on a particle is not a claim about that particle —
+    # 'mahi anō ~tia' has the notation at the end of the whole phrase, and
+    # 'anō' cannot be inflected. Fall through to the word that can be.
+    if index is None or fold(words[index]) in _TRAILING_PARTICLES:
+        index = _last_inflectable(words)
+
+    words[index] = compose(words[index], suffix)
+    return " ".join(words)
+
+
+def _marked_index(marked_headword, words):
+    """Which word of *words* the source's notation sits after, or None.
+
+    Counts the words before the FIRST mark in the original headword; that
+    count is the index of the word the suffix joins. A mark at the very end
+    yields the last word, which is what composing on the tail already did.
+    """
+    match = _MARK.search(marked_headword or "")
+    if not match:
+        return None
+    before = len(marked_headword[:match.start()].split())
+    if not 1 <= before <= len(words):
+        return None
+    return before - 1
+
+
+def _last_inflectable(words):
+    """The index of the last word that is not a trailing particle.
+
+    Steps over a run of them ('haere atu anō'), and never returns past the
+    start: a base that is nothing but particles has no better answer than
+    its own last word.
+    """
+    index = len(words) - 1
+    while index > 0 and fold(words[index]) in _TRAILING_PARTICLES:
+        index -= 1
+    return index
+
+
 # A suffix token as the sources write it: a hyphen or tilde, then letters.
 # Macrons are allowed because papakupu occasionally marks one.
 _TOKEN = r"[-~]\s*([a-zāēīōū]+)"
