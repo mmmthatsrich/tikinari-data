@@ -68,8 +68,16 @@ with a sense number:
     roa       "...the reduplicated form roroa is often used – see
                separate entry"
 
-18 forward and 8 inverse statements survive, 23 distinct pairs after
-deduplication (`nanao` and `naonao` are stated from both ends).
+19 forward and 8 inverse statements survive, 24 distinct pairs after
+deduplication (`nanao` and `naonao` are stated from both ends; the forward
+statement wins, because only it carries the base's sense number).
+
+Nineteen of the twenty forward statements sit inside a parenthetical —
+`'(Reduplicated form of eke [2])'` — and one does not: *wareware* reads
+`'– reduplicated form of ware [2].)'`. A first draft of the parser required
+the opening parenthesis and silently dropped it. The pattern must not
+anchor on the bracket; the containment filter, not the punctuation, is what
+rejects a statement about another word.
 
 ## 4. The spelling rule is a filter, never a generator
 
@@ -206,18 +214,22 @@ split it.
 | compound | 5,271 | 5,271 |
 | suffix | 5,175 | 5,170 |
 | prefix | 661 | 662 |
-| **reduplication** | **279** | **303** |
+| **reduplication** | **279** | **302** |
 | NULL | 38 | 37 |
-| **total** | **11,424** | **11,443** |
+| **total** | **11,424** | **11,442** |
 
-19 new rows: 17 from papakupu's prose, 2 from the tilde markings deferred by
-the previous spec (`ueue` < `ue`, `whakamātautau` < `whakamātau`; the other
-six name words papakupu does not hold). 61 existing rows corrected in place,
+18 new rows, all from papakupu's prose. 61 existing rows corrected in place,
 of which 5 become reduplications.
 
-Unchanged: `entry` 153,440 · `sense` 175,101 · `form` 35,638 ·
-`relation` 175,407 + the new papakupu `derived_from` rows · `concept` 91,140 ·
-18 confirmed judgements.
+**The tilde markings are NOT harvested.** The previous spec deferred eight of
+them (`ue ~ue` yielding `ueue`), and two resolve at both ends. They are still
+deferred, and on reflection they do not belong here at all: the notation says
+a form exists, never that it is a reduplication. Reading `~ue` on `ue` as
+reduplication is our inference, which is the thing §2 refuses. They would
+need their own warrant.
+
+`entry` 153,440 · `sense` 175,101 · `form` 35,638 · `concept` 91,140 and the
+18 confirmed judgements are unchanged. `relation` goes 175,407 → 175,425.
 
 ## 10. Testing
 
