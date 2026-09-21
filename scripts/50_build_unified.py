@@ -178,6 +178,32 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
             b.derived_forms_written += 1
 
 
+def _add_whole_forms(b, entry_id, forms, source):
+    """Write a whole irregular derived form exactly as the source printed it.
+
+    _add_suffix_forms cannot be reused: it composes, and these forms exist
+    precisely because composing does not work — 'hau' + '-hāua' is
+    'hauhāua', a word no dictionary in the corpus holds.
+
+    Where the corpus can corroborate the whole-form reading it does, by
+    EXACT spelling: 'motuhanga' is a headword in four sources, 'tākina' in
+    two, 'kūtia' and 'wetekina' in ngata. 'hāua' itself rests on paekupu
+    alone — it is attested in no other source, and the eight entries that
+    share its FOLDED key are 'hauā' and 'Hauā', a different word. Never
+    count attestation on headword_search; that key strips macrons and
+    collapses doubled vowels, and reading a count off it is the specific
+    error the spec's §2 exists to warn about.
+
+    The note carries ', whole' because the suffix in it is read off the
+    form's spelling rather than printed by the source as a fragment. The
+    '<suffix> (<source>...)' shape is preserved so the per-suffix counts
+    keep working.
+    """
+    for form, suffix, form_type in forms or []:
+        if b.add_form(entry_id, form, form_type, f"{suffix} ({source}, whole)"):
+            b.derived_forms_written += 1
+
+
 def _hepataka_bases(headword, tally):
     """The base(s) hepatakakupu's own `suffixes` column composes onto.
 
@@ -710,6 +736,10 @@ def build_paekupu(con, b):
         suffixes = suffix_forms.read_tilde_suffixes(hw, b.suffix_tally)
         for base in suffix_forms.composition_bases(hw):
             _add_suffix_forms(b, eid, base, suffixes, "paekupu")
+        # A tilde run the vocabulary does not recognise is a whole irregular
+        # derivation, not a suffix — 'hau ~hāua'. It is stored as printed;
+        # composing it would assert a word no source holds.
+        _add_whole_forms(b, eid, suffix_forms.read_whole_forms(hw), "paekupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         # alternative_words are not alternative spellings. A dashed item is a
