@@ -221,14 +221,19 @@ def _hepataka_bases(headword, tally):
     rather than guess, and a phrase passive is exactly the irregular/
     suppletive case spec §7 carves out.
 
-    Each refused base is tallied the same way an unrecognised suffix is.
+    Each refused base is tallied under the 'base' kind — separately from
+    unrecognised suffixes, which are the only refusals the spec's 1%
+    tripwire is about.
     """
     bases = []
     for base in (part.strip() for part in headword.split(",")):
         if not base:
             continue
         if "(" in base or ")" in base:
-            tally.refuse(base)
+            # 'base', not 'suffix': a headword we cannot compose onto is
+            # nothing to do with the suffix vocabulary, and counting it
+            # there put a whole phrase in a list of affixes.
+            tally.refuse(base, kind="base")
             continue
         bases.append(base)
     return bases
@@ -740,7 +745,9 @@ def build_paekupu(con, b):
         # A tilde run the vocabulary does not recognise is a whole irregular
         # derivation, not a suffix — 'hau ~hāua'. It is stored as printed;
         # composing it would assert a word no source holds.
-        _add_whole_forms(b, eid, suffix_forms.read_whole_forms(hw), "paekupu")
+        _add_whole_forms(
+            b, eid, suffix_forms.read_whole_forms(hw, b.suffix_tally),
+            "paekupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex, None, None, None, i)   # Paekupu example = Māori only
         # alternative_words are not alternative spellings. A dashed item is a
@@ -1444,6 +1451,39 @@ def first_seen_snapshot(con, source_id) -> dict:
         "SELECT source_entry_id, first_seen FROM entry WHERE source_id=?", (source_id,))}
 
 
+_TALLY_NOUN = {"suffix": "tokens", "pair": "pair tests",
+               "base": "bases", "whole": "whole forms"}
+
+
+def format_suffix_report(source_id, rows_written, tally):
+    """Spec §6's refusal report, one line per kind. Pure: returns strings.
+
+    The kinds are not comparable, so they are not summed. §6's tripwire —
+    refusals above 1% mean a real suffix has fallen outside the vocabulary,
+    the '-hina' signal — applies to `suffix` ALONE. A rejected pair test is
+    the ngata discriminator declining a compound; a refused base is a
+    parenthesis in a headword; a whole form is a row we wrote. Adding those
+    to the suffix count put four of six sources over the threshold without
+    one of them having the fault the threshold names.
+    """
+    out = [f"  [{source_id}] suffix-forms: {rows_written} rows written"]
+    for kind in tally.kinds():
+        refused = tally.refused_of(kind)
+        rate = tally.refusal_rate(kind)
+        line = f"      {kind:<7} {tally.seen_of(kind):>6} {_TALLY_NOUN[kind]}"
+        if refused:
+            line += (f", {len(refused)} "
+                     f"{'rejected' if kind == 'pair' else 'refused'}")
+            if rate is not None:
+                line += f" ({rate:.2%})"
+                if kind == "suffix" and rate > 0.01:
+                    line += "  <-- OVER 1%: the vocabulary, not the source"
+        out.append(line)
+        if refused:
+            out.append(f"              {refused}")
+    return out
+
+
 def unify_source(con, source_id) -> dict:
     row = con.execute(
         "SELECT default_dialect FROM source_metadata WHERE source_id=?",
@@ -1467,11 +1507,18 @@ def unify_source(con, source_id) -> dict:
     b.counts["_dialect"] = dialect
     # Spec §6's refusal report. Silent only for sources with no suffix
     # notation at all (taikupu, temarareo, ...) — nothing to tally there.
+    #
+    # One line per kind, because they are not comparable. §6's tripwire —
+    # refusals above 1% mean a real suffix has fallen outside the
+    # vocabulary, the '-hina' signal — applies to the `suffix` kind ALONE. A
+    # rejected pair test is the ngata discriminator declining a compound, a
+    # refused base is a parenthesis in a headword, and a whole form is a row
+    # we wrote. Counting those four together put four of six sources over
+    # the threshold without one of them having the fault it names.
     if b.suffix_tally.seen or b.derived_forms_written:
-        refused = b.suffix_tally.refused
-        print(f"  [{source_id}] suffix-forms: {b.suffix_tally.seen} seen, "
-              f"{b.derived_forms_written} written, {len(refused)} refused"
-              + (f" {refused}" if refused else ""))
+        for line in format_suffix_report(source_id, b.derived_forms_written,
+                                         b.suffix_tally):
+            print(line)
     return b.counts
 
 
