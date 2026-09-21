@@ -835,6 +835,24 @@ class Skipped(unittest.TestCase):
 
 
 class NotDuplicated(unittest.TestCase):
+    def test_the_stated_sense_survives_an_inverse_statement_read_first(self):
+        # nao's own row is read first and states the pair with no sense
+        # number; nanao's row states it as 'nao [2]'. Keeping whichever came
+        # first would lose the number and resolve to the wrong base entry.
+        con = _db([(1, "nao", 1, "handle. Used in the reduplicated forms "
+                                 "nanao, naonao."),
+                   (2, "nanao", 1, "grope (Reduplicated form of nao [2])"),
+                   (3, "nao", 2, "grasp")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        target = con.execute(
+            "SELECT r.target_entry_id FROM relation r "
+            "JOIN entry e ON e.id = r.entry_id "
+            "WHERE e.headword = 'nanao'").fetchone()[0]
+        self.assertEqual(con.execute(
+            "SELECT source_entry_id FROM entry WHERE id = ?",
+            (target,)).fetchone()[0], "3")
+
     def test_a_pair_stated_from_both_ends_is_written_once(self):
         con = _db([(1, "nao", 1, "handle. Used in the reduplicated forms "
                                  "nanao, naonao."),
@@ -878,7 +896,9 @@ def _papakupu_reduplications(con, b):
 
     The base's sense number is used when the source gives one: 'eke [2]' is
     a different papakupu row from 'eke [1]', and the rows are not stored in
-    sense order, so the number has to be matched rather than counted.
+    sense order, so the number has to be matched rather than counted. A
+    pair stated from both ends keeps the statement that carries the
+    number, whichever row came first.
 
     A pair whose other end papakupu does not hold is dropped. The word often
     exists in another source — 'taketake' is a headword in 26 — but
@@ -893,7 +913,12 @@ def _papakupu_reduplications(con, b):
             "  FROM entry e JOIN papakupu_entries p "
             "    ON p.id = CAST(e.source_entry_id AS INTEGER) "
             " WHERE e.source_id = 'papakupu'"):
-        index.setdefault(key, {})[sense] = eid
+        # Normalised again on the way in. add_entry stores headword_search
+        # verbatim, and resolve() below normalises every lookup word, so the
+        # two sides must agree. A no-op against real papakupu rows, which
+        # arrive normalised already; without it a fixture holding a raw
+        # 'ekeeke' would never match the collapsed lookup key 'ekeke'.
+        index.setdefault(normalise_search_key(key), {})[sense] = eid
 
     def resolve(word, sense=None):
         by_sense = index.get(normalise_search_key(word))
@@ -903,19 +928,27 @@ def _papakupu_reduplications(con, b):
             return by_sense[sense]
         return by_sense[sorted(by_sense, key=lambda s: (s is None, s))[0]]
 
-    seen = set()
+    # A pair can be stated from both ends, and only the forward statement
+    # carries the base's sense number. papakupu prints the two in no fixed
+    # order, so collect first and keep the richer record; taking whichever
+    # row id came first would silently drop the number.
+    best, order = {}, []
     for hw, definition in con.execute(
             "SELECT headword, definition FROM papakupu_entries ORDER BY id"):
         for child, base, sense in reduplication.read_reduplications(hw, definition):
             key = (reduplication.fold(child), reduplication.fold(base))
-            if key in seen:
-                continue
-            child_eid, base_eid = resolve(child), resolve(base, sense)
-            if child_eid is None or base_eid is None or child_eid == base_eid:
-                continue
-            seen.add(key)
-            b.add_relation(child_eid, "derived_from", base, base_eid,
-                           note="reduplication")
+            if key not in best:
+                best[key] = (child, base, sense)
+                order.append(key)
+            elif sense is not None and best[key][2] is None:
+                best[key] = (child, base, sense)
+    for key in order:
+        child, base, sense = best[key]
+        child_eid, base_eid = resolve(child), resolve(base, sense)
+        if child_eid is None or base_eid is None or child_eid == base_eid:
+            continue
+        b.add_relation(child_eid, "derived_from", base, base_eid,
+                       note="reduplication")
 ```
 
 - [ ] **Step 5: Call it**
@@ -929,7 +962,7 @@ At the very end of `build_papakupu`, after the `for t in jload(sa):` loop and de
 - [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `python -m pytest tests/test_papakupu_reduplication_wiring.py -q`
-Expected: 7 passed.
+Expected: 8 passed.
 
 - [ ] **Step 7: Simulate against the real papakupu rows**
 
