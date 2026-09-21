@@ -91,6 +91,45 @@ class ReadForward(unittest.TestCase):
             [("kōrerorero", "kōrero", None)])
 
 
+    def test_the_shorter_wording_is_also_a_statement(self):
+        # papakupu writes 'Reduplication of' as well as 'reduplicated form
+        # of'. Matching only the longer wording silently dropped karokaro
+        # and kakanga, two clean stated pairs.
+        self.assertEqual(
+            read_reduplications(
+                "karokaro", "clear away. [WMS S. 10]. (Reduplication of karo [2])."),
+            [("karokaro", "karo", 2)])
+
+    def test_a_reduplication_that_is_only_part_of_the_formation_is_skipped(self):
+        # 'kaitātaki' is the prefix kai- PLUS the reduplication of taki, so
+        # it is not a reduplication OF taki — filing it as one would skip a
+        # step and name the wrong base.
+        self.assertEqual(
+            read_reduplications(
+                "kaitātaki",
+                "speechmaker, from the agentive prefix kai-, plus "
+                "reduplication of taki [2], make speeches."),
+            [])
+
+    def test_a_non_maori_token_is_not_a_base(self):
+        # The base capture is Māori letters only, so a statement whose next
+        # token is a digit yields nothing rather than reaching past it for
+        # a word the source did not put there.
+        self.assertEqual(
+            read_reduplications(
+                "matemate", "sickly (reduplicated form of 3 mate)"),
+            [])
+
+    def test_a_function_word_is_not_silently_accepted_as_a_base(self):
+        # The live hazard. papakupu holds 'te' as an entry and 'te' is
+        # inside 'matemate', so containment alone would accept it and ship
+        # 'matemate < te' at confidence 'certain'. The base must be the
+        # token the statement actually names.
+        got = read_reduplications(
+            "matemate", "sickly (reduplicated form of te kupu mate)")
+        self.assertNotIn("te", [base for _, base, _ in got])
+
+
 class ReadInverse(unittest.TestCase):
     def test_two_reduplications_named_with_and(self):
         self.assertEqual(

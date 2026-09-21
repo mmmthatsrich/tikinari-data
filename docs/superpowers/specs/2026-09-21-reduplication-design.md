@@ -68,11 +68,11 @@ with a sense number:
     roa       "...the reduplicated form roroa is often used – see
                separate entry"
 
-19 forward and 8 inverse statements survive, 24 distinct pairs after
+21 forward and 8 inverse statements survive, 26 distinct pairs after
 deduplication (`nanao` and `naonao` are stated from both ends; the forward
 statement wins, because only it carries the base's sense number).
 
-Nineteen of the twenty forward statements sit inside a parenthetical —
+Twenty of the twenty-one forward statements sit inside a parenthetical —
 `'(Reduplicated form of eke [2])'` — and one does not: *wareware* reads
 `'– reduplicated form of ware [2].)'`. A first draft of the parser required
 the opening parenthesis and silently dropped it. The pattern must not
@@ -90,9 +90,19 @@ three real cases need rejecting:
 | `takapau` | `momoe` | a comparative note about a Proto-Polynesian cognate |
 | `puri` | `pupuhi` | a source slip: `pupuhi` is from `puhi` |
 | `taurekareka` | `karokaro` | true, but stated inside another word's entry |
+| `kaitātaki` | `taki` | the prefix `kai-` **plus** a reduplication, so not a reduplication *of* `taki` |
 
 The rule: **the child must contain the base**, after folding macrons only,
-and be longer than it.
+and be longer than it. The base is read as Māori letters only, and a short
+list of grammatical words is refused outright.
+
+That last guard is defensive rather than needed today. Containment is weak
+for a short base, and 22 particles — `te`, `ngā`, `he`, `ki`, `atu`, `mai`
+and the like — are papakupu headwords, so a refresh writing *"reduplicated
+form of te kupu mate"* on `matemate` would otherwise resolve `te` and ship
+`matemate < te` at `confidence = 'certain'`. A length rule cannot separate
+them: `ngā`, `ana`, `atu` and `mai` are three letters, and so are the real
+bases `eke`, `nao` and `roa`.
 
 Deliberately permissive. Māori reduplication has more shapes than a tidy
 rule admits — full (`eke` → `ekeeke`), initial syllable (`nui` → `nunui`),
@@ -107,10 +117,23 @@ is what licenses the row.
 folds `ekeeke` to `ekeke`, which no longer equals `eke` twice. The collapse
 destroys the very seam that makes a reduplication visible.
 
-`karokaro < karo` is a true statement this design still skips: it appears in
-*taurekareka*'s entry, not on the word it describes, and attaching a
-derivation to an entry from another entry's prose is a different mechanism
-than this spec builds.
+`karokaro`'s statement inside *taurekareka*'s entry is skipped, because
+attaching a derivation to an entry from another entry's prose is a different
+mechanism than this spec builds. **`karokaro < karo` is still harvested**,
+from `karokaro`'s own entry, which reads `'(Reduplication of karo [2])'`.
+
+An earlier draft claimed the pair was skipped altogether and gave that
+other-entry statement as the reason. That was wrong twice over: the pair has
+its own statement, and the real gap was that the pattern matched only the
+wording *"reduplicated form of"*. papakupu also writes *"Reduplication of"*,
+in three entries — `karokaro`, `kakanga` and `kaitātaki` — so two clean
+stated pairs were being dropped by a spec that promised to harvest what the
+source states. The pattern now accepts both wordings.
+
+`kaitātaki` remains out: its entry reads *"the agentive prefix kai-, plus
+reduplication of taki [2]"*, which describes `kai-` **and** a reduplication.
+`kaitātaki` is `kai-` + `tātaki`, so filing it as a reduplication of `taki`
+would skip a step and name the wrong base.
 
 ## 5. The process is asserted, not re-derived
 
@@ -178,12 +201,13 @@ produced a fictitious 4,350-row regression.
 
 ## 7. Unresolved ends are dropped
 
-A `derivation` row needs both ends resolved to entries. Ten parsed
-statements name a word that is not a papakupu entry:
+A `derivation` row needs both ends resolved to entries. Six parsed
+statements name a word that is not a papakupu entry, and this is the whole
+list:
 
-    hohoko, hokohoko < hoko      taketake  < take
-    whakawāwā < whakawā          nunui     < nui
-    pāwerawera < pāwera          (and others)
+    hohoko    < hoko        taketake   < take
+    hokohoko  < hoko        whakawāwā  < whakawā
+    nunui     < nui         pāwerawera < pāwera
 
 All exist elsewhere in the corpus — `taketake` is a headword in 26 sources —
 but papakupu names no source, so choosing one would invent a pointer the
@@ -214,11 +238,11 @@ split it.
 | compound | 5,271 | 5,271 |
 | suffix | 5,175 | 5,170 |
 | prefix | 661 | 662 |
-| **reduplication** | **279** | **302** |
+| **reduplication** | **279** | **304** |
 | NULL | 38 | 37 |
-| **total** | **11,424** | **11,442** |
+| **total** | **11,424** | **11,444** |
 
-18 new rows, all from papakupu's prose. 61 existing rows corrected in place,
+20 new rows, all from papakupu's prose. 61 existing rows corrected in place,
 of which 5 become reduplications.
 
 **The tilde markings are NOT harvested.** The previous spec deferred eight of
@@ -229,7 +253,7 @@ reduplication is our inference, which is the thing §2 refuses. They would
 need their own warrant.
 
 `entry` 153,440 · `sense` 175,101 · `form` 35,638 · `concept` 91,140 and the
-18 confirmed judgements are unchanged. `relation` goes 175,407 → 175,425.
+18 confirmed judgements are unchanged. `relation` goes 175,407 → 175,427.
 
 ## 10. Testing
 
@@ -244,9 +268,11 @@ in §4 accepted; `momoe`/`takapau` and `pupuhi`/`puri` rejected.
 **Unit, the normalisation** — `whakaaeaea` < `Aeaeā` gives `whaka-`;
 `kīia` < `kī` gives `-ia`; `awaawa` < `Awa` gives `reduplication`; and the
 three Williams doubled-vowel-length rows still resolve through the fallback.
-A test asserting zero regressions across the 6,153-row path.
+A test asserting zero regressions across the 6,153-row path — this one is
+load-bearing, because the fallback is only safe if it never loses a
+derivation, and nothing else pins that.
 
-**Corpus** — the table in §9, exactly; the 19 new pairs present by exact
+**Corpus** — the table in §9, exactly; the 20 new pairs present by exact
 spelling; no derivation row whose base and child are equal.
 
 **Invariants** — the list in §9.

@@ -3,9 +3,9 @@
 papakupu states its reduplications in prose; we parse them and infer
 nothing. Measured on 2026-09-21 after the rebuild:
 
-    derivation total          11,424 -> 11,442   (+18)
-    process='reduplication'      279 ->    302
-      279 williams, + 5 relabelled from 'suffix', + 18 papakupu
+    derivation total          11,424 -> 11,444   (+20)
+    process='reduplication'      279 ->    304
+      279 williams, + 5 relabelled from 'suffix', + 20 papakupu
     process='suffix'           5,175 ->  5,170
     process='prefix'             661 ->    662
     process NULL                  38 ->     37
@@ -28,7 +28,7 @@ EXPECTED_PROCESS = {
     "compound": 5271,
     "suffix": 5170,
     "prefix": 662,
-    "reduplication": 302,
+    "reduplication": 304,
 }
 
 
@@ -55,10 +55,10 @@ class Reduplication(unittest.TestCase):
             "WHERE process IS NOT NULL GROUP BY 1").fetchall())
         self.assertEqual(got, EXPECTED_PROCESS)
 
-    def test_papakupu_contributed_eighteen_reduplications(self):
+    def test_papakupu_contributed_twenty_reduplications(self):
         self.assertEqual(self._one(
             "SELECT COUNT(*) FROM derivation "
-            "WHERE evidence = 'papakupu: stated as a reduplicated form'"), 18)
+            "WHERE evidence = 'papakupu: stated as a reduplicated form'"), 20)
 
     def test_every_papakupu_reduplication_is_attested_not_segmented(self):
         # The source said so in a sentence.
@@ -77,7 +77,10 @@ class Reduplication(unittest.TestCase):
     def test_the_named_pairs_are_present(self):
         for child, base in (("ekeeke", "eke"), ("nanao", "nao"),
                             ("roroa", "roa"), ("waruwaru", "waru"),
-                            ("whīwhiwhi", "whiwhi"), ("tukutuku", "tuku")):
+                            ("whīwhiwhi", "whiwhi"), ("tukutuku", "tuku"),
+                            # both wordings: these two say 'Reduplication
+                            # of', which an earlier pattern did not match
+                            ("karokaro", "karo"), ("kakanga", "kanga")):
             with self.subTest(child=child):
                 self.assertEqual(self._one(
                     "SELECT COUNT(*) FROM derivation d "
@@ -128,6 +131,15 @@ class Reduplication(unittest.TestCase):
                     "JOIN entry e ON e.id = d.entry_id "
                     "WHERE e.headword = ? AND e.source_id = 'williams'",
                     word), "reduplication")
+
+    def test_a_two_step_formation_is_not_filed_as_a_reduplication(self):
+        # 'kaitātaki' is the prefix kai- PLUS the reduplication of taki, so
+        # it is kai- + tātaki. Filing it as a reduplication of taki would
+        # skip a step and name the wrong base.
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM derivation d "
+            "JOIN entry e ON e.id = d.entry_id "
+            "WHERE e.source_id = 'papakupu' AND e.headword = 'kaitātaki'"), 0)
 
     def test_nothing_is_derived_from_itself(self):
         self.assertEqual(self._one(

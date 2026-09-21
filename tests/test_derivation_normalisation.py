@@ -71,6 +71,38 @@ class Normalisation(unittest.TestCase):
                          (None, None))
 
 
+class NoRegressionAcrossTheCorpus(unittest.TestCase):
+    """The spec's load-bearing claim, pinned instead of merely asserted.
+
+    The strict-then-fallback rule is only safe because it never LOSES a
+    derivation: Williams's doubled-vowel spelling of a long vowel still
+    resolves through the fallback. Measured over the whole derived_from
+    path, 61 rows change and none regresses. Nothing pinned that until
+    this test, and a future change to either normalisation could quietly
+    drop rows that currently work.
+    """
+
+    def test_no_row_on_the_derived_from_path_loses_its_process(self):
+        import sqlite3 as _sq
+        from utils import DB_PATH
+        # Read-only: this suite must never alter the database it measures.
+        con = _sq.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        try:
+            lost = []
+            for child, base, process, affix in con.execute(
+                    "SELECT e.headword, d.base_form, d.process, d.affix "
+                    "  FROM derivation d JOIN entry e ON e.id = d.entry_id "
+                    " WHERE d.evidence LIKE 'williams%' "
+                    "    OR d.evidence LIKE 'ngata%'"):
+                if process is None:
+                    continue
+                if word_origin._derivation_shape(child, base)[0] is None:
+                    lost.append((child, base, process, affix))
+        finally:
+            con.close()
+        self.assertEqual(lost, [], f"rows that would lose a process: {lost[:5]}")
+
+
 def _db():
     con = sqlite3.connect(":memory:")
     con.executescript("""
