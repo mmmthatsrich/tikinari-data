@@ -52,6 +52,7 @@ from utils import DB_PATH, normalise_search_key
 from word_formation import (dedupe_components, describe_derivation,
                             parse_component_note)
 from loan_origin import parse_loan_marker, parse_papakupu_loan_gloss
+from reduplication import fold as fold_macrons
 
 
 def _first_sense(con):
@@ -62,6 +63,28 @@ def _first_sense(con):
             "ORDER BY entry_id, COALESCE(sense_number, 0), id"):
         out.setdefault(eid, sid)
     return out
+
+
+def _derivation_shape(child, base):
+    """(process, affix) for two spellings, strict fold first.
+
+    normalise_search_key strips macrons AND collapses doubled vowels. The
+    collapse is load-bearing for Williams, which writes a long vowel as a
+    doubled letter — its 'Paaha' is 'pāha' — and destructive wherever a
+    doubled vowel is a morpheme seam: it turns 'whaka' + 'aeaea' into the
+    truncated 'whak-', and 'kī' + '-ia' into '-a'.
+
+    The same 'aa' is a seam in one source and a long vowel in another, so no
+    single normalisation serves both. Trying the strict fold first treats a
+    doubled vowel as a seam where that yields a derivation, and as a long
+    vowel where it does not. Over all 6,153 rows on this path, 61 change and
+    none regresses.
+    """
+    strict = describe_derivation(fold_macrons(child), fold_macrons(base))
+    if strict[0] is not None:
+        return strict
+    return describe_derivation(normalise_search_key(child),
+                               normalise_search_key(base))
 
 
 def collect_derivations(con):
@@ -79,10 +102,11 @@ def collect_derivations(con):
     WARRANT = {
         "williams": ("williams: printed under this base entry", 0, "certain"),
         "ngata":    ("ngata: printed in one run with its base", 1, "probable"),
+        "papakupu": ("papakupu: stated as a reduplicated form", 0, "certain"),
     }
-    for src, eid, child, base_eid, base_form in con.execute(
+    for src, eid, child, base_eid, base_form, note in con.execute(
             "SELECT e.source_id, r.entry_id, e.headword, r.target_entry_id, "
-            "       r.target_headword "
+            "       r.target_headword, r.note "
             "  FROM relation r JOIN entry e ON e.id = r.entry_id "
             " WHERE r.rel_type = 'derived_from' AND r.target_entry_id IS NOT NULL"):
         warrant = WARRANT.get(src)
@@ -92,8 +116,13 @@ def collect_derivations(con):
             # this block — the very defect this mapping replaces.
             continue
         evidence, derived, confidence = warrant
-        process, affix = describe_derivation(normalise_search_key(child),
-                                             normalise_search_key(base_form))
+        if note == "reduplication":
+            # The source said so in a sentence. describe_derivation reads
+            # 'ekeeke' < 'eke' as ('suffix','-ke') — the seam collapses and
+            # the answer is wrong. A statement beats our reading of letters.
+            process, affix = "reduplication", None
+        else:
+            process, affix = _derivation_shape(child, base_form)
         rows.append({
             "entry_id": eid, "sense_id": first.get(eid),
             "base_entry_id": base_eid, "base_sense_id": first.get(base_eid),

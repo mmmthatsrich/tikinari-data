@@ -1,0 +1,180 @@
+"""build_papakupu emits a derived_from relation per stated reduplication.
+
+A second pass, because the inverse shape is stated on the BASE's entry while
+the relation belongs on the CHILD's, and the child may not exist yet when
+the base row is read.
+
+Drives the real builder against an in-memory database. Corpus counts live in
+tests/test_reduplication_corpus.py.
+"""
+import importlib.util
+import sqlite3
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+sys.stdout.reconfigure(encoding="utf-8")
+
+_SPEC = importlib.util.spec_from_file_location(
+    "build_unified",
+    Path(__file__).parent.parent / "scripts" / "50_build_unified.py")
+build_unified = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(build_unified)
+
+
+def _db(rows):
+    """rows: (id, headword, sense_number, definition)"""
+    con = sqlite3.connect(":memory:")
+    con.executescript("""
+        CREATE TABLE entry (
+            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
+            headword TEXT, headword_sort TEXT, headword_search TEXT,
+            homonym_no INTEGER, headword_en TEXT, part_of_speech TEXT,
+            loan_marker TEXT, dialect TEXT, audio_url TEXT, locator TEXT,
+            content_hash TEXT, first_seen TEXT, created_at TEXT,
+            last_updated TEXT);
+        CREATE TABLE form (
+            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
+            form_search TEXT, form_type TEXT, note TEXT);
+        CREATE TABLE sense (
+            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
+            parent_sense_id INTEGER, gloss_en TEXT, gloss_mi TEXT,
+            definition_raw TEXT, part_of_speech TEXT, part_of_speech_en TEXT,
+            register TEXT, sort_no INTEGER, note TEXT);
+        CREATE TABLE example (
+            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
+            text_mi TEXT, text_en TEXT, source_abbrev TEXT, citation TEXT,
+            sort_no INTEGER);
+        CREATE TABLE relation (
+            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
+            target_headword TEXT, target_entry_id INTEGER,
+            target_sense_id INTEGER, note TEXT);
+        CREATE TABLE entry_domain (
+            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
+            domain TEXT, domain_lang TEXT);
+        CREATE TABLE papakupu_entries (
+            id INTEGER PRIMARY KEY, headword TEXT, headword_sort TEXT,
+            headword_search TEXT, part_of_speech TEXT, definition TEXT,
+            usage_examples TEXT, variant_forms TEXT, see_also TEXT,
+            source_code TEXT, loan_marker TEXT, sense_number INTEGER,
+            pdf_page INTEGER);
+    """)
+    con.executemany(
+        "INSERT INTO papakupu_entries (id, headword, headword_sort, "
+        "headword_search, part_of_speech, definition, usage_examples, "
+        "variant_forms, see_also, source_code, loan_marker, sense_number, "
+        "pdf_page) VALUES (?,?,?,?,NULL,?,'[]','[]','[]','X',NULL,?,NULL)",
+        [(i, hw, hw, hw.lower(), d, sn) for i, hw, sn, d in rows])
+    return con
+
+
+def _relations(con):
+    return con.execute(
+        "SELECT e.headword, r.rel_type, r.target_headword, r.note "
+        "FROM relation r JOIN entry e ON e.id = r.entry_id "
+        "WHERE r.rel_type = 'derived_from' "
+        "ORDER BY e.headword, r.target_headword").fetchall()
+
+
+class ForwardShape(unittest.TestCase):
+    def setUp(self):
+        self.con = _db([(1, "ekeeke", 1, "movement (Reduplicated form of eke [2])"),
+                        (2, "eke", 1, "get on board"),
+                        (3, "eke", 2, "mount")])
+        b = build_unified.Builder(self.con, "papakupu", None, {})
+        build_unified.build_papakupu(self.con, b)
+
+    def test_the_relation_hangs_on_the_reduplication(self):
+        self.assertEqual(_relations(self.con),
+                         [("ekeeke", "derived_from", "eke", "reduplication")])
+
+    def test_the_stated_sense_picks_the_right_base_entry(self):
+        # 'eke [2]' names the second sense, which is a separate papakupu row.
+        target = self.con.execute(
+            "SELECT target_entry_id FROM relation "
+            "WHERE rel_type = 'derived_from'").fetchone()[0]
+        self.assertEqual(self.con.execute(
+            "SELECT source_entry_id FROM entry WHERE id = ?",
+            (target,)).fetchone()[0], "3")
+
+
+class InverseShape(unittest.TestCase):
+    def setUp(self):
+        # The base is row 1 and names a child that is only minted at row 2 —
+        # the ordering an inline call could not handle.
+        self.con = _db([(1, "hoko", 1,
+                         "trade. In the reduplicated forms hohoko and "
+                         "hokohoko, the focus is on the process."),
+                        (2, "hohoko", 1, "trading"),
+                        (3, "hokohoko", 1, "bartering")])
+        b = build_unified.Builder(self.con, "papakupu", None, {})
+        build_unified.build_papakupu(self.con, b)
+
+    def test_both_children_point_back_at_the_base(self):
+        self.assertEqual(_relations(self.con), [
+            ("hohoko", "derived_from", "hoko", "reduplication"),
+            ("hokohoko", "derived_from", "hoko", "reduplication"),
+        ])
+
+
+class Skipped(unittest.TestCase):
+    def test_a_statement_about_another_word_writes_nothing(self):
+        con = _db([(1, "takapau", 1,
+                    "mat. The reduplicated form momoe is inherited from "
+                    "a Proto Nuclear Polynesian term."),
+                   (2, "momoe", 1, "sleep together")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        self.assertEqual(_relations(con), [])
+
+    def test_an_unresolved_end_writes_nothing(self):
+        # papakupu names 'take', which it does not hold as an entry. The
+        # word exists in 26 other sources, but papakupu names no source, so
+        # reaching across would invent a pointer it never made.
+        con = _db([(1, "take", 1,
+                    "cause. The reduplicated form, taketake, includes "
+                    "well-foundedness.")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        self.assertEqual(_relations(con), [])
+
+    def test_an_entry_with_no_statement_writes_nothing(self):
+        con = _db([(1, "ahu", 1, "tend, foster, fashion")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        self.assertEqual(_relations(con), [])
+
+
+class NotDuplicated(unittest.TestCase):
+    def test_the_stated_sense_survives_an_inverse_statement_read_first(self):
+        # nao's own row is read first and states the pair with no sense
+        # number; nanao's row states it as 'nao [2]'. Keeping whichever came
+        # first would lose the number and resolve to the wrong base entry.
+        con = _db([(1, "nao", 1, "handle. Used in the reduplicated forms "
+                                 "nanao, naonao."),
+                   (2, "nanao", 1, "grope (Reduplicated form of nao [2])"),
+                   (3, "nao", 2, "grasp")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        target = con.execute(
+            "SELECT r.target_entry_id FROM relation r "
+            "JOIN entry e ON e.id = r.entry_id "
+            "WHERE e.headword = 'nanao'").fetchone()[0]
+        self.assertEqual(con.execute(
+            "SELECT source_entry_id FROM entry WHERE id = ?",
+            (target,)).fetchone()[0], "3")
+
+    def test_a_pair_stated_from_both_ends_is_written_once(self):
+        con = _db([(1, "nao", 1, "handle. Used in the reduplicated forms "
+                                 "nanao, naonao."),
+                   (2, "nanao", 1, "grope (Reduplicated form of nao [1])")])
+        b = build_unified.Builder(con, "papakupu", None, {})
+        build_unified.build_papakupu(con, b)
+        self.assertEqual(
+            [r for r in _relations(con) if r[0] == "nanao"],
+            [("nanao", "derived_from", "nao", "reduplication")])
+
+
+if __name__ == "__main__":
+    unittest.main()

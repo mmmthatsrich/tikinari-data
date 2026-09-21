@@ -58,6 +58,7 @@ from wakareo_records import (drop_truncated_tail, example_owners,
                             parse_derivation, parse_tregear)
 from sweep_patch import apply_patches
 import suffix_forms
+import reduplication
 
 NOW = datetime.now(timezone.utc).isoformat()
 
@@ -800,6 +801,67 @@ def build_papakupu(con, b):
             b.add_form(eid, v if isinstance(v, str) else str(v), "variant")
         for t in jload(sa):
             b.add_relation(eid, "see_also", t if isinstance(t, str) else str(t))
+    _papakupu_reduplications(con, b)
+
+
+def _papakupu_reduplications(con, b):
+    """derived_from relations for the reduplications papakupu states.
+
+    A second pass, not an inline call. The inverse shape is stated on the
+    BASE's entry — 'hoko: In the reduplicated forms hohoko and hokohoko' —
+    while the relation belongs on the child's, and the child may not have
+    been minted when its base row was read.
+
+    The base's sense number is used when the source gives one: 'eke [2]' is
+    a different papakupu row from 'eke [1]', and the rows are not stored in
+    sense order, so the number has to be matched rather than counted. A
+    pair stated from both ends keeps the statement that carries the
+    number, whichever row came first.
+
+    A pair whose other end papakupu does not hold is dropped. The word often
+    exists in another source — 'taketake' is a headword in 26 — but
+    papakupu names no source, so choosing one would invent a pointer it
+    never made, and 53_build_word_origin drops an unresolved derived_from
+    anyway.
+    """
+    # headword_search -> {sense_number or None: entry_id}
+    index = {}
+    for eid, key, sense in con.execute(
+            "SELECT e.id, e.headword_search, p.sense_number "
+            "  FROM entry e JOIN papakupu_entries p "
+            "    ON p.id = CAST(e.source_entry_id AS INTEGER) "
+            " WHERE e.source_id = 'papakupu'"):
+        index.setdefault(normalise_search_key(key), {})[sense] = eid
+
+    def resolve(word, sense=None):
+        by_sense = index.get(normalise_search_key(word))
+        if not by_sense:
+            return None
+        if sense is not None and sense in by_sense:
+            return by_sense[sense]
+        return by_sense[sorted(by_sense, key=lambda s: (s is None, s))[0]]
+
+    # A pair can be stated from both ends, and only the forward statement
+    # carries the base's sense number. papakupu prints the two in no fixed
+    # order, so collect first and keep the richer record; taking whichever
+    # row id came first would silently drop the number.
+    best, order = {}, []
+    for hw, definition in con.execute(
+            "SELECT headword, definition FROM papakupu_entries ORDER BY id"):
+        for child, base, sense in reduplication.read_reduplications(hw, definition):
+            key = (reduplication.fold(child), reduplication.fold(base))
+            if key not in best:
+                best[key] = (child, base, sense)
+                order.append(key)
+            elif sense is not None and best[key][2] is None:
+                best[key] = (child, base, sense)
+    for key in order:
+        child, base, sense = best[key]
+        child_eid, base_eid = resolve(child), resolve(base, sense)
+        if child_eid is None or base_eid is None or child_eid == base_eid:
+            continue
+        b.add_relation(child_eid, "derived_from", base, base_eid,
+                       note="reduplication")
 
 
 def build_taikupu(con, b):
