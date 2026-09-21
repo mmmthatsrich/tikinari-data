@@ -60,18 +60,88 @@ class Tally:
     caller (50_build_unified.py) owns one Tally per source, passes it into
     the reader calls below, and prints the summary itself once the source is
     built.
+
+    **Counted by kind**, because one counter was carrying four structurally
+    different events and the spec's 1% tripwire consequently fired on four
+    of six sources without once meaning what it says:
+
+      suffix  a token the source wrote as suffix notation. THE tripwire
+              kind — a refusal here is the '-hina' signal, a real suffix
+              outside the vocabulary.
+      pair    two spellings tested by derived_pair against ngata's runs. A
+              refusal means they are not base + suffix, which is the
+              discriminator working, not a vocabulary gap. Reported because
+              a refusal could in principle name a suffix we lack.
+      base    a headword _hepataka_bases cannot compose onto, because it
+              carries a parenthesis. Nothing to do with the vocabulary.
+      whole   a whole irregular form stored verbatim (paekupu's 'hau
+              ~hāua'). These are WRITTEN, and counting them as refusals was
+              the whole of paekupu's 0.89% against a 1% threshold.
     """
 
+    KINDS = ("suffix", "pair", "base", "whole")
+
     def __init__(self):
-        self.seen = 0
-        self.refused = []
+        self._seen = {k: 0 for k in self.KINDS}
+        self._refused = {k: [] for k in self.KINDS}
+        self._order = []
 
-    def keep(self):
-        self.seen += 1
+    def _touch(self, kind):
+        if kind not in self._seen:
+            raise ValueError(f"unknown tally kind: {kind!r}")
+        if kind not in self._order:
+            self._order.append(kind)
 
-    def refuse(self, token):
-        self.seen += 1
-        self.refused.append(token)
+    def keep(self, kind="suffix"):
+        self._touch(kind)
+        self._seen[kind] += 1
+
+    def refuse(self, token, kind="suffix"):
+        self._touch(kind)
+        self._seen[kind] += 1
+        self._refused[kind].append(token)
+
+    def reclassify(self, token, kind):
+        """Move one refused suffix token into *kind*, as a kept one.
+
+        paekupu refuses '-hāua' through read_tilde_suffixes and then writes
+        'hāua' whole through read_whole_forms. A move, never an add: an
+        earlier version of read_whole_forms took no tally at all precisely
+        to avoid counting the token twice, and that reasoning still holds
+        against adding — it just does not hold against relocating.
+
+        A token that was never refused is a no-op rather than an invention.
+        """
+        self._touch(kind)
+        if token not in self._refused["suffix"]:
+            return
+        self._refused["suffix"].remove(token)
+        self._seen["suffix"] -= 1
+        self._seen[kind] += 1
+
+    def seen_of(self, kind):
+        return self._seen[kind]
+
+    def refused_of(self, kind):
+        return self._refused[kind]
+
+    def refusal_rate(self, kind):
+        """Refusals as a share of tokens seen, or None if the kind is unused."""
+        total = self._seen[kind]
+        return len(self._refused[kind]) / total if total else None
+
+    def kinds(self):
+        """The kinds that actually occurred, in KINDS order."""
+        return [k for k in self.KINDS if k in self._order]
+
+    @property
+    def seen(self):
+        """Every kind together — what the pre-kind report printed."""
+        return sum(self._seen.values())
+
+    @property
+    def refused(self):
+        return [t for k in self.KINDS for t in self._refused[k]]
 
 
 def derived_pair(base, candidate, tally=None):
@@ -88,10 +158,14 @@ def derived_pair(base, candidate, tally=None):
         return None
     if affix in _CLASS:
         if tally is not None:
-            tally.keep()
+            tally.keep(kind="pair")
         return affix
     if tally is not None:
-        tally.refuse(affix)
+        # 'pair', not 'suffix': this is two spellings we TESTED, not a token
+        # the source wrote as suffix notation. A refusal here usually means
+        # the discriminator correctly rejected a compound, so it must not
+        # feed the vocabulary tripwire.
+        tally.refuse(affix, kind="pair")
     return None
 
 
@@ -219,7 +293,7 @@ def _classify_whole(word):
     return None, None
 
 
-def read_whole_forms(headword):
+def read_whole_forms(headword, tally=None):
     """[(form, suffix, form_type)] for each tilde run naming a WHOLE word.
 
     paekupu prints a whole irregular derivation after a tilde where no
@@ -238,12 +312,21 @@ def read_whole_forms(headword):
     ends in 'tu', which is not a suffix, while its first element 'kawea'
     ends in '-a', which is.
 
-    Takes no tally, deliberately. Every run here has already been seen and
-    refused by read_tilde_suffixes on the same headword — _TILDE_TOKEN
-    matches '~hāua' and _keep_known refuses it — so tallying again would
-    count each token twice. The consequence is that the refusal report still
-    lists these sixteen as refused; the report is a diagnostic, not data,
-    and reconciling it belongs with the known Tally defect rather than here.
+    *tally* RECLASSIFIES rather than counts. Every run here has already been
+    seen and refused by read_tilde_suffixes on the same headword —
+    _TILDE_TOKEN matches '~hāua' and _keep_known refuses '-hāua' — so
+    counting it again would double it. Moving it does not: the token stops
+    being a refused suffix and becomes a kept whole form, which is what it
+    is. Sixteen rows were otherwise reported as refusals, and they were the
+    whole of paekupu's 0.89% against the spec's 1% tripwire.
+
+    (An earlier version took no tally at all, for the double-count reason
+    above. That reasoning was right about adding and wrong about moving.)
+
+    The token handed to reclassify is '-' plus the run's first element,
+    which is exactly the string _keep_known refused: _TILDE_TOKEN captures
+    one run of letters, and the first element here is that same run of
+    letters, split on whitespace or hyphen.
 
     See docs/superpowers/specs/2026-09-19-irregular-whole-forms-design.md.
     """
@@ -264,6 +347,8 @@ def read_whole_forms(headword):
             continue
         suffix, form_type = _classify_whole(head)
         if form_type:
+            if tally is not None:
+                tally.reclassify("-" + head, "whole")
             out.append((run, suffix, form_type))
     return out
 

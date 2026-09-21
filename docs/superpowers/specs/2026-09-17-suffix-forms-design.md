@@ -261,13 +261,31 @@ over-merged and the rule is wrong, not the test.
 **Second gate — `hoi` ≥ 7 concepts**, the chaining canary.
 
 **Counts, measured both ways before they are judged.** §1's figures are
-token counts, and rows will be fewer. So each reader reports **three**
-numbers per source: tokens seen, rows written, and tokens refused as
-unrecognised. A reader whose tokens-seen falls more than 10% below §1 is
-missing a shape in the source. A reader whose refusals exceed 1% of its
-tokens has a vocabulary problem, not a source problem — hepatakakupu's
-refusal rate is 9 in 22,911, and anything near a percent means the §2 list
-is wrong. Neither number is a target; both are tripwires.
+token counts, and rows will be fewer. So each reader reports rows written
+plus, **per kind**, tokens seen and tokens refused. A reader whose
+tokens-seen falls more than 10% below §1 is missing a shape in the source. A
+reader whose **suffix-kind** refusals exceed 1% of its suffix tokens has a
+vocabulary problem, not a source problem — hepatakakupu's refusal rate is 9
+in 22,911, and anything near a percent means the §2 list is wrong. Neither
+number is a target; both are tripwires.
+
+**The kinds are not comparable and are never summed.** One counter carrying
+all of them put four of six sources over the 1% threshold without one of
+them having the fault it names, which is how a tripwire stops being read:
+
+| kind | what a refusal means | tripwire |
+|---|---|---|
+| `suffix` | a token the source WROTE as suffix notation is outside the vocabulary. The `-hina` signal. | **yes** |
+| `pair` | `derived_pair` tested two spellings and they are not base + suffix. The ngata and williams discriminator declining a compound. | no |
+| `base` | a headword carries a parenthesis, so nothing can be composed onto it. Unrelated to the vocabulary. | no |
+| `whole` | an irregular form stored verbatim. These are rows we WROTE. | no |
+
+Measured after the split: only papakupu is flagged, at 8.23%, and its 19
+refused tokens are reduplications and appends — a different morphological
+process, deferred by `2026-09-21-reduplication-design.md` §2. Every other
+source is clean. Before the split the same report flagged williams (2.78%,
+one rejected pair test), ngata (2.80%, pair tests), paekupu (0.89%, all of
+it rows it had written) and hepatakakupu's bases (100%, four parentheses).
 
 **Composition is checked against the sources that give both.** ngata and
 williams supply complete derived forms; te_aka, paekupu, papakupu and
