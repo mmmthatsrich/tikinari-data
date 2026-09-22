@@ -145,7 +145,8 @@ def _merge_form_note(existing, incoming):
     return f"{old.group(1)} ({', '.join(sources)})"
 
 
-def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
+def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None,
+                      marked_headword=None):
     """Write one form row per known suffix, composed against *headword*.
 
     An unrecognised suffix writes nothing: classify() is the only thing
@@ -156,6 +157,11 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
     '~hangā'), so classify() is looked up on the FOLDED suffix — classify()
     itself never folds, by design (suffix_forms.classify's own contract) —
     while the suffix passed to compose()/note keeps its original spelling.
+
+    *marked_headword* is the original notation-bearing headword, where the
+    caller has one. compose_phrase uses it to find the element the source
+    marked: 'heke (~nga) atu' means 'hekenga atu', not 'heke atunga'. Left
+    None, composition still steps over a trailing directional particle.
 
     *tally* is optional and normally left None: the other six sources tally
     inside the reader that produced their suffixes (e.g. read_paren_suffixes
@@ -174,7 +180,9 @@ def _add_suffix_forms(b, entry_id, headword, suffixes, source, tally=None):
                 tally.refuse(suffix)
         if not form_type:
             continue
-        if b.add_form(entry_id, suffix_forms.compose(headword, suffix),
+        if b.add_form(entry_id,
+                      suffix_forms.compose_phrase(headword, suffix,
+                                                  marked_headword),
                       form_type, f"{suffix} ({source})"):
             b.derived_forms_written += 1
 
@@ -741,7 +749,11 @@ def build_paekupu(con, b):
         # composition_bases tells the two apart.
         suffixes = suffix_forms.read_tilde_suffixes(hw, b.suffix_tally)
         for base in suffix_forms.composition_bases(hw):
-            _add_suffix_forms(b, eid, base, suffixes, "paekupu")
+            # hw, not base: the notation has been stripped out of base, and
+            # its POSITION is what says which word takes the suffix —
+            # 'heke (~nga) atu' is 'hekenga atu'.
+            _add_suffix_forms(b, eid, base, suffixes, "paekupu",
+                              marked_headword=hw)
         # A tilde run the vocabulary does not recognise is a whole irregular
         # derivation, not a suffix — 'hau ~hāua'. It is stored as printed;
         # composing it would assert a word no source holds.
@@ -795,9 +807,14 @@ def build_papakupu(con, b):
         gloss = clean_gloss(d, [e.get("text_mi") for e in examples])
         sid = b.add_sense(eid, sn, gloss, None, d, part_of_speech=pos)
         base = suffix_forms.strip_suffix_notation(hw)
+        # The bracket notation is inside the headword and its position
+        # matters — 'tau [-ria] mai' is 'tauria mai'.
         _add_suffix_forms(
             b, eid, base,
-            suffix_forms.read_bracket_suffixes(hw, b.suffix_tally), "papakupu")
+            suffix_forms.read_bracket_suffixes(hw, b.suffix_tally), "papakupu",
+            marked_headword=hw)
+        # The tilde notation lives in the DEFINITION and composes onto the
+        # headword, so there is no mark inside the headword to position by.
         _add_suffix_forms(
             b, eid, base,
             suffix_forms.read_tilde_suffixes(d or "", b.suffix_tally), "papakupu")
