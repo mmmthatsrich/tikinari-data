@@ -115,6 +115,12 @@ def _db():
         CREATE TABLE relation (
             id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
             target_headword TEXT, target_entry_id INTEGER, note TEXT);
+        -- collect_derivations reads form to see whether another source
+        -- independently records an ngata derived form; empty here, so
+        -- these rows stay 'probable'.
+        CREATE TABLE form (
+            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
+            form_type TEXT, note TEXT);
         INSERT INTO entry VALUES (1, 'papakupu', 'ekeeke', NULL),
                                  (2, 'papakupu', 'eke',    NULL),
                                  (3, 'williams', 'hopukia', NULL),
