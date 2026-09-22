@@ -273,6 +273,13 @@ _TOKEN = r"[-~]\s*([a-zāēīōū]+)"
 _PAREN_GROUP = re.compile(
     r"\(\s*((?:" + _TOKEN + r"\??\s*[,/]?\s*)+)\)", re.I)
 _TILDE_TOKEN = re.compile(r"~\s*([a-zāēīōū]+)", re.I)
+# The same token with no space allowed, for a reader working in prose. A
+# spaced '~' there is not notation: papakupu writes 'puri ~ puru' for "puri
+# OR puru" and 'Te ~ He hapū' with the tilde standing in for the headword.
+_TILDE_TIGHT = re.compile(r"~([a-zāēīōū]+)", re.I)
+# A token the source itself doubts — papakupu's '~iatia (?)'. te_aka writes
+# the same hedge as '(-tia?)', which read_paren_suffixes already refuses.
+_TILDE_HEDGED = re.compile(r"~([a-zāēīōū]+)\s*\(\s*\?\s*\)", re.I)
 _BRACKET_GROUP = re.compile(r"\[\s*((?:-\s*[a-zāēīōū]+\s*,?\s*)+)\]", re.I)
 _HYPHEN_TOKEN = re.compile(r"-\s*([a-zāēīōū]+)", re.I)
 
@@ -337,14 +344,34 @@ def read_paren_suffixes(text, tally=None):
     return out
 
 
-def read_tilde_suffixes(text, tally=None):
+def read_tilde_suffixes(text, tally=None, tight=False):
     """['-tia', '-tanga'] from '~tia, ~tanga (1) beget' or 'ahu ~nga'.
 
     Separators vary: paekupu spaces them, papakupu uses commas and at least
     once a semicolon ('~a, ~ria, ~ngia; ~nga'). Reading every tilde token and
     filtering by vocabulary handles all of them without a separator rule.
+
+    *tight* refuses a tilde with a space after it, and belongs to a reader
+    working in PROSE. papakupu's notation sits in the definition, where '~'
+    also does two other jobs — 'puri ~ puru' means "puri or puru", and
+    'Te ~ He hapū' uses it to stand in for the headword. Every one of those
+    is spaced and every genuine token is tight, so across papakupu the
+    spaced form yields no real suffix and five artefacts.
+
+    paekupu is left loose on purpose. Its notation lives in the headword, a
+    structured field rather than prose, where a space is untidy typography
+    and not a different meaning: 'āhei ~nga ~ tanga' is '~tanga' spelled
+    with a stray space, and 33 real tokens are written that way.
+
+    A token the source hedges is refused either way. papakupu writes
+    '~iatia (?)' where te_aka writes '(-tia?)'; a doubt is not a claim, and
+    read_paren_suffixes already declines the te_aka form.
     """
-    return _keep_known(_TILDE_TOKEN.findall(text or ""), tally)
+    text = text or ""
+    hedged = set(_TILDE_HEDGED.findall(text))
+    pattern = _TILDE_TIGHT if tight else _TILDE_TOKEN
+    tokens = [t for t in pattern.findall(text) if t not in hedged]
+    return _keep_known(tokens, tally)
 
 
 def read_bracket_suffixes(text, tally=None):

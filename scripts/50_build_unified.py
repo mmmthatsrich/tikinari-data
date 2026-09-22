@@ -815,9 +815,14 @@ def build_papakupu(con, b):
             marked_headword=hw)
         # The tilde notation lives in the DEFINITION and composes onto the
         # headword, so there is no mark inside the headword to position by.
+        # tight=True because the definition is also prose: papakupu writes
+        # 'puri ~ puru' for "puri or puru" and 'Te ~ He hapū' with the
+        # tilde standing in for the headword, and both are spaced where
+        # real notation is not.
         _add_suffix_forms(
             b, eid, base,
-            suffix_forms.read_tilde_suffixes(d or "", b.suffix_tally), "papakupu")
+            suffix_forms.read_tilde_suffixes(d or "", b.suffix_tally,
+                                             tight=True), "papakupu")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)
