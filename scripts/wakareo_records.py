@@ -176,6 +176,15 @@ def _body_text(rec: dict, body: str) -> str | None:
     Kimikupu Hou bodies are often `<BR><B>{equivalent}</B><BR><BR>` — stripping
     leaves the equivalent itself, which is not a definition and must not read as
     one.
+
+    A body can restate SEVERAL equivalents at once, comma-joined —
+    'Ēperira, Ngahuru mātahi, Paenga whāwhā' under the lemma April. Comparing
+    the whole stem against each lemma in turn never matched those, so 183 rows
+    (175 ngata, 8 Kimikupu Hou) kept a body that reached ~450 unified senses as
+    a definition of the word by itself and its synonyms. The comparison is
+    therefore per comma-separated part, and the body is refused only when EVERY
+    part is a lemma: one part that is not makes the run prose again
+    ('aramona, amana, a stone fruit').
     """
     text = strip_tags(body)
     if not text:
@@ -189,7 +198,12 @@ def _body_text(rec: dict, body: str) -> str | None:
         stem = stem[len(qualifier):].strip()
     lemmas = {rec["headword"].casefold()}
     lemmas.update(e.casefold() for e in rec.get("equivalents") or [])
-    return None if stem.casefold() in lemmas else text
+    # A trailing comma leaves an empty part, which is why the parts are
+    # filtered rather than split blindly — ngata's 'Pied tit' ends in one.
+    parts = [p.strip().casefold() for p in stem.split(",") if p.strip()]
+    if parts and all(p in lemmas for p in parts):
+        return None
+    return text
 
 
 _TREGEAR_LABELS = ("Maori Example:", "Compare With:", "Word Base:",
