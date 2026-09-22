@@ -58,10 +58,25 @@ class WordOriginTables(unittest.TestCase):
         self.assertGreater(self._one(
             "SELECT COUNT(*) FROM derivation WHERE derived = 0"), 6500)
 
-    def test_a_segmented_row_is_never_claimed_as_certain(self):
+    def test_a_segmented_row_is_certain_only_with_outside_support(self):
+        # This test used to assert that NO segmented row was ever certain.
+        # That was right while confidence was a blanket hedge over all of
+        # ngata's 4,646, and it is wrong now: 3,797 of them name a derived
+        # form that a different dictionary independently records, and a
+        # hedge covering those pointed at nothing. The rule it was
+        # protecting survives in sharper form — certainty still needs
+        # evidence, it just no longer has to be the source's own statement.
+        #
+        # derived = 1 is untouched by any of this: ngata did not state the
+        # pairing, whatever anyone else records.
         self.assertEqual(self._one(
-            "SELECT COUNT(*) FROM derivation "
-            "WHERE derived <> 0 AND confidence = 'certain'"), 0)
+            "SELECT COUNT(*) FROM derivation d "
+            "JOIN entry e ON e.id = d.entry_id "
+            "WHERE d.derived <> 0 AND d.confidence = 'certain' "
+            "  AND NOT EXISTS (SELECT 1 FROM form f "
+            "      JOIN entry e2 ON e2.id = f.entry_id "
+            "      WHERE e2.source_id <> e.source_id AND f.form = e.headword "
+            "        AND f.form_type IN ('passive','nominalisation'))"), 0)
 
     def test_every_derivation_row_names_its_evidence(self):
         self.assertEqual(self._one(

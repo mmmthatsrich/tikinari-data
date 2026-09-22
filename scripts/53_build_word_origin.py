@@ -87,9 +87,37 @@ def _derivation_shape(child, base):
                                normalise_search_key(base))
 
 
+def _corroborated_forms(con):
+    """Derived forms that a source OTHER than ngata records as passive or
+    nominalisation.
+
+    ngata prints every Māori equivalent of an English lemma in one
+    comma-separated run and never says which member derives from which; the
+    pairing is our segmentation of the spellings, which is what derived = 1
+    records. That inference can go wrong — in 'patu, patua, pātuki,
+    pātukia', 'patu' plus '-kia' also fits 'pātukia', a word that is really
+    'pātuki' plus '-a'.
+
+    Where a different dictionary independently records the same word as a
+    derived form, our pairing has outside support and the row is 'certain'.
+    Where it does not, 'probable' marks it: 3,797 of 4,646 are corroborated,
+    and the remaining 849 are the ones worth a look. A blanket 'probable'
+    over all of them pointed at nothing.
+
+    Exact spellings, deliberately. Folding macrons here would match 'hāua'
+    to 'haua', a different word, and manufacture corroboration — the same
+    trap that produced a fabricated attestation count once already.
+    """
+    return {row[0] for row in con.execute(
+        "SELECT DISTINCT f.form FROM form f JOIN entry e ON e.id = f.entry_id "
+        " WHERE e.source_id <> 'ngata' "
+        "   AND f.form_type IN ('passive', 'nominalisation')")}
+
+
 def collect_derivations(con):
     rows = []
     first = _first_sense(con)
+    corroborated = _corroborated_forms(con)
 
     # ── derived_from: a word and the base it was formed from ─────────────────
     # Two sources write this relation and their warrants differ. Williams
@@ -116,6 +144,11 @@ def collect_derivations(con):
             # this block — the very defect this mapping replaces.
             continue
         evidence, derived, confidence = warrant
+        if src == "ngata":
+            # The warrant's 'probable' is the default; outside support
+            # raises it. derived stays 1 either way — corroboration says the
+            # pairing is right, not that ngata stated it.
+            confidence = "certain" if child in corroborated else "probable"
         if note == "reduplication":
             # The source said so in a sentence. describe_derivation reads
             # 'ekeeke' < 'eke' as ('suffix','-ke') — the seam collapses and
