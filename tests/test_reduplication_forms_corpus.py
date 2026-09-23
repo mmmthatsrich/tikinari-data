@@ -89,17 +89,24 @@ class ReduplicationForms(unittest.TestCase):
             if not r[1].startswith(r[0])]
         self.assertEqual(bad, [], f"not built on their headword: {bad}")
 
-    def test_papakupu_gained_exactly_nine_form_rows(self):
+    def test_papakupu_form_rows(self):
+        # 796 before the reduplications, 805 after them, 809 once the four
+        # residual tokens landed (three by ending, one by ruling).
         self.assertEqual(self._one(
             "SELECT COUNT(*) FROM form f JOIN entry e ON e.id = f.entry_id "
-            "WHERE e.source_id = 'papakupu'"), 805)
+            "WHERE e.source_id = 'papakupu'"), 809)
 
     def test_the_suffix_forms_were_not_disturbed(self):
-        # The reduplication reader runs after the suffix reader and must
-        # not have claimed any of its tokens.
+        # The reduplication reader must not have claimed any of the suffix
+        # reader's tokens. 212 read from fragments, plus the 3 whose class
+        # was read off the composed form's ending.
         self.assertEqual(self._one(
             "SELECT COUNT(*) FROM form f JOIN entry e ON e.id = f.entry_id "
             "WHERE e.source_id = 'papakupu' "
+            "  AND f.form_type IN ('passive','nominalisation')"), 215)
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM form f JOIN entry e ON e.id = f.entry_id "
+            "WHERE e.source_id = 'papakupu' AND f.note LIKE '%(papakupu)'"
             "  AND f.form_type IN ('passive','nominalisation')"), 212)
 
     def test_no_other_source_grew_a_reduplication_type(self):
@@ -121,3 +128,59 @@ class ReduplicationForms(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ResidualTokens(unittest.TestCase):
+    """The last four tokens: three by rule, one by ruling.
+
+    Measured on 2026-09-23:
+        papakupu form rows   805 -> 809
+        suffix refusals        4 -> 0
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.con = _open()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.con.close()
+
+    def _row(self, form):
+        return self.con.execute(
+            "SELECT f.form_type, f.note FROM form f "
+            "JOIN entry e ON e.id = f.entry_id "
+            "WHERE e.source_id = 'papakupu' AND f.form = ?",
+            (form,)).fetchone()
+
+    def test_a_class_read_off_the_ending_is_marked_as_such(self):
+        for form, want in (("meatingia", ("passive", "-ngia (papakupu, by ending)")),
+                           ("meatinga", ("nominalisation", "-inga (papakupu, by ending)")),
+                           ("whakamātautauranga",
+                            ("nominalisation", "-ranga (papakupu, by ending)"))):
+            with self.subTest(form=form):
+                self.assertEqual(self._row(form), want)
+
+    def test_the_ruled_variant_says_it_was_ruled(self):
+        # 'ukui' is another form of 'uku' — the passives are 'ukua' and
+        # 'ukuia'. That is the project owner's judgement, not a rule, and
+        # the note must not let it read as a reading.
+        self.assertEqual(self._row("ukui"), ("variant", "~i (papakupu, ruled)"))
+
+    def test_a_doubling_is_never_also_filed_by_its_ending(self):
+        # 'hokohokoa' ends in '-a'. Both readers would take it, and
+        # add_form dedups on (entry, form, TYPE), so it landed twice until
+        # the readers were made disjoint.
+        for form in ("hokohokoa", "rouroua", "uiuia"):
+            with self.subTest(form=form):
+                self.assertEqual(self.con.execute(
+                    "SELECT COUNT(*) FROM form f "
+                    "JOIN entry e ON e.id = f.entry_id "
+                    "WHERE e.source_id = 'papakupu' AND f.form = ?",
+                    (form,)).fetchone()[0], 1)
+                self.assertEqual(self._row(form)[0], "reduplication")
+
+    def test_papakupu_now_has_809_form_rows(self):
+        self.assertEqual(self.con.execute(
+            "SELECT COUNT(*) FROM form f JOIN entry e ON e.id = f.entry_id "
+            "WHERE e.source_id = 'papakupu'").fetchone()[0], 809)

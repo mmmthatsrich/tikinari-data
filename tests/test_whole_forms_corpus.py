@@ -107,10 +107,16 @@ class WholeForms(unittest.TestCase):
                     "WHERE source_id = 'paekupu' AND source_entry_id = ?",
                     slug), key)
 
-    def test_the_corpus_totals_moved_by_sixteen(self):
-        self.assertEqual(self._one(
+    def test_the_corpus_totals_include_the_sixteen(self):
+        # 34,978 before these sixteen, 34,994 after. Later work added three
+        # more from papakupu, whose class was read off the composed form's
+        # ending rather than a printed fragment, so this is now a floor on
+        # the whole and an exact count of the sixteen below.
+        self.assertGreaterEqual(self._one(
             "SELECT COUNT(*) FROM form "
             "WHERE form_type IN ('passive', 'nominalisation')"), 34994)
+        self.assertEqual(self._one(
+            "SELECT COUNT(*) FROM form WHERE note LIKE '%, whole)'"), 16)
 
     def test_the_existing_composed_rows_survived(self):
         # Three entries carry a composed form AND a whole one; the new writer
