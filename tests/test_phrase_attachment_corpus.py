@@ -92,7 +92,11 @@ class PhraseAttachment(unittest.TestCase):
 
     def test_the_source_totals_are_unchanged(self):
         # The suffix moved within each form; no row was added or lost.
-        for source, want in (("paekupu", 1839), ("papakupu", 212)):
+        # papakupu was 212 when this landed; later work added three whose
+        # class was read off the composed form's ending. The claim here is
+        # that the ELEVEN moved their suffix without changing any count,
+        # which the per-form assertions above still pin exactly.
+        for source, want in (("paekupu", 1839), ("papakupu", 215)):
             with self.subTest(source=source):
                 self.assertEqual(self.con.execute(
                     "SELECT COUNT(*) FROM form f JOIN entry e "

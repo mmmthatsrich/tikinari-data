@@ -790,6 +790,21 @@ def build_paekupu(con, b):
             b.add_domain(eid, sid, subj_en, "en")
 
 
+# Tokens papakupu writes that no rule reaches, resolved by the project
+# owner's judgement rather than by evidence in the strings.
+#
+# 'uku ~i' composes to 'ukui', which ends in no vocabulary suffix and is not
+# a reduplication. It is another FORM of 'uku' — the passives are 'ukua' and
+# 'ukuia' — so it is a variant, not a derived form. Seven sources hold the
+# word, most spelling it 'ūkui'; papakupu's own spelling is kept, as
+# everywhere else.
+#
+# A named exception, deliberately. Encoding it as a rule would mean claiming
+# that any token composing to an attested word is a variant, and the
+# reduplications ('~rau', '~ue', '~uwhi') compose to attested words too.
+_PAPAKUPU_RULED = {("uku", "i"): "variant"}
+
+
 def build_papakupu(con, b):
     sql = ("SELECT id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, usage_examples, variant_forms, see_also, source_code, "
@@ -831,6 +846,27 @@ def build_papakupu(con, b):
                 base, d or "", b.suffix_tally):
             if b.add_form(eid, form, "reduplication", f"~{form[len(base):]} (papakupu)"):
                 b.derived_forms_written += 1
+        # A token can be neither a suffix nor a doubling and still compose
+        # into a word that ENDS in one — 'mea ~tingia' gives 'meatingia',
+        # ending '-ngia'. Runs after the reduplication reader, which would
+        # otherwise lose 'hokohokoa' to its final '-a'. The note carries the
+        # suffix the ending shows, so per-suffix counts stay answerable, and
+        # ', by ending' marks a class read off the form rather than printed.
+        for form, form_type, suffix in suffix_forms.read_tilde_by_ending(
+                base, d or "", b.suffix_tally):
+            if b.add_form(eid, form, form_type,
+                          f"{suffix} (papakupu, by ending)"):
+                b.derived_forms_written += 1
+        # Last, the tokens no rule reaches, resolved by judgement.
+        for (ruled_hw, ruled_tok), ruled_type in _PAPAKUPU_RULED.items():
+            if suffix_forms.fold(base) != suffix_forms.fold(ruled_hw):
+                continue
+            if ruled_tok not in suffix_forms.read_raw_tilde_tokens(d or ""):
+                continue
+            if b.add_form(eid, suffix_forms.compose(base, ruled_tok),
+                          ruled_type, f"~{ruled_tok} (papakupu, ruled)"):
+                b.derived_forms_written += 1
+                b.suffix_tally.reclassify("-" + ruled_tok, "ruled")
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)
@@ -1490,7 +1526,8 @@ def first_seen_snapshot(con, source_id) -> dict:
 
 _TALLY_NOUN = {"suffix": "tokens", "pair": "pair tests",
                "base": "bases", "whole": "whole forms",
-               "reduplication": "reduplications"}
+               "reduplication": "reduplications",
+               "ruled": "by ruling"}
 
 
 def format_suffix_report(source_id, rows_written, tally):

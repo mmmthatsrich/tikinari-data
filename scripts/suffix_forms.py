@@ -81,9 +81,12 @@ class Tally:
               a tilde token that repeats its headword rather than suffixing
               it (papakupu's 'ue ~ue'). Also WRITTEN, and likewise moved out
               of the suffix refusals rather than counted against them.
+      ruled   a token no rule reaches, written on the project owner's
+              judgement ('uku ~i' -> 'ukui', a variant). Kept apart from the
+              rest so the report never presents a ruling as a reading.
     """
 
-    KINDS = ("suffix", "pair", "base", "whole", "reduplication")
+    KINDS = ("suffix", "pair", "base", "whole", "reduplication", "ruled")
 
     def __init__(self):
         self._seen = {k: 0 for k in self.KINDS}
@@ -441,6 +444,58 @@ def read_tilde_reduplications(headword, text, tally=None):
         if tally is not None:
             tally.reclassify("-" + token, "reduplication")
         out.append(compose(headword, token))
+    return out
+
+
+def read_raw_tilde_tokens(text):
+    """Every tight, unhedged tilde token in *text*, unfiltered.
+
+    For a caller that needs to know what the source wrote before any
+    vocabulary test — the named-exception path in build_papakupu, which
+    matches on the token itself rather than on what it classifies as.
+    """
+    text = text or ""
+    hedged = set(_TILDE_HEDGED.findall(text))
+    return [t for t in _TILDE_TIGHT.findall(text) if t not in hedged]
+
+
+def read_tilde_by_ending(headword, text, tally=None):
+    """[(form, form_type, suffix)] for tokens whose COMPOSED form ends in a
+    vocabulary suffix, though the token itself does not.
+
+    papakupu writes 'mea ~tingia'. '-tingia' is not in the 23-word list, so
+    the suffix reader refuses it — but 'meatingia' ends in '-ngia', which
+    is, and te_aka holds the word as a verb. The same test _classify_whole
+    applies to paekupu's whole irregular forms answers it here: read the
+    class off the form rather than the fragment.
+
+    Three tokens in papakupu need this, and two of the three compose into
+    words other dictionaries hold. The suffix returned is the one the
+    ENDING shows, not the token the source wrote, because that is what
+    makes the per-suffix counts answerable; the caller marks the note so a
+    reader can tell an inferred class from a printed one.
+
+    Disjoint from read_tilde_reduplications by construction, not by call
+    order. A doubling can also end in a suffix — 'hoko ~hokoa' gives
+    'hokohokoa', ending '-a' — so simply running second was not enough:
+    both readers saw the token and the row landed twice, once as a
+    reduplication and once as a passive, because add_form dedups on
+    (entry, form, TYPE). Tokens the reduplication rules claim are skipped
+    here outright.
+
+    Tight tildes only and hedges refused, as everywhere else in prose.
+    """
+    out = []
+    for token in read_raw_tilde_tokens(text):
+        if classify(fold("-" + token)) or redup_kind(headword, token):
+            continue
+        form = compose(headword, token)
+        suffix, form_type = _classify_whole(form)
+        if not form_type:
+            continue
+        if tally is not None:
+            tally.reclassify("-" + token, "whole")
+        out.append((form, form_type, suffix))
     return out
 
 
