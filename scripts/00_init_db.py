@@ -959,7 +959,16 @@ def create_tables(conn: sqlite3.Connection) -> None:
             form        TEXT NOT NULL,
             form_search TEXT NOT NULL,             -- normalise_search_key, for matching
             form_type   TEXT,                      -- variant | alt_spelling | plural | inflected |
-                                                    -- passive | nominalisation
+                                                    -- passive | nominalisation | reduplication
+            -- 'reduplication' holds only the forms a source MARKS as one,
+            -- which today is papakupu's 9 tilde tokens that repeat their
+            -- headword ('ue ~ue' -> 'ueue'). It is NOT a count of
+            -- reduplication in the corpus: derivation.process holds 304,
+            -- and neither is the whole picture — 871 headwords are a stem
+            -- written twice, and 2026-09-21-reduplication-design.md §2
+            -- shows why those cannot be harvested. This column answers
+            -- 'does this entry have a recorded reduplicated form?', the
+            -- same question it answers for passive and nominalisation.
             note        TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_form_entry  ON form(entry_id);

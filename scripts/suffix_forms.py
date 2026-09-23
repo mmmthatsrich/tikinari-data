@@ -77,9 +77,13 @@ class Tally:
       whole   a whole irregular form stored verbatim (paekupu's 'hau
               ~hāua'). These are WRITTEN, and counting them as refusals was
               the whole of paekupu's 0.89% against a 1% threshold.
+      reduplication
+              a tilde token that repeats its headword rather than suffixing
+              it (papakupu's 'ue ~ue'). Also WRITTEN, and likewise moved out
+              of the suffix refusals rather than counted against them.
     """
 
-    KINDS = ("suffix", "pair", "base", "whole")
+    KINDS = ("suffix", "pair", "base", "whole", "reduplication")
 
     def __init__(self):
         self._seen = {k: 0 for k in self.KINDS}
@@ -372,6 +376,72 @@ def read_tilde_suffixes(text, tally=None, tight=False):
     pattern = _TILDE_TIGHT if tight else _TILDE_TOKEN
     tokens = [t for t in pattern.findall(text) if t not in hedged]
     return _keep_known(tokens, tally)
+
+
+def redup_kind(headword, token):
+    """How *token* repeats *headword*, or None if it does not.
+
+    papakupu's tilde means "append this to the headword". Usually the token
+    is a suffix — '~a' on 'uku' gives the passive 'ukua' — but sometimes it
+    is the headword again, and 'ue ~ue' gives 'ueue', a word five other
+    dictionaries hold.
+
+    This is NOT the inference 2026-09-21-reduplication-design.md §2 rejects.
+    There the base would be picked out of the lexicon and guessed: of 871
+    headwords that are a stem written twice, a sample of twelve found ONE
+    genuine pair. Here papakupu supplies BOTH strings and the relation
+    between them is arithmetic on what it wrote.
+
+    Three shapes, all measured against the whole source:
+
+        ue         ~ue    ueue           the token IS the headword
+        ui         ~uia   uiuia          the headword plus a known suffix
+        whakamātau ~tau   whakamātautau  the headword's final foot
+
+    The tail rule needs two characters and a headword longer than the
+    token, so a one-letter ending ('uku' ~ 'u') is not a reduplication.
+    Callers test this only AFTER classify() has declined the token, so a
+    real suffix never reaches here.
+    """
+    head, tok = fold(headword), fold(token)
+    if not head or not tok:
+        return None
+    if tok == head:
+        return "doubling"
+    for suffix in sorted(PASSIVE + NOMINALISATION, key=len, reverse=True):
+        if tok == head + suffix[1:]:
+            return "doubling+suffix"
+    if len(tok) >= 2 and len(head) > len(tok) and head.endswith(tok):
+        return "final foot"
+    return None
+
+
+def read_tilde_reduplications(headword, text, tally=None):
+    """['ueue'] for each tilde token of *text* that repeats *headword*.
+
+    Composed and returned whole, because the result is a form of the
+    headword rather than a suffix applied to it. Tight tildes only and
+    hedges refused, exactly as read_tilde_suffixes does in prose: a spaced
+    '~' is papakupu writing "or", and '(?)' is the source doubting itself.
+
+    *tally* RECLASSIFIES rather than counts, the same move
+    read_whole_forms makes. read_tilde_suffixes has already seen these
+    tokens and refused them as unrecognised suffixes; they are not refusals
+    once they are written, but they were counted once already and must not
+    be counted twice.
+    """
+    text = text or ""
+    hedged = set(_TILDE_HEDGED.findall(text))
+    out = []
+    for token in _TILDE_TIGHT.findall(text):
+        if token in hedged or classify(fold("-" + token)):
+            continue
+        if redup_kind(headword, token) is None:
+            continue
+        if tally is not None:
+            tally.reclassify("-" + token, "reduplication")
+        out.append(compose(headword, token))
+    return out
 
 
 def read_bracket_suffixes(text, tally=None):
