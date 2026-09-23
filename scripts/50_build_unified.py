@@ -823,6 +823,14 @@ def build_papakupu(con, b):
             b, eid, base,
             suffix_forms.read_tilde_suffixes(d or "", b.suffix_tally,
                                              tight=True), "papakupu")
+        # The same notation can repeat the headword instead of suffixing it
+        # — 'ue ~ue' is 'ueue'. Stored as a form of the base, like the
+        # passives above, because that is what the notation names: a form
+        # on this entry, not a claim about another entry.
+        for form in suffix_forms.read_tilde_reduplications(
+                base, d or "", b.suffix_tally):
+            if b.add_form(eid, form, "reduplication", f"~{form[len(base):]} (papakupu)"):
+                b.derived_forms_written += 1
         for i, ex in enumerate(examples):
             b.add_example(sid, eid, ex.get("text_mi"), ex.get("text_en"),
                           ex.get("source_abbrev"), None, i)
@@ -1481,7 +1489,8 @@ def first_seen_snapshot(con, source_id) -> dict:
 
 
 _TALLY_NOUN = {"suffix": "tokens", "pair": "pair tests",
-               "base": "bases", "whole": "whole forms"}
+               "base": "bases", "whole": "whole forms",
+               "reduplication": "reduplications"}
 
 
 def format_suffix_report(source_id, rows_written, tally):
