@@ -564,3 +564,47 @@ never reaching the column at all.
 - **`subject_area`/`subject_area_en` is the controlled vocabulary** the rubric's §2 already
   permits deriving across languages with, so a mapping from `(science)` to the existing
   Pūtaiao/Science pair has a sanctioned route.
+
+---
+
+## D42. Editorial notes inside `example.text_en` — 3,785 te_aka examples — **found by the sweep, queued**
+
+Found judging the calibration slice's tier-4 cluster `amupa`, 2026-09-24.
+
+te_aka:20438's example reads:
+
+> `On 16 August Mekini was hung for the murder of the child of a woman called Amupa.`
+> `note: Maori name?`
+
+The trailing note is te_aka's own editorial query about the headword, not a translation of the
+Māori sentence. A reader shown the example sees it. **3,785 te_aka examples** carry a `note:`
+marker inside `text_en`.
+
+### The notes are not one kind
+
+This is why the finding is `queued` and not `applied` — the target column depends on which
+kind it is:
+
+| shape | example | belongs in |
+|---|---|---|
+| glossing a proper noun | `note: Persian king.` · `note: pharoah` | a sense gloss, or nowhere |
+| a citation | `note: 2Sam1:20` | `example.citation` |
+| an open editorial query | `note: Maori name?` | not a user-facing field at all |
+
+§3 permits `applied` only where the target column is unambiguous. Here it is not, and a blanket
+strip would discard a citation that the schema already has a home for.
+
+### Related but distinct
+
+- **D9** was source HTML reaching `definition_raw` — markup, mechanically removable.
+- **D41** is a subject domain inside `gloss_en` — one kind of content, one target column.
+
+This one is a single marker carrying at least three kinds of content, which is what makes it a
+classification problem rather than a cleanup.
+
+### Also recorded on that cluster
+
+1,380 senses are glossed exactly `unknown` — te_aka 1,376, ngata 4. That is **not** a defect:
+§2 says a missing gloss is reported and never filled, and te_aka is being honest about a
+transliterated name it could not identify. Recorded so that a consumer counting glosses knows
+these are a deliberate absence rather than content.
