@@ -1,6 +1,24 @@
 {
  "clusters": [
   {
+   "cluster_key": "(te) ra rangawatea",
+   "completed_at": "2026-09-24T04:35:01.225328+00:00",
+   "finding_count": 3,
+   "notes": "first tier-4 calibration cluster; rubric v2. Single source, so no cross-source question - and the finding is one no tier-1 cluster had surfaced.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
+   "cluster_key": "[to] tara!",
+   "completed_at": "2026-09-24T04:36:19.113126+00:00",
+   "finding_count": 2,
+   "notes": "second tier-4 calibration cluster; rubric v2. Extends and corrects the count filed on '(te) ra rangawatea'.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
    "cluster_key": "ahuahu",
    "completed_at": "2026-09-11T21:17:54.213065+00:00",
    "finding_count": 6,
@@ -19,10 +37,28 @@
    "status": "done"
   },
   {
+   "cluster_key": "ainga whakararo",
+   "completed_at": "2026-09-24T04:33:50.359524+00:00",
+   "finding_count": 1,
+   "notes": "first tier-3 calibration cluster; rubric v2. Clean: the only judgement is identity.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
    "cluster_key": "angitu",
    "completed_at": "2026-09-11T21:21:33.659607+00:00",
    "finding_count": 4,
    "notes": "second calibration cluster, rubric v2, judged after the D21 citation fix",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
+   "cluster_key": "apatono",
+   "completed_at": "2026-09-24T04:36:52.586040+00:00",
+   "finding_count": 2,
+   "notes": "third tier-3 calibration cluster; rubric v2. A coinage and its dictionary entry agreeing.",
    "patch_count": 0,
    "rubric_version": "v2",
    "status": "done"
@@ -330,6 +366,40 @@
    "severity": null,
    "subject": "54_build_concepts.form_concepts",
    "summary": "A member's confidence is frozen at the moment it attaches, against whichever members happened to be in the concept then — not against the concept's final membership. te_aka 'galaxy.' and te_matatiki 'Galaxy' score coverage 1.00 against each other, which is ordinary evidence, yet te_aka is tiered uncertain: it attached when only paekupu was present, scored weak against paekupu's encyclopaedic definition, and never got credit for te_matatiki arriving afterwards."
+  },
+  {
+   "action": "deferred",
+   "cluster_key": "(te) ra rangawatea",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:35:01.217051+00:00",
+   "detail": "paekupu prints the headword '(Te) Ra Rangaawatea', where the parenthesis marks the article as optional. normalise_search_key keeps the parenthesis, so headword_search is '(te) ra rangawatea' and the cluster is keyed on that. A reader searching the bare term does not reach it. Systemic rather than local: 707 entries hold a parenthetical anywhere in headword_search and 291 begin with one - paekupu 258, te_aka 18, kimikupu_hou 11, te_matatiki 4 - and 1,080 sweep clusters are keyed with a bracket. Not all are the same shape: te_aka's '(ka/he/te) tau/kino (ke) (hoki)' is an idiom whose parentheses mark genuine alternation, and stripping those would be wrong. Deferred rather than queued because a per-cluster patch cannot address it and section 6 records the precedent - a systemic defect belongs in the script that causes it, as D19 and D20 did.",
+   "finding_id": "cal-t4:(te) ra rangawatea:1",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "medium",
+   "subject": "paekupu:rangaawatea-2",
+   "summary": "an optional article inside headword_search makes the term findable only with it"
+  },
+  {
+   "action": "deferred",
+   "cluster_key": "[to] tara!",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:36:19.107795+00:00",
+   "detail": "te_aka prints '[to] tara!', where the square brackets mark an implied possessive. headword_search keeps both the brackets and the exclamation mark, so the cluster is keyed '[to] tara!' and a reader searching the bare word does not reach it. The finding filed on '(te) ra rangawatea' counted round brackets only and reported 707 entries; counting square brackets, exclamation and question marks as well gives 883, across eight sources - paekupu 506, te_aka 252, kimikupu_hou 57, papakupu 28, williams 20, te_matatiki 14, hepatakakupu 4, tregear_exceptions 2. Round brackets alone are 707, square 139, ellipsis 128, slash 48, exclamation 46, question 35. Recorded here rather than re-filing the whole finding per cluster, which is the noise section 4 warns about. Still deferred: the shapes are not all one defect, since te_aka's idiom keys genuinely alternate, and the fix belongs in the key-building script rather than in any cluster.",
+   "finding_id": "cal-t4:[to] tara!:1",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "medium",
+   "subject": "te_aka:8521",
+   "summary": "square brackets and terminal punctuation reach headword_search too; the earlier count of 707 was low"
   },
   {
    "action": "deferred",
@@ -775,6 +845,23 @@
   },
   {
    "action": "none",
+   "cluster_key": "(te) ra rangawatea",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:35:01.221837+00:00",
+   "detail": "'(Te) Ra Rangaawatea' writes the first long vowel as a macron and the second as a doubled letter in the same headword. Recorded, not corrected: section 2 forbids rewriting a source's own voice, and with one source in this cluster there is no cross-source disagreement to make it a macronisation finding. Noted because the doubled-vowel convention is the one that normalise_search_key collapses, which is how 'Paaha' and 'paha' reconcile elsewhere.",
+   "finding_id": "cal-t4:(te) ra rangawatea:2",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "paekupu:rangaawatea-2",
+   "summary": "one headword mixes a macron and a doubled vowel"
+  },
+  {
+   "action": "none",
    "cluster_key": "ahuahu",
    "confidence": "certain",
    "created_at": "2026-09-11T20:23:24.847033+00:00",
@@ -840,6 +927,23 @@
    "severity": "low",
    "subject": "cluster angitu",
    "summary": "no cognate set is linked to any entry in this cluster"
+  },
+  {
+   "action": "none",
+   "cluster_key": "apatono",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:36:52.585038+00:00",
+   "detail": "definition_raw reads 'Delegation [aparangi W.12 ... tono W.436 demand]'. The bracketed block is not stray content: it is te_matatiki's own printed derivation, gloss_en is the clean 'Delegation', and both components are already lifted into cross_ref relations resolved against williams:280 and williams:10406. Recorded so a later pass does not read the brackets as field_placement and strip a source's own text, which section 2 forbids.",
+   "finding_id": "cal-t3:apatono:2",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "low",
+   "subject": "te_matatiki:WR-TM.68#47694",
+   "summary": "the component block sits in definition_raw, which is where it belongs"
   },
   {
    "action": "none",
@@ -1608,6 +1712,40 @@
   },
   {
    "action": "queued",
+   "cluster_key": "(te) ra rangawatea",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:35:01.224320+00:00",
+   "detail": "One entry, one source, one sense, glossed 'Armistice Day' under domain Tikanga a-Iwi / Social Science. No other source in the corpus carries this term under this key, so concept 2598147 has one member and that is right rather than a failure to group. Confirming the membership records that the single-source concept was judged, not merely unexamined.",
+   "finding_id": "cal-t4:(te) ra rangawatea:3",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "paekupu:rangaawatea-2",
+   "summary": "sole member of its concept, correctly"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "[to] tara!",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:36:19.112125+00:00",
+   "detail": "One te_aka entry, one sense, a curse glossed at length and marked as said only to or about a woman. No other source carries this phrase, so concept 2598303 having one member is right. Its missing part_of_speech is not flagged: 1,672 of te_aka's 47,888 entries have none, so a per-cluster finding would be noise rather than signal.",
+   "finding_id": "cal-t4:[to] tara!:2",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "te_aka:8521#1",
+   "summary": "sole member of its concept, correctly"
+  },
+  {
+   "action": "queued",
    "cluster_key": "ahuahu",
    "confidence": "certain",
    "created_at": "2026-09-11T20:23:24.850037+00:00",
@@ -1744,6 +1882,23 @@
   },
   {
    "action": "queued",
+   "cluster_key": "ainga whakararo",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:33:50.354507+00:00",
+   "detail": "Both headwords are 'ainga whakararo' with identical macronisation. paekupu glosses it 'subduction' under domain Putaiao/Science and records its components as 'ainga - driving force' and 'whakararo - downward'; te_aka glosses 'forcing downwards, subduction - a geological process where one tectonic plate moves under another' and cites Te Reo Putaiao 2009:305. te_aka's gloss spells out exactly the formation paekupu's component notes describe, and nothing in either contradicts the other. The difference is depth of definition, which section 3 treats as editorial rather than error. Concept 2599223 already proposes both; this confirms the two memberships rather than proposing a grouping.",
+   "finding_id": "cal-t3:ainga whakararo:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "low",
+   "subject": "paekupu:ainga-whakararo ; te_aka:38813#1",
+   "summary": "paekupu and te_aka carry the same coined geological term"
+  },
+  {
+   "action": "queued",
    "cluster_key": "angitu",
    "confidence": "certain",
    "created_at": "2026-09-11T21:21:33.659607+00:00",
@@ -1775,6 +1930,23 @@
    "severity": "low",
    "subject": "te_matatiki:WR-TM.57#47683 ; te_matatiki:WR-TM.58#47684",
    "summary": "two Te Matatiki entries are one word split by part of speech"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "apatono",
+   "confidence": "certain",
+   "created_at": "2026-09-24T04:36:52.580512+00:00",
+   "detail": "Both are 'apatono' glossed delegation. te_matatiki records the formation - 'aparangi W.12 company of persons, especially distinguished persons' plus 'tono W.436 demand' - with both components resolved to williams entries, and te_aka carries it as a settled noun with a usage example. A coinage list and a general dictionary recording the same term is the expected relation between these two sources, not a conflict. The gloss differs only as 'Delegation' against 'delegation.', which is te_matatiki's capitalisation convention for coinages and not a reading that changes; section 3 excludes source convention from consistency.",
+   "finding_id": "cal-t3:apatono:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "low",
+   "subject": "te_aka:47108#1 ; te_matatiki:WR-TM.68#47694",
+   "summary": "te_matatiki's coinage and te_aka's entry are the same word"
   },
   {
    "action": "queued",
@@ -2852,6 +3024,12 @@
   },
   {
    "sense_number": 1,
+   "source_entry_id": "38813",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
    "source_entry_id": "39789",
    "source_id": "te_aka",
    "status": "confirmed"
@@ -2876,6 +3054,12 @@
   },
   {
    "sense_number": 1,
+   "source_entry_id": "47108",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
    "source_entry_id": "48937",
    "source_id": "te_aka",
    "status": "confirmed"
@@ -2890,6 +3074,12 @@
    "sense_number": 1,
    "source_entry_id": "73",
    "source_id": "williams",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
+   "source_entry_id": "8521",
+   "source_id": "te_aka",
    "status": "confirmed"
   },
   {
@@ -2930,6 +3120,18 @@
   },
   {
    "sense_number": null,
+   "source_entry_id": "WR-TM.68#47694",
+   "source_id": "te_matatiki",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": null,
+   "source_entry_id": "ainga-whakararo",
+   "source_id": "paekupu",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": null,
    "source_entry_id": "haukainga",
    "source_id": "paekupu",
    "status": "confirmed"
@@ -2937,6 +3139,12 @@
   {
    "sense_number": null,
    "source_entry_id": "ikarangi",
+   "source_id": "paekupu",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": null,
+   "source_entry_id": "rangaawatea-2",
    "source_id": "paekupu",
    "status": "confirmed"
   }
@@ -2947,7 +3155,7 @@
    "created_at": "2026-09-11T21:26:55.255207+00:00",
    "field": "gloss_en",
    "finding_id": "cal-02:aranga:1",
-   "last_applied_at": "2026-09-23T01:24:29.795202+00:00",
+   "last_applied_at": "2026-09-23T09:42:12.894480+00:00",
    "last_status": "applied",
    "new_value": null,
    "old_value": "n.",
@@ -2965,7 +3173,7 @@
    "created_at": "2026-09-11T21:26:55.255207+00:00",
    "field": "part_of_speech",
    "finding_id": "cal-02:aranga:1",
-   "last_applied_at": "2026-09-23T01:24:29.795202+00:00",
+   "last_applied_at": "2026-09-23T09:42:12.894480+00:00",
    "last_status": "applied",
    "new_value": "n.",
    "old_value": null,
@@ -2983,7 +3191,7 @@
    "created_at": "2026-09-11T22:30:19.447905+00:00",
    "field": "gloss_en",
    "finding_id": "cal-02:hia:5",
-   "last_applied_at": "2026-09-23T01:24:29.795202+00:00",
+   "last_applied_at": "2026-09-23T09:42:12.894480+00:00",
    "last_status": "applied",
    "new_value": "How many?",
    "old_value": "inter.numeral How many?",
@@ -3001,7 +3209,7 @@
    "created_at": "2026-09-11T22:30:19.448903+00:00",
    "field": "part_of_speech",
    "finding_id": "cal-02:hia:5",
-   "last_applied_at": "2026-09-23T01:24:29.795202+00:00",
+   "last_applied_at": "2026-09-23T09:42:12.894480+00:00",
    "last_status": "applied",
    "new_value": "Interrogative Numeral",
    "old_value": null,
@@ -3019,7 +3227,7 @@
    "created_at": "2026-09-11T22:30:19.449902+00:00",
    "field": "gloss_en",
    "finding_id": "cal-02:hia:5",
-   "last_applied_at": "2026-09-23T01:24:29.795202+00:00",
+   "last_applied_at": "2026-09-23T09:42:12.894480+00:00",
    "last_status": "applied",
    "new_value": "initial element in a small set of compund words hiamoe sleepy, hiatangi on the verge of tears, hiangongo pine away, hiainu thirsty, hiakai hungry",
    "old_value": "prefix initial element in a small set of compund words hiamoe sleepy, hiatangi on the verge of tears, hiangongo pine away, hiainu thirsty, hiakai hungry",
@@ -3037,7 +3245,7 @@
    "created_at": "2026-09-11T22:30:19.449902+00:00",
    "field": "part_of_speech",
    "finding_id": "cal-02:hia:5",
-   "last_applied_at": "2026-09-23T01:24:29.795202+00:00",
+   "last_applied_at": "2026-09-23T09:42:12.894480+00:00",
    "last_status": "applied",
    "new_value": "Prefix",
    "old_value": null,

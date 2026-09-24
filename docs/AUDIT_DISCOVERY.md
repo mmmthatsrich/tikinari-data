@@ -384,3 +384,70 @@ papyfera, "Paper mulberry" (Moraceae)'`) and are fine as they are.
 Left for the sweep rather than fixed in the pipeline: 12 rows is below the point
 where a re-parse and rebuild is cheaper than a judgement, and the batch
 assembler surfaces them in the etymology section where they will be read anyway.
+
+---
+
+## D39. Brackets and terminal punctuation reach `headword_search` — 883 entries — **found by the sweep, deferred**
+
+Found judging the calibration slice's first two tier-4 clusters, 2026-09-24. Twenty-nine
+tier-1 and tier-2 clusters had not surfaced it: a multi-source cluster is judged on whether
+the sources agree, not on whether a reader could have found the word.
+
+paekupu prints `(Te) Rā Rangaawatea`, where the parenthesis marks the article as optional.
+`normalise_search_key` keeps it, so `headword_search` is `(te) ra rangawatea` and a reader
+searching the bare term does not reach the entry. te_aka's `[tō] tara!` is the same shape with
+square brackets and an exclamation mark.
+
+| in `headword_search` | entries |
+|---|---|
+| round brackets | 707 |
+| square brackets | 139 |
+| ellipsis `...` | 128 |
+| slash | 48 |
+| exclamation mark | 46 |
+| question mark | 35 |
+| **any bracket or terminal punctuation** | **883** |
+
+By source: paekupu 506, te_aka 252, kimikupu_hou 57, papakupu 28, williams 20,
+te_matatiki 14, hepatakakupu 4, tregear_exceptions 2. 1,080 sweep clusters are keyed with a
+bracket.
+
+### Why it is not simply "strip the punctuation"
+
+**The shapes are not one defect.** Two of them are genuinely different:
+
+- **An optional element.** `(Te) Rā Rangaawatea`, `[tō] tara!` — the brackets mark something a
+  speaker may omit. The bare form is the one a reader will type, so the key should hold it.
+- **Real alternation.** te_aka's `(ka/he/te) tau/kino (kē) (hoki)` and
+  `(ko) wai ka hua, (ko) wai ka tohu` are idiom templates. The parentheses and slashes mark
+  choices, and there is no single bare form to strip to. Stripping would produce
+  `ka/he/te tau/kino kē hoki`, which is not a word anyone would search for either.
+
+A fix has to tell those apart, and the discriminator is not obvious from the string alone.
+
+**The precedent is that this belongs in the pipeline, not the rubric.** §6 of the rubric records
+D19 and D20 being fixed in the script that caused them rather than written into the standard.
+The same applies here: `normalise_search_key` builds these keys, and 883 entries cannot be
+corrected cluster by cluster.
+
+### Constraints on the eventual fix
+
+- **Do not rewrite `headword`.** Same rule as D18 and part-of-speech: the printed form is the
+  record. Only the key changes.
+- **Keying on the bare form must not merge homographs.** Stripping `(te)` from
+  `(te) ra rangawatea` yields `ra rangawatea`; check first whether that collides with an
+  existing key, because a collision is a merge, and merging on key identity alone is the error
+  D18 exists to prevent.
+- **An entry may need more than one key.** The honest answer for the optional-element shape may
+  be that both `(te) ra rangawatea` and `ra rangawatea` should find it, which is a
+  search-alias question rather than a key-rewrite one. `form` already holds alternative
+  spellings for exactly this purpose and may be the right home.
+- **Measure the alternation shapes before touching them.** The 48 slashes and some of the 707
+  parentheses are idiom templates where no bare form exists.
+
+### Where it is recorded
+
+Two `deferred` findings in `sweep_finding`, on clusters `(te) ra rangawatea` and `[to] tara!`.
+The first counted round brackets only and reported 707; the second corrects it to 883 and
+names the per-source and per-shape breakdown. Both are `action='deferred'` rather than
+`queued`, because there is no per-cluster patch that would address them.
