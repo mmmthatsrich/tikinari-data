@@ -3,28 +3,28 @@
   {
    "cluster_key": "(te) ra rangawatea",
    "completed_at": "2026-09-24T04:35:01.225328+00:00",
-   "finding_count": 3,
+   "finding_count": 2,
    "notes": "first tier-4 calibration cluster; rubric v2. Single source, so no cross-source question - and the finding is one no tier-1 cluster had surfaced.",
    "patch_count": 0,
-   "rubric_version": "v2",
+   "rubric_version": "v3",
    "status": "done"
   },
   {
    "cluster_key": "[to] tara!",
    "completed_at": "2026-09-24T04:36:19.113126+00:00",
-   "finding_count": 2,
+   "finding_count": 1,
    "notes": "second tier-4 calibration cluster; rubric v2. Extends and corrects the count filed on '(te) ra rangawatea'.",
    "patch_count": 0,
-   "rubric_version": "v2",
+   "rubric_version": "v3",
    "status": "done"
   },
   {
    "cluster_key": "aharoto pihika",
    "completed_at": "2026-09-24T05:05:06.615471+00:00",
-   "finding_count": 1,
+   "finding_count": 0,
    "notes": "third tier-4 calibration cluster; rubric v2. Clean.",
    "patch_count": 0,
-   "rubric_version": "v2",
+   "rubric_version": "v3",
    "status": "done"
   },
   {
@@ -66,10 +66,10 @@
   {
    "cluster_key": "akonga urungarua",
    "completed_at": "2026-09-24T05:08:30.821110+00:00",
-   "finding_count": 1,
+   "finding_count": 0,
    "notes": "fifth tier-4 calibration cluster; rubric v2. Clean.",
    "patch_count": 0,
-   "rubric_version": "v2",
+   "rubric_version": "v3",
    "status": "done"
   },
   {
@@ -1780,8 +1780,8 @@
    "detail": "One entry, one source, one sense, glossed 'Armistice Day' under domain Tikanga a-Iwi / Social Science. No other source in the corpus carries this term under this key, so concept 2598147 has one member and that is right rather than a failure to group. Confirming the membership records that the single-source concept was judged, not merely unexamined.",
    "finding_id": "cal-t4:(te) ra rangawatea:3",
    "kind": "duplicate",
-   "reverted_at": null,
-   "review": null,
+   "reverted_at": "2026-09-24T09:19:38.213353+00:00",
+   "review": "superseded by rubric v3: a single-member concept in a single-source cluster is known-correct, not a finding",
    "reviewed_at": null,
    "rubric_version": "v2",
    "session_id": "cal-t4",
@@ -1797,8 +1797,8 @@
    "detail": "One te_aka entry, one sense, a curse glossed at length and marked as said only to or about a woman. No other source carries this phrase, so concept 2598303 having one member is right. Its missing part_of_speech is not flagged: 1,672 of te_aka's 47,888 entries have none, so a per-cluster finding would be noise rather than signal.",
    "finding_id": "cal-t4:[to] tara!:2",
    "kind": "duplicate",
-   "reverted_at": null,
-   "review": null,
+   "reverted_at": "2026-09-24T09:19:38.216703+00:00",
+   "review": "superseded by rubric v3: a single-member concept in a single-source cluster is known-correct, not a finding",
    "reviewed_at": null,
    "rubric_version": "v2",
    "session_id": "cal-t4",
@@ -1814,8 +1814,8 @@
    "detail": "te_aka:20047 'Aharoto Pihika' glosses 'Ashdothpisgah.' and is typed proper noun - place / Historical Loan Word, with a scripture example carrying both halves. The transliteration is of a place named once in the Hebrew Bible, so no other source in the corpus carries it and concept 2598526 having one member is right. Nothing to flag: gloss_en and definition_raw agree because the gloss IS the whole definition for a name, which section 4 treats as normal rather than duplication.",
    "finding_id": "cal-t4:aharoto pihika:1",
    "kind": "duplicate",
-   "reverted_at": null,
-   "review": null,
+   "reverted_at": "2026-09-24T09:19:38.219720+00:00",
+   "review": "superseded by rubric v3: a single-member concept in a single-source cluster is known-correct, not a finding",
    "reviewed_at": null,
    "rubric_version": "v2",
    "session_id": "cal-t4",
@@ -2001,8 +2001,8 @@
    "detail": "'akonga urungarua' glossed 'dual (enrolled) student' under Matauranga Whanui / Education General. No other source carries the term, so concept 2599643 having one member is right. Nothing flagged: headword_en repeating gloss_en is paekupu's structure and D1's resolution already records that its English headword IS the gloss for the 79 percent of entries with no definition; the parenthesis in 'dual (enrolled) student' is part of the English phrase rather than a domain marker, so it is not the D41 shape; and the unresolved synonym to 'akonga kura paparua' is the section 4 pattern that must not be flagged per cluster.",
    "finding_id": "cal-t4:akonga urungarua:1",
    "kind": "duplicate",
-   "reverted_at": null,
-   "review": null,
+   "reverted_at": "2026-09-24T09:19:38.221720+00:00",
+   "review": "superseded by rubric v3: a single-member concept in a single-source cluster is known-correct, not a finding",
    "reviewed_at": null,
    "rubric_version": "v2",
    "session_id": "cal-t4",
@@ -3205,12 +3205,6 @@
   },
   {
    "sense_number": 1,
-   "source_entry_id": "20047",
-   "source_id": "te_aka",
-   "status": "confirmed"
-  },
-  {
-   "sense_number": 1,
    "source_entry_id": "20770",
    "source_id": "te_aka",
    "status": "confirmed"
@@ -3277,12 +3271,6 @@
   },
   {
    "sense_number": 1,
-   "source_entry_id": "8521",
-   "source_id": "te_aka",
-   "status": "confirmed"
-  },
-  {
-   "sense_number": 1,
    "source_entry_id": "898",
    "source_id": "williams",
    "status": "confirmed"
@@ -3343,12 +3331,6 @@
   },
   {
    "sense_number": null,
-   "source_entry_id": "akonga-urungarua",
-   "source_id": "paekupu",
-   "status": "confirmed"
-  },
-  {
-   "sense_number": null,
    "source_entry_id": "haukainga",
    "source_id": "paekupu",
    "status": "confirmed"
@@ -3356,12 +3338,6 @@
   {
    "sense_number": null,
    "source_entry_id": "ikarangi",
-   "source_id": "paekupu",
-   "status": "confirmed"
-  },
-  {
-   "sense_number": null,
-   "source_entry_id": "rangaawatea-2",
    "source_id": "paekupu",
    "status": "confirmed"
   }

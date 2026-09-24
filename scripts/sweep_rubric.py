@@ -14,7 +14,7 @@ thing the sweep is actually applying.
 import re
 from pathlib import Path
 
-VERSION = "v2"
+VERSION = "v3"
 
 RUBRIC_PATH = Path(__file__).parent.parent / "docs" / "SWEEP_RUBRIC.md"
 

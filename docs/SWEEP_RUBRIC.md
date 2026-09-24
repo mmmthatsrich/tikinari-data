@@ -1,4 +1,4 @@
-# Audit Sweep Rubric — v2
+# Audit Sweep Rubric — v3
 
 The standard the cluster sweep judges by. Every finding records the rubric
 version that produced it (`sweep_finding.rubric_version`), and every completed
@@ -146,7 +146,8 @@ are different words.
 
 ### `duplicate`
 
-Two entries are the same word.
+Two **or more** entries are the same word. A concept with a single member is
+not this kind and not any kind — see the known-correct table.
 
 *Triggers.* Same cluster, compatible senses, and — cross-source — nothing in
 either that contradicts the other.
@@ -200,6 +201,7 @@ noise, and noise in the log is what makes a log unreadable.
 | Latin binomials in a gloss | `Myrsine australis`, `Apteryx` are the definition for plant and bird entries |
 | Te Māra Reo glosses that are species lists | 86 entries have no prose definition; the species list is the content the source gives |
 | A source's entry having exactly one sense | Normal, not a truncation |
+| A concept with one member, in a cluster with one source | Normal. The completed cluster row already records that it was judged under a named rubric version; a finding adds nothing to that, and confirming the membership changes nothing either. No single-member concept is `uncertain` — 54,866 are `certain` and 8,151 `probable` — and the export drops only `uncertain` concepts that are unconfirmed, so all of them ship whatever their status. Tier 4 is 36,311 clusters of this shape; a finding each would be 36,311 rows saying nothing |
 | A relation rendered `[UNRESOLVED]` where the target headword is carried by several entries in that source | Expected, not a defect. 9,656 rows. `resolve_within_source_relations` deliberately resolves only the 5,197 unambiguous ones; choosing among homographs needs the concept layer. Do not flag per cluster |
 | The same Māori sentence appearing twice on one sense with different English | Two sources' renderings, e.g. papakupu's 'Maranga mai.' as both 'Rise and shine.' [TWK] and 'Get up.' [MWA] |
 
@@ -222,6 +224,24 @@ Not the sweep's to decide, even when visible in a batch.
 ---
 
 ## 6. Version history
+
+**v3** — added one row to the known-correct table: a concept with a single member,
+in a single-source cluster, is not a finding. Found judging the calibration slice's first
+tier-4 clusters, where the rubric had never been exercised. Confirming such a membership was
+measured to change nothing — the export drops only `uncertain` concepts that are unconfirmed,
+and no single-member concept is `uncertain` — so a finding per cluster would have added
+36,311 rows of noise to reach the same corpus. `duplicate` now says explicitly that it
+describes two or more entries.
+
+**The requeue was scoped, deliberately.** §7 says to reopen everything judged under the
+superseded version, which would be 38 clusters. Only 4 are affected: the single-member
+`duplicate` findings on `(te) ra rangawatea`, `[to] tara!`, `aharoto pihika` and
+`akonga urungarua`. The other 34 judged two or more entries, which v3 does not change. Those
+4 findings were reverted rather than their clusters re-judged, because `requeue_before_rubric`
+reopens a cluster without retiring its findings — re-judging would have duplicated the D39
+observations on two of them, leaving the log worse than before. The point of a version is to
+make a change into a targeted re-sweep; targeting it to what the change touches is that
+principle applied, not a departure from it.
 
 **v2** — added two rows to the known-correct table after the first calibration
 cluster: relations left unresolved because the target headword is ambiguous
