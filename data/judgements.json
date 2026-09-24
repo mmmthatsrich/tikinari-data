@@ -64,6 +64,15 @@
    "status": "done"
   },
   {
+   "cluster_key": "akonga urungarua",
+   "completed_at": "2026-09-24T05:08:30.821110+00:00",
+   "finding_count": 1,
+   "notes": "fifth tier-4 calibration cluster; rubric v2. Clean.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
    "cluster_key": "angitu",
    "completed_at": "2026-09-11T21:21:33.659607+00:00",
    "finding_count": 4,
@@ -86,6 +95,15 @@
    "completed_at": "2026-09-24T05:07:20.047586+00:00",
    "finding_count": 2,
    "notes": "fourth tier-3 calibration cluster; rubric v2.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
+   "cluster_key": "aramona",
+   "completed_at": "2026-09-24T05:09:31.920715+00:00",
+   "finding_count": 2,
+   "notes": "fifth tier-3 calibration cluster; rubric v2. The D40 shape in te_aka, which D40 had recorded as unmeasured.",
    "patch_count": 0,
    "rubric_version": "v2",
    "status": "done"
@@ -1977,6 +1995,23 @@
   },
   {
    "action": "queued",
+   "cluster_key": "akonga urungarua",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:08:30.816202+00:00",
+   "detail": "'akonga urungarua' glossed 'dual (enrolled) student' under Matauranga Whanui / Education General. No other source carries the term, so concept 2599643 having one member is right. Nothing flagged: headword_en repeating gloss_en is paekupu's structure and D1's resolution already records that its English headword IS the gloss for the 79 percent of entries with no definition; the parenthesis in 'dual (enrolled) student' is part of the English phrase rather than a domain marker, so it is not the D41 shape; and the unresolved synonym to 'akonga kura paparua' is the section 4 pattern that must not be flagged per cluster.",
+   "finding_id": "cal-t4:akonga urungarua:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "paekupu:akonga-urungarua",
+   "summary": "a paekupu coinage correctly alone in its concept"
+  },
+  {
+   "action": "queued",
    "cluster_key": "angitu",
    "confidence": "certain",
    "created_at": "2026-09-11T21:21:33.659607+00:00",
@@ -2059,6 +2094,40 @@
    "severity": "low",
    "subject": "te_aka:49647#1 ; te_matatiki:WR-TM.98#47724",
    "summary": "te_matatiki's coinage and te_aka's entry are the same term"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "aramona",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:09:31.920715+00:00",
+   "detail": "Both entries are 'aramona' glossed 'almond.' - te_aka:20770 typed 'simple noun, Historical Loan Word' with an example about almond oil, te_aka:353 typed 'loan, noun' with a scripture example citing Tauanga 17:8. Nothing in either contradicts the other; they are one loanword entered twice. Concept 2601101 holds te_aka:20770 with ngata, and 2601102 holds te_aka:353 alone, so the word is two concepts. This is the D40 shape in a source D40 recorded as unmeasured. Measured now across six sources: te_aka has 986 headwords repeated with an identical gloss and paekupu 833, and every one of both is split; ngata (128), hepatakakupu (4,921) and papakupu (8) have the same repeats and ALL are already grouped, because their source_entry_id encodes a shared word id that lexeme_key collapses. williams's 1,093 repeats have no identical-gloss cases at all - they are the (i)/(ii) homographs and belong apart.",
+   "finding_id": "cal-t3:aramona:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "medium",
+   "subject": "te_aka:20770#1 ; te_aka:353#1",
+   "summary": "te_aka carries the same loan twice and the two land in different concepts"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "aramona",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:09:31.920715+00:00",
+   "detail": "ngata reaches 'aramona' from the English headword 'Almond' and te_aka glosses it 'almond.'. Same word, and the grouping in concept 2601101 is right as far as it goes - te_aka:353 belongs there too, which the finding above records. Confirming these two says each member belongs, not that the concept is complete, which section 3 of the runner's contract allows explicitly.",
+   "finding_id": "cal-t3:aramona:2",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "low",
+   "subject": "ngata:WR-HMN.290#26289~1 ; te_aka:20770#1",
+   "summary": "ngata's English-lemma entry and te_aka's are the same word"
   },
   {
    "action": "queued",
@@ -3142,6 +3211,12 @@
   },
   {
    "sense_number": 1,
+   "source_entry_id": "20770",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
    "source_entry_id": "38813",
    "source_id": "te_aka",
    "status": "confirmed"
@@ -3238,6 +3313,12 @@
   },
   {
    "sense_number": null,
+   "source_entry_id": "WR-HMN.290#26289~1",
+   "source_id": "ngata",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": null,
    "source_entry_id": "WR-TM.666#48292",
    "source_id": "te_matatiki",
    "status": "confirmed"
@@ -3257,6 +3338,12 @@
   {
    "sense_number": null,
    "source_entry_id": "ainga-whakararo",
+   "source_id": "paekupu",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": null,
+   "source_entry_id": "akonga-urungarua",
    "source_id": "paekupu",
    "status": "confirmed"
   },

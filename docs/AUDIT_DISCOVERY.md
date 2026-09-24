@@ -491,9 +491,30 @@ which the rubric's `homograph` kind exists to protect: those belong in separate 
 grouping them would be the worst error the sweep can make. Only the identical-gloss subset is
 clearly one word, and even there the check should be on the gloss, not the slug.
 
-**Other sources may have the same shape.** Measured for paekupu because that is where the
-cluster led. hepatakakupu repeats a `word_id` across senses by design and is already handled;
-te_aka, ngata and williams have not been measured for this.
+**The failure is not general — measured across six sources on cluster `aramona`, 2026-09-24.**
+The first draft of this entry implied `_seed_groups` never rejoins a source's own seeds. It
+does, for half of them.
+
+| source | headword on >1 entry | identical gloss | split across concepts |
+|---|---|---|---|
+| te_aka | 5,707 | **986** | all |
+| paekupu | 2,117 | **833** | all |
+| williams | 1,093 | 0 | all |
+| ngata | 5,294 | 128 | **0 — already grouped** |
+| hepatakakupu | 4,921 | 4,921 | **0 — already grouped** |
+| papakupu | 540 | 8 | **0 — already grouped** |
+
+ngata, hepatakakupu and papakupu encode a shared word id inside `source_entry_id`
+(hepatakakupu's `word_id~sense`, ngata's `seid#wid~i`), which `lexeme_key` collapses, so their
+repeats are one lexeme and one seed already. te_aka, williams and paekupu mint an unrelated id
+per entry, so nothing ties them together.
+
+**williams's 1,093 are not a defect.** None of them shares a gloss: they are the `(i)`/`(ii)`
+homographs, which belong in separate concepts and which the `homograph` finding kind exists to
+keep apart. Counting them here would have inverted the rubric's most important protection.
+
+So the real population is **te_aka 986 + paekupu 833 = 1,819** identical-gloss repeats held as
+two or more concepts.
 
 ### Where it is recorded
 
