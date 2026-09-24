@@ -608,3 +608,62 @@ classification problem rather than a cleanup.
 §2 says a missing gloss is reported and never filled, and te_aka is being honest about a
 transliterated name it could not identify. Recorded so that a consumer counting glosses knows
 these are a deliberate absence rather than content.
+
+---
+
+## D43. The monolingual source is structurally excluded from the concept layer — hepatakakupu, 24,941 memberships — **found by the sweep, queued**
+
+Found judging the calibration slice's tier-3 cluster `auahitūroa`, 2026-09-24. The most
+consequential finding of the slice so far.
+
+`concept_evidence`'s gloss axes — `gloss_overlap` (weight 0.5) and `gloss_overlap_weak` (0.3) —
+compare `gloss_en`. **`gloss_mi` appears nowhere in the module.** He Pātaka Kupu is a
+monolingual Māori dictionary, which §4 of the rubric correctly records as normal, so it has
+`gloss_en` for **none** of its 24,941 senses and can never produce gloss evidence.
+
+| source | joins a concept holding another source |
+|---|---|
+| williams | 17,595 of 24,976 — **70%** |
+| ngata | 20,995 of 33,775 — **62%** |
+| papakupu | 2,580 of 4,683 — **55%** |
+| te_aka | 26,965 of 59,485 — **45%** |
+| paekupu | 5,257 of 16,486 — **32%** |
+| **hepatakakupu** | **1,336 of 24,941 — 5%** |
+
+Its 5% comes entirely from the non-gloss axes: `cites_source`, `shared_example` and
+`attributed_quote`.
+
+### The proof case
+
+`auahitūroa` is unambiguous. hepatakakupu:4287 glosses it in Māori as a celestial body with an
+elliptical orbit, an ice and dust nucleus, growing a tail near the sun. te_aka:516 glosses it
+`'Comet'`. **One cognate set — `AUAHI-TUROA '(To Auahi-Turoa), a comet. Cf. auahi, smoke.'` —
+links to both entries.** Both are canonically `Noun`, so no part-of-speech block applies. They
+are still concepts 2602536 and 2602537.
+
+### Why this is hard, not merely unfixed
+
+- **A Māori-to-Māori axis buys almost nothing.** Only two sources carry `gloss_mi` at all:
+  hepatakakupu (24,900) and paekupu (3,435). Every other source has zero. So a `gloss_mi`
+  overlap axis could only ever pair hepatakakupu with a fifth of paekupu.
+- **Cross-language gloss matching is forbidden.** §2: *"Translating a gloss from one language
+  into the other is authoring, not auditing, and is forbidden."* An axis that matched
+  `'Comet'` against `'He ao tuarangi…'` would have to translate one of them.
+- **The non-gloss axes are the route, and they are narrow.** `shared_example` needs two sources
+  printing the same sentence; `cites_source` needs one source citing another's entry. Neither
+  is available for most of hepatakakupu.
+
+### What the cluster shows is available
+
+The etymology link was decisive here and is not currently an evidence axis in `WEIGHTS`. A
+shared cognate set is not proof on its own — the `hoi` canary in
+`tests/test_concept_acceptance.py` records that `shared_cognate_set` once merged ten distinct
+words into one concept, which is why it was removed or blocked. But **a shared cognate set
+plus a compatible canonical part of speech** is a narrower claim than either alone, and this
+cluster is a case where it would have been right. That is a hypothesis for the concept work to
+test against the calibration answers, not a change to make blind.
+
+### Scale
+
+At 5%, roughly 23,600 hepatakakupu memberships sit in single-source concepts. Some of those
+words genuinely appear in no other dictionary. An unknown share are `auahitūroa`.
