@@ -501,3 +501,45 @@ One `queued` finding on cluster `ako tautauāmoa`, with an `observation` beside 
 domain pair as the thing to preserve. The memberships were deliberately **not** confirmed:
 confirming both would assert that the split into two concepts is correct, which is the opposite
 of the finding.
+
+---
+
+## D41. Subject domains live inside `gloss_en` and never reach `entry_domain` — 2,541 senses — **found by the sweep, queued**
+
+Found judging the calibration slice's fourth tier-3 cluster, 2026-09-24.
+
+te_aka:49647 `ārai-ā-ngaoaho` glosses `'(science) light-dependent resistor.'` The leading
+`(science)` is a subject marker, and `entry_domain` holds **nothing at all** for that entry —
+so the only record of the domain is inside the gloss text a reader sees.
+
+| senses whose `gloss_en` opens with a parenthetical | |
+|---|---|
+| te_matatiki | 1,244 |
+| te_aka | 1,017 |
+| papakupu | 133 |
+| paekupu | 102 |
+| williams | 43 |
+| kimikupu_hou, temarareo | 1 each |
+| **total** | **2,541** |
+
+te_aka's are unmistakably subjects: `(sport)` 58, `(mathematics)` 32, `(rugby)` 24, `(golf)` 20,
+`(anatomy)` 20, `(softball)` 19, `(chemistry)` 19, `(cricket)` 16, `(biology)` 16, `(music)` 15.
+
+**Distinct from D8.** That finding is about 18,439 te_aka `entry_domain` rows holding a
+*register* marker instead of a domain — a wrong value in the right column. This is the domain
+never reaching the column at all.
+
+### Constraints on the eventual fix
+
+- **Not every leading parenthetical is a domain.** The shape has to be read before it is
+  stripped; a gloss may open with a grammatical or register note, and te_matatiki's 1,244 are
+  its own printed convention.
+- **Adding is safe, removing is not.** Writing the domain into `entry_domain` is additive and
+  breaks no rule. Deleting `(science)` from `gloss_en` edits a source's printed text, which
+  §2 of the rubric forbids for the raw fields — the canonical layer is where normalisation
+  belongs.
+- **The patch layer cannot do it.** `sweep_patch` updates fields; creating an `entry_domain`
+  row is an insert. This is why the finding is `queued` rather than `applied`.
+- **`subject_area`/`subject_area_en` is the controlled vocabulary** the rubric's §2 already
+  permits deriving across languages with, so a mapping from `(science)` to the existing
+  Pūtaiao/Science pair has a sanctioned route.

@@ -19,6 +19,15 @@
    "status": "done"
   },
   {
+   "cluster_key": "aharoto pihika",
+   "completed_at": "2026-09-24T05:05:06.615471+00:00",
+   "finding_count": 1,
+   "notes": "third tier-4 calibration cluster; rubric v2. Clean.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
    "cluster_key": "ahuahu",
    "completed_at": "2026-09-11T21:17:54.213065+00:00",
    "finding_count": 6,
@@ -46,6 +55,15 @@
    "status": "done"
   },
   {
+   "cluster_key": "ako tautauamoa",
+   "completed_at": "2026-09-24T05:05:56.703629+00:00",
+   "finding_count": 2,
+   "notes": "fourth tier-4 calibration cluster; rubric v2. Single source but two entries - a shape no multi-source cluster shows.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
    "cluster_key": "angitu",
    "completed_at": "2026-09-11T21:21:33.659607+00:00",
    "finding_count": 4,
@@ -59,6 +77,15 @@
    "completed_at": "2026-09-24T04:36:52.586040+00:00",
    "finding_count": 2,
    "notes": "third tier-3 calibration cluster; rubric v2. A coinage and its dictionary entry agreeing.",
+   "patch_count": 0,
+   "rubric_version": "v2",
+   "status": "done"
+  },
+  {
+   "cluster_key": "arai-a-ngaoaho",
+   "completed_at": "2026-09-24T05:07:20.047586+00:00",
+   "finding_count": 2,
+   "notes": "fourth tier-3 calibration cluster; rubric v2.",
    "patch_count": 0,
    "rubric_version": "v2",
    "status": "done"
@@ -913,6 +940,23 @@
   },
   {
    "action": "none",
+   "cluster_key": "ako tautauamoa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:05:56.702629+00:00",
+   "detail": "Recorded because it is what a fix would have to preserve. Collapsing the two entries would lose the fact that paekupu classifies this term under both Technology and Education General, which is real information about how the coinage is used. The concept layer can hold one concept with two members and both domains attached, so grouping them need not discard either - but a naive deduplication that kept one entry would.",
+   "finding_id": "cal-t4:ako tautauamoa:2",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "paekupu:ako-tautauamoa ; paekupu:ako-tautauamoa-2",
+   "summary": "the domain pair is the only content that distinguishes the two entries"
+  },
+  {
+   "action": "none",
    "cluster_key": "angitu",
    "confidence": "certain",
    "created_at": "2026-09-11T21:21:33.659607+00:00",
@@ -1746,6 +1790,23 @@
   },
   {
    "action": "queued",
+   "cluster_key": "aharoto pihika",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:05:06.610214+00:00",
+   "detail": "te_aka:20047 'Aharoto Pihika' glosses 'Ashdothpisgah.' and is typed proper noun - place / Historical Loan Word, with a scripture example carrying both halves. The transliteration is of a place named once in the Hebrew Bible, so no other source in the corpus carries it and concept 2598526 having one member is right. Nothing to flag: gloss_en and definition_raw agree because the gloss IS the whole definition for a name, which section 4 treats as normal rather than duplication.",
+   "finding_id": "cal-t4:aharoto pihika:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "te_aka:20047#1",
+   "summary": "a transliterated biblical place name, correctly alone in its concept"
+  },
+  {
+   "action": "queued",
    "cluster_key": "ahuahu",
    "confidence": "certain",
    "created_at": "2026-09-11T20:23:24.850037+00:00",
@@ -1899,6 +1960,23 @@
   },
   {
    "action": "queued",
+   "cluster_key": "ako tautauamoa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:05:56.696633+00:00",
+   "detail": "The two entries are identical in every field that carries meaning: headword 'ako tautauamoa', headword_en and gloss_en 'self-directed learning', and the same unresolved cross_ref to 'tautauamoa - each for oneself'. They differ only in domain, Hangarau/Technology against Matauranga Whanui/Education General. paekupu publishes per curriculum subject, so listing a coined term under two areas is its structure rather than a data defect - but they are one word, and concepts 2599598 and 2599599 hold them separately. Systemic: 2,117 paekupu headwords appear on more than one entry, 833 of those with an identical gloss, and ALL 2,117 land in more than one concept. The concept builder seeds on lexeme, so two slugs from one source are two seeds and nothing rejoins them. Memberships deliberately NOT confirmed here: confirming both would assert the split is right, which is the opposite of this finding.",
+   "finding_id": "cal-t4:ako tautauamoa:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t4",
+   "severity": "medium",
+   "subject": "paekupu:ako-tautauamoa#1 ; paekupu:ako-tautauamoa-2#1",
+   "summary": "one paekupu term listed twice under two subject areas, and split into two concepts"
+  },
+  {
+   "action": "queued",
    "cluster_key": "angitu",
    "confidence": "certain",
    "created_at": "2026-09-11T21:21:33.659607+00:00",
@@ -1947,6 +2025,40 @@
    "severity": "low",
    "subject": "te_aka:47108#1 ; te_matatiki:WR-TM.68#47694",
    "summary": "te_matatiki's coinage and te_aka's entry are the same word"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "arai-a-ngaoaho",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:07:20.041043+00:00",
+   "detail": "gloss_en is '(science) light-dependent resistor.' The leading '(science)' is a subject marker, which section 3 names as a field_placement trigger, and entry_domain holds nothing at all for te_aka:49647 - so the only record of the domain is inside the gloss text. Systemic: 2,541 senses across seven sources open with a parenthetical, te_matatiki 1,244, te_aka 1,017, papakupu 133, paekupu 102, williams 43. te_aka's are plainly subjects - (sport) 58, (mathematics) 32, (rugby) 24, (golf) 20, (anatomy) 20, (chemistry) 19. Queued rather than applied because the fix creates an entry_domain row, which the patch layer does not do, and because not every leading parenthetical is a domain - the shape has to be read before it is stripped. Distinct from D8, which is about domain rows holding register markers; this is the domain never reaching a row.",
+   "finding_id": "cal-t3:arai-a-ngaoaho:1",
+   "kind": "field_placement",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "medium",
+   "subject": "te_aka:49647#1",
+   "summary": "the subject domain sits inside gloss_en and the entry has no domain row"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "arai-a-ngaoaho",
+   "confidence": "certain",
+   "created_at": "2026-09-24T05:07:20.045580+00:00",
+   "detail": "Both are 'arai-a-ngaoaho' glossed '(science) light-dependent resistor'. te_matatiki records the formation from four williams components - 'arai ward off', 'a after the manner of', 'ngao strength, energy', 'aho radiant light' - all four resolved against williams entries. te_aka carries the settled term. Same relation between a coinage list and a general dictionary as in cluster 'apatono'. The glosses differ only by a full stop.",
+   "finding_id": "cal-t3:arai-a-ngaoaho:2",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v2",
+   "session_id": "cal-t3",
+   "severity": "low",
+   "subject": "te_aka:49647#1 ; te_matatiki:WR-TM.98#47724",
+   "summary": "te_matatiki's coinage and te_aka's entry are the same term"
   },
   {
    "action": "queued",
@@ -3024,6 +3136,12 @@
   },
   {
    "sense_number": 1,
+   "source_entry_id": "20047",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
    "source_entry_id": "38813",
    "source_id": "te_aka",
    "status": "confirmed"
@@ -3067,6 +3185,12 @@
   {
    "sense_number": 1,
    "source_entry_id": "49068",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
+   "source_entry_id": "49647",
    "source_id": "te_aka",
    "status": "confirmed"
   },
@@ -3121,6 +3245,12 @@
   {
    "sense_number": null,
    "source_entry_id": "WR-TM.68#47694",
+   "source_id": "te_matatiki",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": null,
+   "source_entry_id": "WR-TM.98#47724",
    "source_id": "te_matatiki",
    "status": "confirmed"
   },
