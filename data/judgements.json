@@ -73,6 +73,24 @@
    "status": "done"
   },
   {
+   "cluster_key": "amonapapa",
+   "completed_at": "2026-09-24T09:23:54.606229+00:00",
+   "finding_count": 0,
+   "notes": "tier-4, rubric v3. Clean: te_aka transliteration of a newspaper name, one sense, correctly alone in concept 2599960. No finding, per the v3 known-correct row.",
+   "patch_count": 0,
+   "rubric_version": "v3",
+   "status": "done"
+  },
+  {
+   "cluster_key": "amupa",
+   "completed_at": "2026-09-24T09:24:56.776146+00:00",
+   "finding_count": 2,
+   "notes": "tier-4, rubric v3. Single member, so no identity finding; two real ones in the content.",
+   "patch_count": 0,
+   "rubric_version": "v3",
+   "status": "done"
+  },
+  {
    "cluster_key": "angitu",
    "completed_at": "2026-09-11T21:21:33.659607+00:00",
    "finding_count": 4,
@@ -142,6 +160,15 @@
    "notes": "sixth calibration cluster, rubric v2; produced the D23 loanword rule",
    "patch_count": 0,
    "rubric_version": "v2",
+   "status": "done"
+  },
+  {
+   "cluster_key": "auahituroa",
+   "completed_at": "2026-09-24T09:27:18.346515+00:00",
+   "finding_count": 3,
+   "notes": "tier-3, rubric v3. The monolingual source is split from the bilingual one despite a shared cognate set naming both.",
+   "patch_count": 0,
+   "rubric_version": "v3",
    "status": "done"
   },
   {
@@ -972,6 +999,23 @@
    "severity": "low",
    "subject": "paekupu:ako-tautauamoa ; paekupu:ako-tautauamoa-2",
    "summary": "the domain pair is the only content that distinguishes the two entries"
+  },
+  {
+   "action": "none",
+   "cluster_key": "amupa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T09:24:56.775147+00:00",
+   "detail": "gloss_en and definition_raw both read 'unknown.' for a transliterated personal name te_aka could not identify. Recorded, not flagged as a gap: section 2 says a missing gloss is reported and never filled, and inventing a meaning for a name attested once in a nineteenth-century newspaper is exactly what that forbids. 1,380 senses in the corpus are glossed 'unknown' - te_aka 1,376, ngata 4 - so a consumer counting glosses should know these are a deliberate absence rather than content. The example does identify the referent as a woman's name, which is why the editor's query beside it is worth keeping even though it is in the wrong column.",
+   "finding_id": "cal-t4:amupa:2",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-t4",
+   "severity": "low",
+   "subject": "te_aka:20438#1",
+   "summary": "the gloss is 'unknown.', which is honest rather than missing"
   },
   {
    "action": "none",
@@ -2012,6 +2056,23 @@
   },
   {
    "action": "queued",
+   "cluster_key": "amupa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T09:24:56.770263+00:00",
+   "detail": "example.text_en reads 'On 16 August Mekini was hung for the murder of the child of a woman called Amupa. note: Maori name?' The trailing 'note: Maori name?' is te_aka's own editorial query about the headword, not part of the translation of the Maori sentence, and a reader shown the example sees it. Systemic: 3,785 te_aka examples carry a 'note:' marker inside text_en. The notes are not one kind - 'note: Persian king.' and 'note: pharoah' gloss a proper noun, 'note: 2Sam1:20' is a citation that belongs in example.citation, and this one is a question the editor left open. Queued rather than applied: the correction is not fully determined, because where the content goes depends on which kind it is, and section 3 allows applied only when the target column is unambiguous.",
+   "finding_id": "cal-t4:amupa:1",
+   "kind": "field_placement",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-t4",
+   "severity": "medium",
+   "subject": "te_aka:20438#1",
+   "summary": "a lexicographer's query sits inside the example's English translation"
+  },
+  {
+   "action": "queued",
    "cluster_key": "angitu",
    "confidence": "certain",
    "created_at": "2026-09-11T21:21:33.659607+00:00",
@@ -2247,6 +2308,57 @@
    "severity": "medium",
    "subject": "hepatakakupu:9533#1 ; hepatakakupu:18597#2 ; te_aka:478#1 ; papakupu:176#1 <- ATEA '(myth.) the last of the Ages'",
    "summary": "the mythological Atea set competes with the 'clear, unobstructed' set on every entry that has one"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "auahituroa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T09:27:18.340762+00:00",
+   "detail": "hepatakakupu:4287 glosses 'Auahituroa' in Maori as a celestial body with an elliptical orbit round the sun, an ice and dust nucleus, growing a tail as it nears the sun. te_aka:516 glosses it 'Comet'. They are the same word, and the ETYMOLOGY block settles it independently of any gloss: the single cognate set AUAHI-TUROA '(To Auahi-Turoa), a comet. Cf. auahi, smoke.' links to BOTH entries via tregear. Both are canonically Noun, so no part-of-speech block applies. They are nonetheless concepts 2602536 and 2602537. The cause is structural rather than local, and is filed as D43: concept_evidence's gloss axes read gloss_en, hepatakakupu has none for any of its 24,941 senses, and so it joins a cross-source concept in only 5 percent of its memberships against williams 70, ngata 62 and te_aka 45 percent.",
+   "finding_id": "cal-t3:auahituroa:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-t3",
+   "severity": "high",
+   "subject": "hepatakakupu:4287#1 ; te_aka:516#1 ; te_aka:516#2",
+   "summary": "one word held as two concepts because the monolingual source cannot produce gloss evidence"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "auahituroa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T09:27:18.346515+00:00",
+   "detail": "Sense 1 'Comet - sometimes personified as in the example' and sense 2 'comet - sometimes written as auahi-turoa or auahi turoa' are one word in one source, split by te_aka into a personified and a plain reading. Whether that split is the right editorial choice is out of remit under section 5. Both are in concept 2602537 and both belong there; confirming says each member belongs, not that the concept is complete - hepatakakupu:4287#1 belongs too, which the finding above records.",
+   "finding_id": "cal-t3:auahituroa:3",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-t3",
+   "severity": "low",
+   "subject": "te_aka:516#1 ; te_aka:516#2",
+   "summary": "te_aka's two senses of comet belong together, as they already are"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "auahituroa",
+   "confidence": "certain",
+   "created_at": "2026-09-24T09:27:18.346515+00:00",
+   "detail": "gloss_en reads 'comet - sometimes written as auahi-turoa or auahi turoa .' The two alternative spellings are form data stated in prose, and te_aka:516 has no form rows at all, so the variants exist only inside a sentence. Section 3 names a variant form inside prose as a field_placement trigger. 73 senses carry the shape - 61 'sometimes written', 12 'also written'. Queued rather than applied because the fix inserts form rows, which the patch layer does not do, and because deleting the clause would edit a source's printed gloss, which section 2 forbids; the variants should be ADDED as forms while the gloss stands.",
+   "finding_id": "cal-t3:auahituroa:2",
+   "kind": "field_placement",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-t3",
+   "severity": "medium",
+   "subject": "te_aka:516#2",
+   "summary": "variant spellings sit inside the gloss and nowhere else"
   },
   {
    "action": "queued",
@@ -3265,6 +3377,12 @@
   },
   {
    "sense_number": 1,
+   "source_entry_id": "516",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 1,
    "source_entry_id": "73",
    "source_id": "williams",
    "status": "confirmed"
@@ -3296,6 +3414,12 @@
   {
    "sense_number": 2,
    "source_entry_id": "41515",
+   "source_id": "te_aka",
+   "status": "confirmed"
+  },
+  {
+   "sense_number": 2,
+   "source_entry_id": "516",
    "source_id": "te_aka",
    "status": "confirmed"
   },
