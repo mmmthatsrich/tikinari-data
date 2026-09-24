@@ -451,3 +451,53 @@ Two `deferred` findings in `sweep_finding`, on clusters `(te) ra rangawatea` and
 The first counted round brackets only and reported 707; the second corrects it to 883 and
 names the per-source and per-shape breakdown. Both are `action='deferred'` rather than
 `queued`, because there is no per-cluster patch that would address them.
+
+---
+
+## D40. A source's own repeats are never grouped — 2,117 paekupu headwords — **found by the sweep, queued**
+
+Found judging the calibration slice's fourth tier-4 cluster, 2026-09-24, and invisible to the
+twenty-nine multi-source clusters judged before it for the same reason as D39: a tier-1 cluster
+is read for whether the *sources* agree, and this is a source disagreeing with itself.
+
+paekupu publishes per curriculum subject, so a coined term can be listed under two subject
+areas. `ako tautauāmoa` appears as `ako-tautauamoa` under Hangarau/Technology and
+`ako-tautauamoa-2` under Mātauranga Whānui/Education General. Every field that carries meaning
+is identical — headword, `headword_en`, `gloss_en`, and the same cross-reference. Only the
+domain differs.
+
+| | |
+|---|---|
+| paekupu slugs ending `-2`, `-3`, … | 3,486 |
+| paekupu headwords on more than one entry | **2,117** |
+| …of those, with an identical gloss across the entries | **833** |
+| …of those, landing in more than one concept | **2,117 — all of them** |
+
+`54_build_concepts._seed_groups` seeds on `lexeme`, which is `(source_id, source_entry_id,
+headword, locator)`. Two slugs from one source are two lexemes, so they are two seeds, and
+nothing in the matcher rejoins seeds from the same source. The 833 identical-gloss cases are
+one word held as two concepts.
+
+### What a fix must not lose
+
+**The domain pair is the only content distinguishing the entries, and it is real information.**
+That paekupu classifies `ako tautauāmoa` under both Technology and Education General says
+something about the term. A concept can hold two members with both domains attached, so
+grouping them need not discard either — but a deduplication that kept one entry and dropped
+the other would.
+
+**The 2,117 are not all the 833.** A shared headword with *different* glosses is a homograph,
+which the rubric's `homograph` kind exists to protect: those belong in separate concepts and
+grouping them would be the worst error the sweep can make. Only the identical-gloss subset is
+clearly one word, and even there the check should be on the gloss, not the slug.
+
+**Other sources may have the same shape.** Measured for paekupu because that is where the
+cluster led. hepatakakupu repeats a `word_id` across senses by design and is already handled;
+te_aka, ngata and williams have not been measured for this.
+
+### Where it is recorded
+
+One `queued` finding on cluster `ako tautauāmoa`, with an `observation` beside it naming the
+domain pair as the thing to preserve. The memberships were deliberately **not** confirmed:
+confirming both would assert that the split into two concepts is correct, which is the opposite
+of the finding.
