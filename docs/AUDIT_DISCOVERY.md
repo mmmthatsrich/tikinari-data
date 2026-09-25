@@ -852,3 +852,76 @@ English, and the attested-stem constraint keeps it to forms the sources themselv
 looser rule — edit distance, or stripping suffixes without checking the result is a word —
 would be inventing the link rather than reading it, and is the same error
 `resolve_relations_by_gloss` refused when it required exact string identity (D34).
+
+---
+
+## D46. Te Aka's sense-level synonyms are flattened onto the entry — 87,569 relations — **found on the bench, queued**
+
+Found 2026-09-26, answering a question about te Aka's relation model. Not found judging a
+cluster: `aho`, the case below, sits at priority 1 behind the calibration slice.
+
+### The source says which sense; the build does not
+
+`04_te_aka_parse.py` reads the dictionary-link anchors **inside each sense's div** and stores
+them on that sense (`sense_synonyms`, line 160). It then also accumulates an entry-level
+`all_synonyms`, commented *"legacy / FTS / synonym resolution"*.
+
+`50_build_unified.py` line 618 iterates that entry-level aggregate and calls
+`b.add_relation(eid, ...)`. **The per-sense list is never read.** `relation` has no source-side
+sense column, so the assertion becomes one about the word.
+
+`te_aka_entries.senses` still holds the per-sense lists, so nothing was lost at parse and
+nothing needs re-scraping. The flattening is entirely in the build.
+
+### `aho` — five senses, two synonym sets, twelve flat relations
+
+| | |
+|---|---|
+| sense 1 | `fishing line, cord, string, line, medium for an atua` |
+| sense 2 | `weft, woof - cross-threads of weaving or a mat.` |
+| sense 3 | `line of descent, genealogy.` |
+| sense 4 | `chord (maths).` |
+| sense 5 | `sine (maths)` |
+
+The source puts `{io, kapa, papanga, raina, ripa, rārangi, tawhā}` on **sense 1** and
+`{hikahika, kaha, kāwai, kāwei, takiaho}` on **sense 3**. What is built is twelve relations on
+the entry with no sense, so the cord sense and the genealogy sense become mutual synonyms.
+`aho` is the rubric's own `spurious_etymology` worked example.
+
+### Scale
+
+| | |
+|---|---|
+| te_aka synonym relations | 87,569 |
+| entries carrying at least one | 10,676 |
+| of those, multi-sense | 4,489 |
+| **whose senses carry different sets** | **2,046** |
+| relations sitting on a multi-sense entry | 49,755 |
+| relations attributable to a named sense | 89,957 |
+
+The last row exceeding the first is a second, smaller loss: the entry-level aggregate dedups
+(`if syn not in all_synonyms`), so a synonym serving two senses collapses to one link and the
+fact that it serves both is discarded — **2,388 attributions**.
+
+### The 42% that looks like sense resolution is not
+
+`target_sense_id` is set on 37,104 of the 87,569. Of the **50,465** relations pointing at a
+*multi-sense* target, **zero** have a sense chosen. Every resolved one came from
+`resolve_unambiguous_senses` picking the only sense there was. There is no editorial sense
+choice in this data, on either side.
+
+### It is also dense, which compounds it
+
+Median degree 4, max 170, **91% reciprocated**. Of 1,421 connected components, 1,175 (82.7%)
+are complete graphs — synonym sets expanded to full cliques. But the largest component holds
+**7,630 entries**, 71% of everything carrying a synonym, because the cliques chain through
+shared members. Flattening senses is what lets them chain: `aho`'s two unrelated sets are
+joined at the entry, and every set touching either is now one component.
+
+### Why this is queued, not applied
+
+The fix is a build change, not a field patch — `add_relation` would need a source-side
+`sense_id`, and `relation` would need the column. That is schema work plus a rebuild, and it
+should be measured against the concept layer first: 49,755 relations currently asserting more
+than the source does is also 49,755 that `resolve_within_source_relations` and the concept
+evidence axes have been reading. Narrowing them is likely right and is certainly not free.
