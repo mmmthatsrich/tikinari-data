@@ -1237,7 +1237,7 @@ ship again.
 
 ---
 
-## D48. Test fixtures hand-roll the core tables — 76 tables across 26 files — **found on the bench, queued**
+## D48. Test fixtures hand-roll the core tables — 76 tables across 26 files — **✅ fixed 2026-09-26**
 
 Found 2026-09-26, after D46 and D47 each broke fixtures that had nothing to do with them.
 
@@ -1293,3 +1293,41 @@ is to point the fixtures at it:
 
 Not urgent and not risky, but it is 460 declarations of duplicated knowledge, and the sweep
 has 55,700 clusters left to judge — every finding that reaches the schema pays this tax again.
+
+### Fixed
+
+`tests/core_schema.py` exposes `core_db()`, which calls `00_init_db.initialise()` and clones
+the result per call — 11 ms to build, 0.6 ms to clone, which matters across ~1,470 tests.
+
+| | before | after |
+|---|---|---|
+| hand-rolled core tables | 76 | **3** |
+| files affected | 26 | **2** |
+| missing column declarations | 460 | **46** |
+
+**The three that remain are deliberate and annotated.** `test_build_unified_fk` builds a
+minimal schema to exercise foreign-key behaviour; `test_relation_resolution`,
+`test_sense_addressability` and `test_derived_long_scope` each have one test about a database
+that *lacks* a table, which `core_db()` — providing every table — would defeat.
+
+### What the conversion found
+
+Every one of these was a test passing against a table the pipeline has never run on:
+
+- My own D43 and D44 fixtures inserted `entry` rows with no `headword_sort` and
+  `ETY_entry_link` rows with no `source`, both `NOT NULL` in the real schema.
+- `concept_member` rows with no `source_entry_id` and no `confidence`; `ngata_entries` rows
+  with no `ref_no`, `headword_sort` or `headword_search`.
+
+One test needed more than a conversion. `RebuildSurvival`'s E2 case sets
+`entry.headword_search` to NULL to reach the state 54's guard exists for — and the real schema
+declares that column `NOT NULL`, so **the state is unreachable through it**. That is the point
+rather than an obstacle: the guard is for a database that got there anyway, by rows written
+before the constraint or by a restore. The test now relaxes that one column via
+`writable_schema`, with a `schema_version` bump, because SQLite caches the parsed schema and
+the edit is otherwise silently ignored.
+
+Five files used positional inserts — `INSERT INTO entry VALUES (...)` — which depend on the
+hand-rolled column order, so each needed its columns named before its table could go. That is
+its own small argument for the change: a positional insert against a table defined three files
+away is unreadable, and it silently means something different the moment a column moves.
