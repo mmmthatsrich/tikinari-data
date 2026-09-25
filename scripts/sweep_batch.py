@@ -41,10 +41,16 @@ SELECT sense_id, entry_id, text_mi, text_en, citation, source_abbrev
 
 _FORM_SQL = "SELECT entry_id, form, form_type FROM form WHERE entry_id IN (%s)"
 
+# `from_sense` is the sense that ASSERTS the relation, where the source says
+# (D46). NULL means the source made the claim of the word, which is what every
+# source but te Aka prints — not that the sense is unknown.
 _RELATION_SQL = """
 SELECT r.entry_id, r.rel_type, r.target_headword, r.note,
-       t.source_id AS t_src, t.source_entry_id AS t_seid, r.target_sense_id
-  FROM relation r LEFT JOIN entry t ON t.id = r.target_entry_id
+       t.source_id AS t_src, t.source_entry_id AS t_seid, r.target_sense_id,
+       s.sense_number AS from_sense
+  FROM relation r
+  LEFT JOIN entry t ON t.id = r.target_entry_id
+  LEFT JOIN sense s ON s.id = r.sense_id
  WHERE r.entry_id IN (%s)
 """
 
@@ -162,7 +168,7 @@ def assemble(con, cluster_key: str) -> dict:
             ("forms", _FORM_SQL, ("form", "form_type")),
             ("relations", _RELATION_SQL,
              ("rel_type", "target_headword", "note", "t_src", "t_seid",
-              "target_sense_id")),
+              "target_sense_id", "from_sense")),
             ("domains", _DOMAIN_SQL, ("domain", "domain_lang"))):
         acc = {}
         for r in con.execute(sql % ph, ids):
@@ -179,6 +185,7 @@ def assemble(con, cluster_key: str) -> dict:
         e["relations"] = [
             {"rel_type": r["rel_type"], "target_headword": r["target_headword"],
              "note": r["note"], "target_sense_id": r["target_sense_id"],
+             "from_sense": r["from_sense"],
              "target_address": (f"{r['t_src']}:{r['t_seid']}" if r["t_src"] else None)}
             for r in grouped["relations"].get(eid, [])]
         if eid in loose:
@@ -241,8 +248,12 @@ def render(batch: dict) -> str:
             tgt = r["target_address"] or "UNRESOLVED"
             sense = f" sense={r['target_sense_id']}" if r["target_sense_id"] else ""
             note = f"  note={_trim(r['note'], 60)!r}" if r["note"] else ""
+            # Which sense asserts it, where the source says (D46). te Aka's
+            # `aho` puts one synonym set on its cord sense and another on its
+            # genealogy sense; flattened onto the entry they read as one.
+            frm = f"  from s{r['from_sense']}" if r["from_sense"] else ""
             out.append(f"      rel   {r['rel_type']} -> {r['target_headword']!r} "
-                       f"[{tgt}{sense}]{note}")
+                       f"[{tgt}{sense}]{frm}{note}")
         for d in e["domains"]:
             out.append(f"      domain {d['domain']!r} ({d['domain_lang']})")
 

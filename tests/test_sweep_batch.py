@@ -109,6 +109,31 @@ class Render(unittest.TestCase):
     def test_the_etymology_section_is_rendered(self):
         self.assertIn("ETYMOLOGY", self.text)
 
+    def test_a_relation_shows_which_sense_asserts_it(self):
+        # D46. te Aka states its synonyms per sense, and `aho` is why that
+        # matters: the source puts one set on sense 1, 'fishing line, cord,
+        # string', and another on sense 3, 'line of descent, genealogy'.
+        # Rendered without the attribution, twelve synonyms hang off the entry
+        # and a judge cannot see that the cord sense and the genealogy sense
+        # were never synonyms of each other.
+        text = render(assemble(self.con, "aho"))
+        cord = [l for l in text.splitlines()
+                if "rel   synonym" in l and "'io'" in l]
+        descent = [l for l in text.splitlines()
+                   if "rel   synonym" in l and "'kāwai'" in l]
+        self.assertTrue(cord and descent)
+        self.assertIn("from s1", cord[0])
+        self.assertIn("from s3", descent[0])
+
+    def test_an_entry_level_relation_claims_no_sense(self):
+        # Every source but te Aka states its relations of the WORD, and NULL
+        # means exactly that rather than 'unknown'. Marking those would invent
+        # an attribution the source never made.
+        text = render(assemble(self.con, "aho"))
+        williams = [l for l in text.splitlines()
+                    if "rel   " in l and "from s" in l and "williams" in l]
+        self.assertEqual(williams, [])
+
     def test_an_empty_cluster_renders_without_blowing_up(self):
         self.assertIsInstance(render(assemble(self.con, "zzzznotacluster")), str)
 
