@@ -611,7 +611,7 @@ these are a deliberate absence rather than content.
 
 ---
 
-## D43. The monolingual source is structurally excluded from the concept layer — hepatakakupu, 24,941 memberships — **found by the sweep, queued**
+## D43. The monolingual source is structurally excluded from the concept layer — hepatakakupu, 24,941 memberships — **narrow fix built 2026-09-25; 5.4% → 8.7%, remainder open**
 
 Found judging the calibration slice's tier-3 cluster `auahitūroa`, 2026-09-24. The most
 consequential finding of the slice so far.
@@ -638,8 +638,16 @@ Its 5% comes entirely from the non-gloss axes: `cites_source`, `shared_example` 
 `auahitūroa` is unambiguous. hepatakakupu:4287 glosses it in Māori as a celestial body with an
 elliptical orbit, an ice and dust nucleus, growing a tail near the sun. te_aka:516 glosses it
 `'Comet'`. **One cognate set — `AUAHI-TUROA '(To Auahi-Turoa), a comet. Cf. auahi, smoke.'` —
-links to both entries.** Both are canonically `Noun`, so no part-of-speech block applies. They
-are still concepts 2602536 and 2602537.
+links to both entries.** They are still concepts 2602536 and 2602537.
+
+> **Correction, 2026-09-25.** This entry originally read *"Both are canonically `Noun`, so no
+> part-of-speech block applies."* That is true entry-to-entry and **false sense-to-sense**.
+> te_aka:516 has two senses: **#1 `Proper noun (person)`** — Auahitūroa the personage — and
+> **#2 `Noun`**, the comet. `proper noun` is deliberately outside `OPEN_POS`, so #1 *does*
+> block against hepatakakupu's `Noun`. A block against any one member rules out the whole
+> concept, so sense 1 vetoes attachment to sense 2. That is a second and independent cause,
+> recorded below as **D44**, and it is why this cluster is still two concepts even now that
+> the evidence axis it asked for exists.
 
 ### Why this is hard, not merely unfixed
 
@@ -663,7 +671,111 @@ plus a compatible canonical part of speech** is a narrower claim than either alo
 cluster is a case where it would have been right. That is a hypothesis for the concept work to
 test against the calibration answers, not a change to make blind.
 
+### The hypothesis, tested — 2026-09-25
+
+Measured before implementing, over the 23,605 stranded memberships:
+
+| gate | memberships | |
+|---|---|---|
+| single-source hepatakakupu memberships | 23,605 | 100.0% |
+| …`headword_search` shared with another source | 22,863 | 96.9% |
+| …and a cognate set shared with one of those | 16,441 | 69.7% |
+| …and at least one partner unblocked | 16,297 | 69.0% |
+
+**The part-of-speech conjunct is vacuous.** The hypothesis above claimed "a shared cognate set
+plus a compatible canonical part of speech" is narrower than either alone. It removes **144
+memberships, 0.9%** — 968 partner-pairs on macron disagreement and 225 on POS. It cannot be
+the safety mechanism, and for the right reason: `OPEN_POS` deliberately lets noun, verb,
+stative, modifier and adverb interchange, so the block almost never fires.
+
+**What the conjunct missed is ambiguity, not category.** Counting distinct partner *words*,
+a stranded sense reaches **5.3 on average**, and 2,391 of them reach ten or more. `keho` alone
+has five hepatakakupu senses all reaching williams:2671's 'Peak of a hill' *and* 'Frost, ice'.
+Shipping this would have been `hoi` again.
+
+**Sense-level cognate links do not rescue it.** `ETY_entry_link.sense_id` is populated on 88.5%
+of rows, but requiring a sense-level match trims only 16,297 → 15,681 — those ids are assigned
+mechanically by `resolve_unambiguous_senses` where the target has one sense, not semantically.
+It also *loses* `auahitūroa`, since te_aka carries `sense_id` on just 51% of its links.
+
+### What was built instead
+
+The discipline D32 and D34 already use — act only where exactly one candidate survives — and
+required from **both** sides:
+
+> a shared cognate set **∧** unblocked **∧** exactly one surviving partner lexeme, each way
+
+Mutual uniqueness costs 1,057 of the 5,737 one-sided pairs and buys a symmetric claim, which
+matters because `positive_evidence` is scored in both directions. Shipped as evidence kind
+`shared_cognate_set_unique` (weight 0.6, confidence **probable** — the link is stated and the
+uniqueness proved, but no source says the two entries are one word), in
+`concept_evidence.cognate_unique_pairs`, with `tests/test_concept_cognate_unique.py`.
+
+| | axis off | axis on |
+|---|---|---|
+| concepts | 91,140 | 90,419 |
+| spanning 1 source | 72,193 | 70,773 |
+| spanning 2 sources | 11,832 | 12,514 |
+| **hepatakakupu cross-source** | **5.4%** | **8.7%** (+832) |
+| williams cross-source | 70.4% | 72.2% |
+| `hoi` concepts (canary floor 7) | 7 | 7 |
+
 ### Scale
 
-At 5%, roughly 23,600 hepatakakupu memberships sit in single-source concepts. Some of those
-words genuinely appear in no other dictionary. An unknown share are `auahitūroa`.
+At 5%, roughly 23,600 hepatakakupu memberships sat in single-source concepts. The hedge that
+"some of those words genuinely appear in no other dictionary" is now measured and is small:
+**only 742 of 23,605 — 3.1% —** have a headword no other source carries. Vocabulary is not the
+explanation. The axis above recovers 832; the remaining ~15,400 are reachable by headword and
+cognate set but ambiguous, and need evidence a cognate set cannot supply.
+
+---
+
+## D44. One sense's part of speech vetoes its whole entry — **found on the bench, queued**
+
+Found 2026-09-25, implementing the **D43** axis. It is why D43's own proof case still does not
+merge, and it is independent of D43.
+
+`form_concepts` refuses a concept if a block holds against **any** current member:
+
+```python
+if any(blocks(s, e) for s in seed for e in existing):
+    continue
+```
+
+That is the anti-chaining rule, and the rule itself is right — it is what stops a third source
+compatible with each of two separated words from quietly joining them. The problem is the
+granularity of what it quantifies over. A seed is a whole **lexeme**, so a block earned by one
+sense is applied to every sense of that entry.
+
+### The case
+
+| sense | part of speech | |
+|---|---|---|
+| te_aka:516#1 | `Proper noun (person)` | Auahitūroa, the personage |
+| te_aka:516#2 | `Noun` | the comet |
+| hepatakakupu:4287#1 | `Noun` | the comet, described in Māori |
+
+`cognate_unique_pairs` names `(hepatakakupu:4287#1, te_aka:516#2)` as a mutually unique pair —
+the evidence is there and correct. But te_aka:516#1 is a proper noun, `proper noun` is
+emphatically outside `OPEN_POS` (the `Hene` rule, and rightly so), and so the block it earns
+against `Noun` rules out the entire concept. Sense 2 never gets to attach.
+
+### Why this is not a quick fix
+
+- **The POS block is sense-level; the seed is entry-level.** `blocks()` already compares the
+  sense's own `part_of_speech_en`. It is the quantifier in `form_concepts` that widens a
+  sense's claim to its whole lexeme.
+- **Narrowing it weakens the anti-chaining rule**, which the design calls "the safety
+  mechanism of the whole design". Any change here must be measured against the `hoi` canary
+  and the calibration answers, exactly as the D43 axis was.
+- **Not every block should narrow.** A source filing two entries apart (`a['lexeme'] !=
+  b['lexeme']`) is a statement about *words* and should keep vetoing the whole seed. A macron
+  disagreement is about a *spelling*. Only the POS block is clearly a per-sense claim. The
+  three may not deserve the same treatment.
+
+### Scale
+
+Not yet measured. The population is senses that earn a block their sibling senses do not
+share; `proper noun` co-tagged with `noun` on one entry is 30 occurrences corpus-wide, but
+that count is entry-level and is not the right measure for this. **Measuring it is the first
+step, not changing `form_concepts`.**
