@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from sweep_findings import FINDING_DDL
@@ -27,14 +28,7 @@ mod = importlib.import_module("61_export_judgements")
 
 
 def _db():
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE concept_member (
-            id INTEGER PRIMARY KEY, concept_id INTEGER, source_id TEXT,
-            source_entry_id TEXT, sense_number INTEGER, entry_id INTEGER,
-            sense_id INTEGER, status TEXT NOT NULL, confidence TEXT,
-            created_at TEXT);
-    """)
+    con = core_db()
     for ddl in (QUEUE_DDL, FINDING_DDL, PATCH_DDL):
         con.executescript(ddl)
     con.executemany(

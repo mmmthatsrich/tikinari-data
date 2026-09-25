@@ -18,6 +18,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from sweep_queue import (QUEUE_DDL, claim_next, complete, mark_calibration,
@@ -26,12 +27,7 @@ from sweep_queue import (QUEUE_DDL, claim_next, complete, mark_calibration,
 
 
 def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword_search TEXT);
-        CREATE TABLE sense (id INTEGER PRIMARY KEY, entry_id INTEGER);
-    """)
+    con = core_db()
     con.executescript(QUEUE_DDL)
     rows = [
         # 'aho' — 5 sources -> tier 1
@@ -45,7 +41,7 @@ def _db() -> sqlite3.Connection:
         (None, "te_aka", "zzz"),
     ]
     con.executemany(
-        "INSERT INTO entry (id, source_id, headword_search) VALUES (?,?,?)", rows)
+        "INSERT INTO entry (id, source_id, headword_search, headword, headword_sort)VALUES (?,?,?, '', '')", rows)
     for eid, in con.execute("SELECT id FROM entry"):
         con.execute("INSERT INTO sense (entry_id) VALUES (?)", (eid,))
     con.commit()

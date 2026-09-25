@@ -20,24 +20,17 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from sweep_patch import PATCH_DDL, apply_patches, record_patch, revert
 
 
 def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-            headword TEXT, headword_en TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-            gloss_en TEXT, definition_raw TEXT, note TEXT);
-    """)
+    con = core_db()
     con.executescript(PATCH_DDL)
-    con.execute("INSERT INTO entry (id, source_id, source_entry_id, headword) "
-                "VALUES (1, 'te_aka', '31760', 'pepa')")
+    con.execute("INSERT INTO entry (id, source_id, source_entry_id, headword, "
+                "  headword_sort, headword_search) VALUES (1, 'te_aka', '31760', 'pepa', '', '')")
     con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
                 "VALUES (10, 1, 1, 'newspaper.')")
     con.commit()

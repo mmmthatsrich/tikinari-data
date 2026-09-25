@@ -10,6 +10,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -20,19 +21,7 @@ _SPEC.loader.exec_module(build_unified)
 
 
 def _memory_db():
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-            headword TEXT, headword_sort TEXT, headword_search TEXT,
-            homonym_no INTEGER, headword_en TEXT, part_of_speech TEXT,
-            loan_marker TEXT, dialect TEXT, audio_url TEXT, locator TEXT,
-            content_hash TEXT, first_seen TEXT, created_at TEXT,
-            last_updated TEXT);
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
-            form_search TEXT, form_type TEXT, note TEXT);
-    """)
+    con = core_db()
     return con
 
 
@@ -100,29 +89,6 @@ class BuildPaekupuWiring(unittest.TestCase):
     def setUp(self):
         self.con = _memory_db()
         self.con.executescript("""
-            CREATE TABLE paekupu_entries (
-                id INTEGER PRIMARY KEY, slug TEXT, headword TEXT,
-                headword_sort TEXT, headword_search TEXT, headword_en TEXT,
-                part_of_speech TEXT, definition TEXT, definition_mi TEXT,
-                usage_examples TEXT, audio_url TEXT, alternative_words TEXT,
-                subject_areas TEXT, subject_area TEXT, subject_area_en TEXT);
-            CREATE TABLE sense (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-                parent_sense_id INTEGER, gloss_en TEXT, gloss_mi TEXT,
-                definition_raw TEXT, part_of_speech TEXT,
-                part_of_speech_en TEXT, register TEXT, sort_no INTEGER,
-                note TEXT);
-            CREATE TABLE example (
-                id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-                text_mi TEXT, text_en TEXT, source_abbrev TEXT,
-                citation TEXT, sort_no INTEGER);
-            CREATE TABLE relation (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-                target_headword TEXT, target_entry_id INTEGER,
-                target_sense_id INTEGER, note TEXT);
-            CREATE TABLE entry_domain (
-                id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-                domain TEXT, domain_lang TEXT);
             INSERT INTO paekupu_entries
                 (slug, headword, headword_sort, headword_search, headword_en,
                  part_of_speech, definition, definition_mi, usage_examples,
