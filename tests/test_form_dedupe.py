@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 import importlib.util
@@ -23,19 +24,7 @@ _SPEC.loader.exec_module(build_unified)
 
 
 def _memory_db():
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-            headword TEXT, headword_sort TEXT, headword_search TEXT,
-            homonym_no INTEGER, headword_en TEXT, part_of_speech TEXT,
-            loan_marker TEXT, dialect TEXT, audio_url TEXT, locator TEXT,
-            content_hash TEXT, first_seen TEXT, created_at TEXT,
-            last_updated TEXT);
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
-            form_search TEXT, form_type TEXT, note TEXT);
-    """)
+    con = core_db()
     return con
 
 

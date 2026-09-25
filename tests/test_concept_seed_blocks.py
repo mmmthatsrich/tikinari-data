@@ -35,6 +35,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 sys.stdout.reconfigure(encoding="utf-8")
 
 from concept_evidence import GlossIndex, blocks, seed_blocks
+from core_schema import core_db
 
 
 def _sense(**kw):
@@ -133,27 +134,15 @@ class SeedScopedPartOfSpeech(unittest.TestCase):
 
 def _db():
     """te_aka's two-sense comet against hepatakakupu's one-sense comet."""
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (id INTEGER PRIMARY KEY, source_id TEXT,
-            source_entry_id TEXT, headword TEXT, headword_search TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT, locator TEXT);
-        CREATE TABLE sense (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            sense_number INTEGER, gloss_en TEXT, gloss_mi TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT);
-        CREATE TABLE example (id INTEGER PRIMARY KEY, sense_id INTEGER,
-            text_mi TEXT, citation TEXT);
-        CREATE TABLE relation (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            target_entry_id INTEGER);
-        CREATE TABLE ETY_entry_link (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            cognateset_id INTEGER, sense_id INTEGER);
-    """)
+    con = core_db()
     con.executemany(
         "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-        "headword_search, part_of_speech_en, locator) VALUES (?,?,?,?,?,?,?)", [
-            (1, "hepatakakupu", "4287", "Auahitūroa", "auahituroa", "Noun",
-             "word_id=342"),
-            (2, "te_aka", "516", "Auahitūroa", "auahituroa", None, None),
+        "headword_sort, headword_search, part_of_speech_en, locator) "
+        "VALUES (?,?,?,?,?,?,?,?)", [
+            (1, "hepatakakupu", "4287", "Auahitūroa", "auahituroa",
+             "auahituroa", "Noun", "word_id=342"),
+            (2, "te_aka", "516", "Auahitūroa", "auahituroa",
+             "auahituroa", None, None),
         ])
     con.executemany(
         "INSERT INTO sense (id, entry_id, sense_number, gloss_en, gloss_mi, "
@@ -164,7 +153,8 @@ def _db():
             (12, 2, 2, "comet.", None, "Noun"),
         ])
     con.executemany(
-        "INSERT INTO ETY_entry_link (entry_id, cognateset_id) VALUES (?,?)",
+        "INSERT INTO ETY_entry_link (entry_id, cognateset_id, source) "
+        "VALUES (?,?,'tregear')",
         [(1, 7), (2, 7)])
     con.commit()
     return con

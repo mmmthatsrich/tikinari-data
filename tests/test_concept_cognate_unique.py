@@ -33,6 +33,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 from concept_evidence import (EVIDENCE_CONFIDENCE, EVIDENCE_WEIGHT, GlossIndex,
                               cognate_unique_pairs, positive_evidence)
+from core_schema import core_db
 
 
 def _sense(**kw):
@@ -187,27 +188,15 @@ def _bucket_db(extra_entries=(), extra_senses=(), extra_links=()):
     every gloss axis is blind to it — so the only thing that can join these
     two is the cognate set they share.
     """
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (id INTEGER PRIMARY KEY, source_id TEXT,
-            source_entry_id TEXT, headword TEXT, headword_search TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT, locator TEXT);
-        CREATE TABLE sense (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            sense_number INTEGER, gloss_en TEXT, gloss_mi TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT);
-        CREATE TABLE example (id INTEGER PRIMARY KEY, sense_id INTEGER,
-            text_mi TEXT, citation TEXT);
-        CREATE TABLE relation (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            target_entry_id INTEGER);
-        CREATE TABLE ETY_entry_link (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            cognateset_id INTEGER, sense_id INTEGER);
-    """)
+    con = core_db()
     con.executemany(
         "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-        "headword_search, part_of_speech_en, locator) VALUES (?,?,?,?,?,?,?)", [
-            (1, "hepatakakupu", "4287", "Auahitūroa", "auahituroa", "Noun",
-             "word_id=342"),
-            (2, "te_aka", "516", "Auahitūroa", "auahituroa", "Noun", None),
+        "headword_sort, headword_search, part_of_speech_en, locator) "
+        "VALUES (?,?,?,?,?,?,?,?)", [
+            (1, "hepatakakupu", "4287", "Auahitūroa", "auahituroa",
+             "auahituroa", "Noun", "word_id=342"),
+            (2, "te_aka", "516", "Auahitūroa", "auahituroa",
+             "auahituroa", "Noun", None),
             *extra_entries,
         ])
     con.executemany(
@@ -218,7 +207,8 @@ def _bucket_db(extra_entries=(), extra_senses=(), extra_links=()):
             *extra_senses,
         ])
     con.executemany(
-        "INSERT INTO ETY_entry_link (entry_id, cognateset_id) VALUES (?,?)",
+        "INSERT INTO ETY_entry_link (entry_id, cognateset_id, source) "
+        "VALUES (?,?,'tregear')",
         [(1, 7), (2, 7), *extra_links])
     con.commit()
     return con
@@ -260,8 +250,10 @@ class FormConceptsUsesTheAxis(unittest.TestCase):
         # may join on it. Every sense here is its own concept.
         con = _bucket_db(
             extra_entries=[
-                (3, "williams", "2671", "Auahitūroa", "auahituroa", "Noun", None),
-                (4, "williams", "2672", "Auahitūroa", "auahituroa", "Noun", None)],
+                (3, "williams", "2671", "Auahitūroa", "auahituroa",
+                 "auahituroa", "Noun", None),
+                (4, "williams", "2672", "Auahitūroa", "auahituroa",
+                 "auahituroa", "Noun", None)],
             extra_senses=[(12, 3, 1, None, None), (13, 4, 1, None, None)],
             extra_links=[(3, 7), (4, 7)])
         concepts = self._concepts(con)
