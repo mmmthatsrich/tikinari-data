@@ -1081,17 +1081,41 @@ measurement too.)
 The 49,755 relations that assert more than the source does are the rows those consumers have
 been reading, so narrowing them is a separate change needing its own measurement.
 
-### Two schema drifts found while building the test fixture
+### Two schema drifts found while building the test fixture — **✅ fixed 2026-09-26**
 
-Left as found, recorded so they are not rediscovered:
+Neither had ever failed anything, which is why both survived.
 
-- **`te_aka_entries` has two DDLs.** `04_te_aka_import.py` owns it — it drops and recreates
-  it — and the copy in `00_init_db.py` has drifted and lacks the `senses` column. The
-  importer always wins in practice, so this is latent rather than live, but a fixture built
-  on `00_init_db` alone gets a table the pipeline never sees.
-- **The init sequence is not one function.** `sense.note` comes from `migrate_pos_columns`,
-  not `migrate_tables`, so calling a subset silently omits columns. Fixtures should run the
-  same sequence `00_init_db.main()` does.
+**A landing table had two DDLs.** `04_te_aka_import.py`, `04_paekupu_import.py` and
+`05_hepataka_import.py` each DROP and CREATE their own table, so theirs is the shape the
+pipeline runs on — and `00_init_db.py` carried a second, stale copy of each. Measured against
+the live database, a fresh init was missing:
+
+| table | columns absent |
+|---|---|
+| `te_aka_entries` | `senses` |
+| `paekupu_entries` | `alternative_words`, `audio_url`, `definition_mi`, `pos_mi`, `slug`, `subject_area_en`, `subject_areas` |
+| `hepatakakupu_entries` | `master_sense`, `master_word_id`, `semantic_domain`, `sense_number`, `suffixes`, `synonym_senses`, `synonyms` |
+
+Nothing failed, because the importer recreates the table before anything reads it. It bites
+whatever trusts `00_init_db` alone — a fixture, or a fresh database queried before its first
+import, which is exactly how it surfaced.
+
+The stale copies are gone, along with paekupu's index, FTS table and triggers, which sat in a
+different section of the file and were left dangling by the first removal pass.
+`create_importer_owned_tables()` calls each owner's DDL, **all or nothing per table**: those
+scripts run straight after their own DROP, so they carry no `IF NOT EXISTS` and their triggers
+contain semicolons, and cannot be split or applied piecemeal.
+
+**The init sequence was not one call.** `main()` ran five functions in order, and `sense.note`
+comes from `migrate_pos_columns` while `sense.part_of_speech` comes from `migrate_tables`, so
+calling a subset produced a database that looked initialised and silently lacked columns.
+`initialise()` is now the whole sequence.
+
+Verified: a fresh `initialise()` and the live staging database agree on all three tables — 17,
+20 and 18 columns — with no FTS or index object missing.
+`tests/test_schema_single_source.py` pins both, including that `00_init_db`'s **source** must
+not contain a `CREATE` for an owned table, so the duplication cannot return by being pasted
+back.
 
 ---
 
