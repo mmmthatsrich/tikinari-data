@@ -15,6 +15,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -25,30 +26,22 @@ _SPEC.loader.exec_module(word_origin)
 
 
 def _db():
-    con = sqlite3.connect(":memory:")
+    con = core_db()
+    # collect_derivations reads `form` to see whether another source
+    # independently records an ngata derived form; empty here, so these rows
+    # stay 'probable'.
     con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword TEXT,
-            loan_marker TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-            gloss_en TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER, note TEXT);
-        -- collect_derivations reads form to see whether another source
-        -- independently records an ngata derived form; empty here, so
-        -- these rows stay 'probable'.
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
-            form_type TEXT, note TEXT);
-        INSERT INTO entry VALUES (1, 'williams', 'hopukia', NULL),
-                                 (2, 'williams', 'hopu',    NULL),
-                                 (3, 'ngata',    'ahutia',  NULL),
-                                 (4, 'ngata',    'ahu',     NULL);
-        INSERT INTO sense VALUES (10, 1, 1, NULL), (11, 2, 1, NULL),
-                                 (12, 3, 1, NULL), (13, 4, 1, NULL);
-        INSERT INTO relation VALUES
+        INSERT INTO entry (id, source_id, headword, loan_marker,
+                           headword_sort, headword_search) VALUES
+            (1, 'williams', 'hopukia', NULL, '', ''),
+            (2, 'williams', 'hopu',    NULL, '', ''),
+            (3, 'ngata',    'ahutia',  NULL, '', ''),
+            (4, 'ngata',    'ahu',     NULL, '', '');
+        INSERT INTO sense (id, entry_id, sense_number, gloss_en) VALUES
+            (10, 1, 1, NULL), (11, 2, 1, NULL),
+            (12, 3, 1, NULL), (13, 4, 1, NULL);
+        INSERT INTO relation (id, entry_id, rel_type, target_headword,
+                              target_entry_id, note) VALUES
             (100, 1, 'derived_from', 'hopu', 2, NULL),
             (101, 3, 'derived_from', 'ahu',  4, NULL);
     """)
@@ -87,10 +80,14 @@ class Evidence(unittest.TestCase):
         # block — the exact defect this mapping replaces.
         con = _db()
         con.executescript("""
-            INSERT INTO entry VALUES (5, 'te_aka', 'kakea', NULL),
-                                     (6, 'te_aka', 'kake',  NULL);
-            INSERT INTO sense VALUES (14, 5, 1, NULL), (15, 6, 1, NULL);
-            INSERT INTO relation VALUES
+            INSERT INTO entry (id, source_id, headword, loan_marker,
+                               headword_sort, headword_search) VALUES
+                (5, 'te_aka', 'kakea', NULL, '', ''),
+                                     (6, 'te_aka', 'kake', NULL, '', '');
+            INSERT INTO sense (id, entry_id, sense_number, gloss_en) VALUES
+                (14, 5, 1, NULL), (15, 6, 1, NULL);
+            INSERT INTO relation (id, entry_id, rel_type, target_headword,
+                                  target_entry_id, note) VALUES
                 (102, 5, 'derived_from', 'kake', 6, NULL);
         """)
         bases = [r["base_form"] for r in word_origin.collect_derivations(con)]

@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -33,35 +34,30 @@ _SPEC.loader.exec_module(word_origin)
 
 def _db(corroborating_source=None):
     """ngata pairs ahu/ahutia; optionally another source records ahutia."""
-    con = sqlite3.connect(":memory:")
+    con = core_db()
     con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword TEXT,
-            loan_marker TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-            gloss_en TEXT);
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
-            form_type TEXT, note TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER, note TEXT);
-        INSERT INTO entry VALUES (1, 'ngata', 'ahutia', NULL),
-                                 (2, 'ngata', 'ahu',    NULL),
-                                 (3, 'williams', 'hopukia', NULL),
-                                 (4, 'williams', 'hopu',    NULL),
-                                 (5, 'te_aka', 'ahu', NULL);
-        INSERT INTO sense VALUES (10,1,1,NULL),(11,2,1,NULL),
-                                 (12,3,1,NULL),(13,4,1,NULL),(14,5,1,NULL);
-        INSERT INTO relation VALUES
+        INSERT INTO entry (id, source_id, headword, loan_marker,
+                           headword_sort, headword_search) VALUES
+            (1, 'ngata',    'ahutia',  NULL, '', ''),
+            (2, 'ngata',    'ahu',     NULL, '', ''),
+            (3, 'williams', 'hopukia', NULL, '', ''),
+            (4, 'williams', 'hopu',    NULL, '', ''),
+            (5, 'te_aka',   'ahu',     NULL, '', '');
+        INSERT INTO sense (id, entry_id, sense_number, gloss_en) VALUES
+            (10,1,1,NULL),(11,2,1,NULL),(12,3,1,NULL),(13,4,1,NULL),(14,5,1,NULL);
+        INSERT INTO relation (id, entry_id, rel_type, target_headword,
+                              target_entry_id, note) VALUES
             (100, 1, 'derived_from', 'ahu',  2, NULL),
             (101, 3, 'derived_from', 'hopu', 4, NULL);
     """)
     if corroborating_source:
-        con.execute("INSERT INTO entry VALUES (6, ?, 'kake', NULL)",
-                    (corroborating_source,))
-        con.execute("INSERT INTO form VALUES (1, 6, 'ahutia', 'passive', NULL)")
+        con.execute(
+            "INSERT INTO entry (id, source_id, headword, loan_marker, "
+            "  headword_sort, headword_search) VALUES (6, ?, 'kake', NULL, '', '')",
+            (corroborating_source,))
+        con.execute(
+            "INSERT INTO form (id, entry_id, form, form_type, note, form_search) "
+            "VALUES (1, 6, 'ahutia', 'passive', NULL, '')")
     return con
 
 

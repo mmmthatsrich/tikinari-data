@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -32,18 +33,15 @@ _SPEC.loader.exec_module(build_concepts)
 
 
 def _db():
-    con = sqlite3.connect(":memory:")
+    con = core_db()
     con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-            headword TEXT);
-        CREATE TABLE derivation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, base_form TEXT,
-            evidence TEXT, derived INTEGER, confidence TEXT);
-        INSERT INTO entry VALUES (1, 'williams', '10', 'hōmai'),
-                                 (2, 'ngata',    '20', 'whākina'),
-                                 (3, 'ngata',    '30', 'ahutia');
-        INSERT INTO derivation VALUES
+        INSERT INTO entry (id, source_id, source_entry_id, headword,
+                           headword_sort, headword_search) VALUES
+            (1, 'williams', '10', 'hōmai',   '', ''),
+            (2, 'ngata',    '20', 'whākina', '', ''),
+            (3, 'ngata',    '30', 'ahutia',  '', '');
+        INSERT INTO derivation (id, entry_id, base_form, evidence, derived,
+                                confidence) VALUES
             (1, 1, 'hō',    'williams: printed under this base entry', 0, 'certain'),
             (2, 2, 'whāki', 'ngata: printed in one run with its base',  1, 'probable'),
             (3, 3, 'ahu',   'ngata: printed in one run with its base',  1, 'probable');
@@ -71,5 +69,7 @@ class DerivedLong(unittest.TestCase):
         # The concept-build fixture has no derivation table; the guard that
         # allows that must survive the added WHERE clause.
         bare = sqlite3.connect(":memory:")
+        # Deliberately NOT core_db(): the point is a database with no
+        # derivation table, and the real schema has one.
         bare.executescript("CREATE TABLE entry (id INTEGER PRIMARY KEY);")
         self.assertEqual(build_concepts._derived_long(bare), set())

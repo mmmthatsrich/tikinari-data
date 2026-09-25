@@ -19,6 +19,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -104,30 +105,21 @@ class NoRegressionAcrossTheCorpus(unittest.TestCase):
 
 
 def _db():
-    con = sqlite3.connect(":memory:")
+    con = core_db()
+    # collect_derivations reads `form` to see whether another source
+    # independently records an ngata derived form; empty here, so these rows
+    # stay 'probable'.
     con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword TEXT,
-            loan_marker TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-            gloss_en TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER, note TEXT);
-        -- collect_derivations reads form to see whether another source
-        -- independently records an ngata derived form; empty here, so
-        -- these rows stay 'probable'.
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
-            form_type TEXT, note TEXT);
-        INSERT INTO entry VALUES (1, 'papakupu', 'ekeeke', NULL),
-                                 (2, 'papakupu', 'eke',    NULL),
-                                 (3, 'williams', 'hopukia', NULL),
-                                 (4, 'williams', 'hopu',    NULL);
-        INSERT INTO sense VALUES (10,1,1,NULL),(11,2,1,NULL),
-                                 (12,3,1,NULL),(13,4,1,NULL);
-        INSERT INTO relation VALUES
+        INSERT INTO entry (id, source_id, headword, loan_marker,
+                           headword_sort, headword_search) VALUES
+            (1, 'papakupu', 'ekeeke',  NULL, '', ''),
+            (2, 'papakupu', 'eke',     NULL, '', ''),
+            (3, 'williams', 'hopukia', NULL, '', ''),
+            (4, 'williams', 'hopu',    NULL, '', '');
+        INSERT INTO sense (id, entry_id, sense_number, gloss_en) VALUES
+            (10,1,1,NULL),(11,2,1,NULL),(12,3,1,NULL),(13,4,1,NULL);
+        INSERT INTO relation (id, entry_id, rel_type, target_headword,
+                              target_entry_id, note) VALUES
             (100, 1, 'derived_from', 'eke',  2, 'reduplication'),
             (101, 3, 'derived_from', 'hopu', 4, NULL);
     """)

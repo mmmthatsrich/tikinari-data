@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 from williams_xref import extract_xrefs, parse_see_also_targets
 
 
@@ -131,25 +132,18 @@ class TestResolveWilliamsXrefs(unittest.TestCase):
     rows, against a synthetic in-memory DB (no production data)."""
 
     def _db(self):
-        con = sqlite3.connect(":memory:")
-        con.executescript("""
-            CREATE TABLE entry (
-                id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-                headword TEXT, headword_search TEXT);
-            CREATE TABLE williams_entries (
-                id INTEGER PRIMARY KEY, headword TEXT, headword_search TEXT,
-                sense_number TEXT);
-            CREATE TABLE relation (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-                target_headword TEXT, target_entry_id INTEGER, note TEXT);
-        """)
+        con = core_db()
         # Two williams source rows: homographs of "ahu" (sense i and ii), and "tuaahu".
         ws = [(1, "ahu", "ahu", "i"), (2, "ahu", "ahu", "ii"), (3, "tuaahu", "tuahu", None)]
-        con.executemany("INSERT INTO williams_entries VALUES (?,?,?,?)", ws)
+        con.executemany(
+            "INSERT INTO williams_entries (id, headword, headword_search, "
+            "  sense_number, headword_sort) VALUES (?,?,?,?, '')", ws)
         # Mirrored unified entries (source_entry_id = williams_entries.id).
         es = [(10, "williams", "1", "ahu", "ahu"), (11, "williams", "2", "ahu", "ahu"),
               (12, "williams", "3", "tuaahu", "tuahu")]
-        con.executemany("INSERT INTO entry VALUES (?,?,?,?,?)", es)
+        con.executemany(
+            "INSERT INTO entry (id, source_id, source_entry_id, headword, "
+            "  headword_search, headword_sort) VALUES (?,?,?,?,?, '')", es)
         return con
 
     def _add(self, con, rel_type, target):
