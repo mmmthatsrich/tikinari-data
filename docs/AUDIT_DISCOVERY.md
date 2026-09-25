@@ -1119,7 +1119,7 @@ back.
 
 ---
 
-## D47. A confirmation granted to one grouping is re-applied to every later grouping — **found on the bench, queued**
+## D47. A confirmation granted to one grouping is re-applied to every later grouping — **✅ fixed 2026-09-26**
 
 Found 2026-09-26, verifying the D44 rebuild. Not hypothetical: it happened during that
 rebuild, to a row that can be named.
@@ -1199,3 +1199,38 @@ this pipeline already states — but stop the concept-level claim from silently 
 Nothing is destroyed, the export stops shipping unexamined merges as confirmed, and a
 grouping that changed gets looked at again — which is what a judge would want, since a new
 witness is exactly the thing that could change their mind.
+
+### Fixed as recommended
+
+`concept_member` gains `confirmed_grouping`, a JSON array of the member keys a confirmation
+was granted to, written by `sweep_runner._apply_concept_actions` at confirm time.
+`54_build_concepts._concept_status()` confirms a concept only where some confirmed member's
+recorded grouping **covers everything now present**.
+
+Three details the remedy above did not spell out, settled while building it:
+
+- **Losing a member is fine.** The judge saw more than is there now, so nothing unexamined has
+  appeared. The test is subset, not equality.
+- **A rejected member is not part of the grouping.** The rejection records that the sense does
+  *not* belong, so its later presence is not an unseen witness.
+- **A confirmation with no recorded grouping cannot confirm.** It cannot be checked, and an
+  unverifiable claim is not a confirmation. That covers every row judged before the column
+  existed — deliberately not backfilled, because backfilling would assert the judge saw a
+  grouping they may never have seen, which is the very thing this finding is about.
+
+### Measured on staging
+
+| | before | after |
+|---|---|---|
+| confirmed concepts | 13 | **0** |
+| member judgements | 28 | **28** |
+| unjudged members inside a confirmed concept | 10 | **0** |
+
+All 13 predate the column, so all 13 revert. **No judgement was lost** — every one of the 28
+confirmed memberships keeps its own status, and only the concept-level claim waits to be
+re-earned.
+
+Two uncertain concepts shipped *only* because they were confirmed, and are now withheld until
+re-judged: **3148696** (paekupu, te_aka, williams) and **3150970** (te_aka, te_aka). Both hold
+a confirmed member, so the sweep will re-confirm them with a grouping recorded and they will
+ship again.
