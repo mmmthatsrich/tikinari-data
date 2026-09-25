@@ -730,7 +730,7 @@ cognate set but ambiguous, and need evidence a cognate set cannot supply.
 
 ---
 
-## D44. One sense's part of speech vetoes its whole entry — **found on the bench, queued**
+## D44. One sense's part of speech vetoes its whole entry — 148 attachments, 324 senses — **measured 2026-09-26, queued**
 
 Found 2026-09-25, implementing the **D43** axis. It is why D43's own proof case still does not
 merge, and it is independent of D43.
@@ -773,12 +773,52 @@ against `Noun` rules out the entire concept. Sense 2 never gets to attach.
   disagreement is about a *spelling*. Only the POS block is clearly a per-sense claim. The
   three may not deserve the same treatment.
 
-### Scale
+### Scale — measured 2026-09-26
 
-Not yet measured. The population is senses that earn a block their sibling senses do not
-share; `proper noun` co-tagged with `noun` on one entry is 30 occurrences corpus-wide, but
-that count is entry-level and is not the right measure for this. **Measuring it is the first
-step, not changing `form_concepts`.**
+Measured by replaying the real attachment loop over the whole corpus and recording every
+seed-vs-concept rejection where at least one sense of the seed was itself clean **and** had
+positive evidence — the attachments a per-sense rule would have allowed.
+
+| | |
+|---|---|
+| seed-vs-concept rejections caused by a block | 67,525 |
+| …where **every** sense was blocked — genuine | 67,016 (99.2%) |
+| …clean sense, but no evidence anyway | 361 |
+| **…clean sense with evidence — preventable** | **148 (0.22%)** |
+
+148 attachments, **324 senses**: papakupu 164, williams 93, te_aka 67. No other source is
+affected at all.
+
+### The speculation above is confirmed, and more sharply than it was put
+
+This entry guessed that the three block kinds "may not deserve the same treatment". Measured,
+**every one of the 148 is caused by the part-of-speech block alone.** Not predominantly —
+exclusively. Zero involve a macron disagreement, and zero involve a source filing two entries
+apart.
+
+That last is the important one. The anti-chaining rule's stated purpose is the *lexeme* block
+— *"if two words are separated by their own source's numbering, no third source compatible
+with each can later join them"* — and the lexeme block never appears in this population.
+Narrowing the POS block to the sense that earns it would leave the anti-chaining mechanism
+untouched.
+
+### What it would attach
+
+| confidence the attachment would earn | |
+|---|---|
+| `certain` | 5 |
+| `probable` | 91 |
+| `uncertain` | 52 |
+
+The export keeps `status = 'confirmed' OR confidence IN (certain, probable)`, so the 52
+uncertain ones would not ship unless a human confirmed them: the shipped gain is about **96
+attachments**. Small, and it includes D43's proof case — `auahitūroa`, blocked by
+`part_of_speech`, with `shared_cognate_set_unique` as its evidence, sitting in this population.
+
+Worked examples: te_aka's `ae` (sense 1 `Verb` 'to agree' blocks; senses 2–4 `Interjection`
+'yes' are clean and match papakupu's 'yes, in the sense of "I agree with"'); papakupu's `ata`
+(sense 1 `Noun` 'morning, daylight' matches ngata 'Morning', while sense 3
+`Proper noun (person)` blocks).
 
 ---
 
