@@ -1081,6 +1081,45 @@ measurement too.)
 The 49,755 relations that assert more than the source does are the rows those consumers have
 been reading, so narrowing them is a separate change needing its own measurement.
 
+### The follow-on, measured — and it is a no-op
+
+Measured 2026-09-26, before writing any of it:
+
+- **`cites_source` never sees a `sense_id`.** That evidence comes only from williams (1,526
+  rows) and te_matatiki (648). Neither source carries the attribution and te_aka contributes
+  none, so narrowing the `cites` index changes nothing.
+- **The resolvers never see one either.** All 89,916 te_aka relations are already resolved,
+  and every one of the 11,908 unresolved relations in the corpus has `sense_id` NULL —
+  paekupu 6,513, williams 1,732, te_matatiki 1,357, hepatakakupu 1,340, papakupu 737,
+  tregear_exceptions 208, temarareo 21. `resolve_within_source_relations`,
+  `resolve_relations_by_domain` and `resolve_relations_by_gloss` act only on unresolved rows.
+
+The one source carrying the attribution is the one with nothing left for the resolvers to do.
+Narrowing them would be writing code against data that does not exist, and the 49,755 figure
+above — real as a description of what the relations *assert* — turns out to name no consumer
+that currently reads them wrongly.
+
+**It becomes live the moment a second source gains the attribution.** paekupu and hepatakakupu
+both publish per-sense structure and both have thousands of unresolved relations, so this is
+worth re-measuring rather than closing.
+
+### What was worth doing: showing it in the batch
+
+`sweep_batch` now renders the asserting sense, across 4,463 multi-sense entries. On `aho`:
+
+```
+rel synonym -> 'io'      [te_aka:1764]  from s1
+rel synonym -> 'raina'   [te_aka:6429]  from s1
+…
+rel synonym -> 'kāwai'   [te_aka:2465]  from s3
+rel synonym -> 'kaha'    [te_aka:1836]  from s3
+```
+
+Sense 1 is *fishing line, cord, string*; sense 3 is *line of descent, genealogy*. Flattened,
+those twelve read as one set and a judge cannot see they were never synonyms of each other.
+NULL renders as nothing rather than as "unknown", because an entry-level claim is what every
+other source actually prints.
+
 ### Two schema drifts found while building the test fixture — **✅ fixed 2026-09-26**
 
 Neither had ever failed anything, which is why both survived.
