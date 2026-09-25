@@ -53,7 +53,7 @@ def _memory_db():
         CREATE TABLE relation (
             id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
             target_headword TEXT, target_entry_id INTEGER,
-            target_sense_id INTEGER, note TEXT);
+            target_sense_id INTEGER, sense_id INTEGER, note TEXT);
         CREATE TABLE ngata_entries (
             id INTEGER PRIMARY KEY, source_entry_id TEXT, wakareo_id TEXT,
             headword TEXT, part_of_speech TEXT, search_scope TEXT,

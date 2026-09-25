@@ -1015,11 +1015,16 @@ def create_tables(conn: sqlite3.Connection) -> None:
             target_entry_id INTEGER REFERENCES entry(id),   -- resolved when possible (Te Aka word_id)
             target_sense_id INTEGER REFERENCES sense(id),   -- Williams prints sense-level pointers
                                                             --   ('apa (i), 2'); NULL until resolved
+            sense_id        INTEGER REFERENCES sense(id),   -- WHICH sense asserts this (D46).
+                                                            --   te Aka states it per sense; every
+                                                            --   other source is entry-level, so
+                                                            --   NULL means "the word, not a sense"
             note            TEXT
         );
         CREATE INDEX IF NOT EXISTS idx_relation_entry ON relation(entry_id);
         CREATE INDEX IF NOT EXISTS idx_relation_target ON relation(target_entry_id);
         CREATE INDEX IF NOT EXISTS idx_relation_tsense ON relation(target_sense_id);
+        CREATE INDEX IF NOT EXISTS idx_relation_sense ON relation(sense_id);
 
         -- ── derivation: how a Māori word was formed from another ─────────────
         -- docs/WORD_FORMATION_DESIGN.md. Kept OUT of ETY_*: POLLEX decides case
@@ -1411,6 +1416,11 @@ def migrate_tables(conn: sqlite3.Connection) -> None:
     # A headword could always be addressed; a sense never could. Williams's
     # 'see apa (i), sense 2' and POLLEX's '*afo is sense 2' both needed this.
     _add_column(conn, "ETY_entry_link", "sense_id", "INTEGER REFERENCES sense(id)")
+    # D46: which sense asserts a relation. te Aka states it per sense and the
+    # build was reading an entry-level aggregate instead.
+    _add_column(conn, "relation", "sense_id", "INTEGER REFERENCES sense(id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_relation_sense "
+                 "  ON relation(sense_id)")
     _add_column(conn, "relation", "target_sense_id", "INTEGER REFERENCES sense(id)")
     pollex_cols = {row[1] for row in conn.execute("PRAGMA table_info(pollex_entries)")}
     if "source_author" not in pollex_cols:

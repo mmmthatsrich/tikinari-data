@@ -49,7 +49,7 @@ def _db(rows):
         CREATE TABLE relation (
             id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
             target_headword TEXT, target_entry_id INTEGER,
-            target_sense_id INTEGER, note TEXT);
+            target_sense_id INTEGER, sense_id INTEGER, note TEXT);
         CREATE TABLE entry_domain (
             id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
             domain TEXT, domain_lang TEXT);
