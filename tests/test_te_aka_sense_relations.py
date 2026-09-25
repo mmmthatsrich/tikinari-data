@@ -37,10 +37,6 @@ sys.stdout.reconfigure(encoding="utf-8")
 
 bu = importlib.import_module("50_build_unified")
 init_db = importlib.import_module("00_init_db")
-# te_aka_entries is owned by the IMPORTER, which drops and recreates it. The
-# copy of that DDL in 00_init_db has drifted and lacks `senses`, so the
-# importer's is the authoritative shape and the one to build a fixture on.
-te_aka_import = importlib.import_module("04_te_aka_import")
 
 # te_aka:79 'aho', trimmed to the three senses that matter.
 AHO_SENSES = [
@@ -68,22 +64,15 @@ AHO_SENSES = [
 
 
 def _db(senses=AHO_SENSES):
-    """The real core schema, not a hand-copied subset.
+    """The real schema, not a hand-copied subset.
 
-    An earlier draft of this test wrote its own CREATE TABLEs and drifted from
-    the real ones within minutes. `create_tables` is what the pipeline runs,
-    so it is what the fixture runs.
+    An earlier draft wrote its own CREATE TABLEs and drifted from the real
+    ones within minutes; a second called part of the init sequence and
+    silently lacked `sense.note`. `initialise` is the whole thing, and is what
+    the pipeline runs — see tests/test_schema_single_source.py.
     """
     con = sqlite3.connect(":memory:")
-    # The same sequence 00_init_db.main() runs, in the same order. Calling a
-    # subset silently omits columns -- sense.note comes from
-    # migrate_pos_columns, not migrate_tables.
-    init_db.create_tables(con)
-    init_db.create_wakareo_tables(con)
-    init_db.migrate_pos_columns(con)
-    init_db.migrate_tables(con)
-    con.executescript(te_aka_import._DROP_SQL)
-    con.executescript(te_aka_import._CREATE_SQL)
+    init_db.initialise(con)
     # The entry-level aggregate, exactly as the parser builds it: deduped.
     agg = []
     for s in senses:

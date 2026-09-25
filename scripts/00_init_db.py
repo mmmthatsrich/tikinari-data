@@ -2,6 +2,8 @@
 and seeds source_metadata. Safe to re-run (CREATE IF NOT EXISTS).
 """
 
+import importlib
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -700,88 +702,13 @@ def create_tables(conn: sqlite3.Connection) -> None:
             VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
         END;
 
-        -- ── Te Aka ───────────────────────────────────────────────────────────
-        CREATE TABLE IF NOT EXISTS te_aka_entries (
-            id               INTEGER PRIMARY KEY AUTOINCREMENT,
-            word_id          INTEGER NOT NULL,
-            headword         TEXT NOT NULL,
-            headword_sort    TEXT NOT NULL,
-            headword_search  TEXT NOT NULL,
-            part_of_speech   TEXT,
-            definition       TEXT,
-            usage_examples   TEXT DEFAULT '[]',
-            audio_url        TEXT,
-            synonyms         TEXT DEFAULT '[]',
-            source_citations TEXT DEFAULT '[]',
-            filters          TEXT DEFAULT '[]',
-            content_hash     TEXT,              -- SHA-256 of material fields; used for refresh diffing
-            first_seen       TEXT,              -- datetime of first import
-            created_at       TEXT DEFAULT (datetime('now')),
-            last_updated     TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_te_aka_word_id
-            ON te_aka_entries(word_id);
-        CREATE INDEX IF NOT EXISTS idx_te_aka_search
-            ON te_aka_entries(headword_search);
+        -- te_aka_entries is created by 04_te_aka_import.py, which DROPs and CREATEs it on
+        -- every import. A second copy here drifted out of step and was
+        -- removed; initialise() calls the owner's DDL instead.
 
-        CREATE VIRTUAL TABLE IF NOT EXISTS te_aka_fts USING fts5(
-            headword, definition, usage_examples,
-            content='te_aka_entries', content_rowid='id',
-            tokenize='unicode61'
-        );
-
-        CREATE TRIGGER IF NOT EXISTS te_aka_fts_ins AFTER INSERT ON te_aka_entries BEGIN
-            INSERT INTO te_aka_fts(rowid, headword, definition, usage_examples)
-            VALUES (new.id, new.headword, new.definition, new.usage_examples);
-        END;
-        CREATE TRIGGER IF NOT EXISTS te_aka_fts_upd AFTER UPDATE ON te_aka_entries BEGIN
-            INSERT INTO te_aka_fts(te_aka_fts, rowid, headword, definition, usage_examples)
-            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
-            INSERT INTO te_aka_fts(rowid, headword, definition, usage_examples)
-            VALUES (new.id, new.headword, new.definition, new.usage_examples);
-        END;
-        CREATE TRIGGER IF NOT EXISTS te_aka_fts_del AFTER DELETE ON te_aka_entries BEGIN
-            INSERT INTO te_aka_fts(te_aka_fts, rowid, headword, definition, usage_examples)
-            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
-        END;
-
-        -- ── He Pātaka Kupu (stub) ────────────────────────────────────────────
-        CREATE TABLE IF NOT EXISTS hepatakakupu_entries (
-            id             INTEGER PRIMARY KEY,
-            headword       TEXT NOT NULL,
-            headword_sort  TEXT NOT NULL,
-            headword_search TEXT NOT NULL,
-            part_of_speech TEXT,
-            definition     TEXT,
-            usage_examples TEXT,          -- JSON array
-            word_id        INTEGER,
-            definition_mi  TEXT,
-            created_at     TEXT DEFAULT (datetime('now')),
-            last_updated   TEXT DEFAULT (datetime('now'))
-        );
-        CREATE INDEX IF NOT EXISTS idx_hepatakakupu_search
-            ON hepatakakupu_entries(headword_search);
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS hepatakakupu_fts USING fts5(
-            headword, definition, usage_examples,
-            content='hepatakakupu_entries', content_rowid='id',
-            tokenize='unicode61'
-        );
-
-        CREATE TRIGGER IF NOT EXISTS hepatakakupu_fts_ins AFTER INSERT ON hepatakakupu_entries BEGIN
-            INSERT INTO hepatakakupu_fts(rowid, headword, definition, usage_examples)
-            VALUES (new.id, new.headword, new.definition, new.usage_examples);
-        END;
-        CREATE TRIGGER IF NOT EXISTS hepatakakupu_fts_upd AFTER UPDATE ON hepatakakupu_entries BEGIN
-            INSERT INTO hepatakakupu_fts(hepatakakupu_fts, rowid, headword, definition, usage_examples)
-            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
-            INSERT INTO hepatakakupu_fts(rowid, headword, definition, usage_examples)
-            VALUES (new.id, new.headword, new.definition, new.usage_examples);
-        END;
-        CREATE TRIGGER IF NOT EXISTS hepatakakupu_fts_del AFTER DELETE ON hepatakakupu_entries BEGIN
-            INSERT INTO hepatakakupu_fts(hepatakakupu_fts, rowid, headword, definition, usage_examples)
-            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
-        END;
+        -- hepatakakupu_entries is created by 05_hepataka_import.py, which DROPs and CREATEs it on
+        -- every import. A second copy here drifted out of step and was
+        -- removed; initialise() calls the owner's DDL instead.
 
         -- ── Source Abbreviations ─────────────────────────────────────────────
         -- Lookup table for expanding inline source citations across all dictionaries.
@@ -799,22 +726,9 @@ def create_tables(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_source_abbrevs_dict
             ON source_abbreviations(source_dict);
 
-        -- ── Paekupu ──────────────────────────────────────────────────────────
-        CREATE TABLE IF NOT EXISTS paekupu_entries (
-            id               INTEGER PRIMARY KEY,
-            headword         TEXT NOT NULL,
-            headword_sort    TEXT NOT NULL,
-            headword_search  TEXT NOT NULL,
-            part_of_speech   TEXT,
-            definition       TEXT,
-            usage_examples   TEXT,             -- JSON array
-            headword_en      TEXT,
-            subject_area     TEXT,
-            content_hash     TEXT,             -- SHA-256 of material fields; used for refresh diffing
-            first_seen       TEXT,             -- datetime of first import
-            created_at       TEXT DEFAULT (datetime('now')),
-            last_updated     TEXT DEFAULT (datetime('now'))
-        );
+        -- paekupu_entries is created by 04_paekupu_import.py, which DROPs and CREATEs it on
+        -- every import. A second copy here drifted out of step and was
+        -- removed; initialise() calls the owner's DDL instead.
 
         -- ── Cross-source duplicate candidates ────────────────────────────────
         -- Detected algorithmically; AI-reviewed via Claude Code; human-approved.
@@ -883,29 +797,8 @@ def create_tables(conn: sqlite3.Connection) -> None:
             ON data_refresh_log(run_id);
         CREATE INDEX IF NOT EXISTS idx_refresh_log_entry
             ON data_refresh_log(source_dict, entry_key);
-        CREATE INDEX IF NOT EXISTS idx_paekupu_search
-            ON paekupu_entries(headword_search);
-
-        CREATE VIRTUAL TABLE IF NOT EXISTS paekupu_fts USING fts5(
-            headword, definition, usage_examples,
-            content='paekupu_entries', content_rowid='id',
-            tokenize='unicode61'
-        );
-
-        CREATE TRIGGER IF NOT EXISTS paekupu_fts_ins AFTER INSERT ON paekupu_entries BEGIN
-            INSERT INTO paekupu_fts(rowid, headword, definition, usage_examples)
-            VALUES (new.id, new.headword, new.definition, new.usage_examples);
-        END;
-        CREATE TRIGGER IF NOT EXISTS paekupu_fts_upd AFTER UPDATE ON paekupu_entries BEGIN
-            INSERT INTO paekupu_fts(paekupu_fts, rowid, headword, definition, usage_examples)
-            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
-            INSERT INTO paekupu_fts(rowid, headword, definition, usage_examples)
-            VALUES (new.id, new.headword, new.definition, new.usage_examples);
-        END;
-        CREATE TRIGGER IF NOT EXISTS paekupu_fts_del AFTER DELETE ON paekupu_entries BEGIN
-            INSERT INTO paekupu_fts(paekupu_fts, rowid, headword, definition, usage_examples)
-            VALUES ('delete', old.id, old.headword, old.definition, old.usage_examples);
-        END;
+        -- paekupu's index, FTS table and triggers are created by
+        -- 04_paekupu_import.py alongside the table itself.
 
         -- ════════════════════════════════════════════════════════════════════
         --  CANONICAL UNIFIED CORE  (SCHEMA_PROPOSAL.md §3)
@@ -1516,16 +1409,63 @@ def seed_source_metadata(conn: sqlite3.Connection) -> None:
     )
 
 
+# Landing tables whose DDL lives in the importer that DROPs and CREATEs them
+# on every run. That module is the single owner: a second copy here drifted
+# out of step and nothing failed, because the importer recreates the table
+# before anything reads it. It bites whatever trusts this module alone — a
+# test fixture, or a fresh database queried before its first import.
+_IMPORTER_OWNED = (
+    "04_te_aka_import",       # te_aka_entries
+    "04_paekupu_import",      # paekupu_entries
+    "05_hepataka_import",     # hepatakakupu_entries
+)
+
+
+def create_importer_owned_tables(conn: sqlite3.Connection) -> None:
+    """Create each landing table from the DDL its importer owns.
+
+    All or nothing per table. The owner's script is written to run straight
+    after its own DROP, so its statements carry no IF NOT EXISTS and its
+    triggers contain semicolons — it cannot be split or applied piecemeal.
+    If the table is already there the importer has run, and its script is
+    skipped whole.
+    """
+    for name in _IMPORTER_OWNED:
+        owner = importlib.import_module(name)
+        m = re.search(r"CREATE TABLE\s+(?:IF NOT EXISTS\s+)?(\w+)",
+                      owner._CREATE_SQL)
+        if not m:
+            raise RuntimeError(f"{name}._CREATE_SQL creates no table")
+        table = m.group(1)
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "  AND name = ?", (table,)).fetchone():
+            continue
+        conn.executescript(owner._CREATE_SQL)
+
+
+def initialise(conn: sqlite3.Connection) -> None:
+    """Everything a usable database needs, in order — the whole sequence.
+
+    One call, because it was several. `sense.note` comes from
+    `migrate_pos_columns` and `sense.part_of_speech` from `migrate_tables`, so
+    calling a subset produced a database that looked initialised and silently
+    lacked columns. Anything that needs a schema — `main()`, a test fixture —
+    calls this and gets what the pipeline runs on.
+    """
+    create_tables(conn)
+    create_wakareo_tables(conn)
+    create_importer_owned_tables(conn)
+    create_sweep_patch(conn)
+    migrate_wakareo_unique_key(conn)
+    migrate_wakareo_body_text(conn)
+    migrate_pos_columns(conn)
+    migrate_tables(conn)
+
+
 def main() -> None:
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
-        create_tables(conn)
-        create_wakareo_tables(conn)
-        create_sweep_patch(conn)
-        migrate_wakareo_unique_key(conn)
-        migrate_wakareo_body_text(conn)
-        migrate_pos_columns(conn)
-        migrate_tables(conn)
+        initialise(conn)
         seed_source_metadata(conn)
         conn.commit()
     print(f"Database initialised: {DB_PATH}")
