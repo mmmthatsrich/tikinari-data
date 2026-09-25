@@ -1234,3 +1234,62 @@ Two uncertain concepts shipped *only* because they were confirmed, and are now w
 re-judged: **3148696** (paekupu, te_aka, williams) and **3150970** (te_aka, te_aka). Both hold
 a confirmed member, so the sweep will re-confirm them with a grouping recorded and they will
 ship again.
+
+---
+
+## D48. Test fixtures hand-roll the core tables — 76 tables across 26 files — **found on the bench, queued**
+
+Found 2026-09-26, after D46 and D47 each broke fixtures that had nothing to do with them.
+
+This is a **test-infrastructure** finding, not a corpus defect. It is recorded here because it
+is the same root cause as the drift fixed under D46 — schema knowledge written down twice —
+only in `tests/` rather than in `00_init_db.py`, and because it now taxes every schema change
+the sweep's findings produce.
+
+### The measurement
+
+Comparing each `CREATE TABLE` in `tests/` against what `initialise()` builds:
+
+| | |
+|---|---|
+| hand-rolled core tables | **76** |
+| files affected | **26** |
+| column declarations missing | **460** |
+
+The worst are not close:
+
+```
+test_concept_build.py        entry     8/19 cols   missing 11
+test_derivation_evidence.py  entry     4/19 cols   missing 15
+test_concept_acceptance.py   concept   3/11 cols   missing  8
+```
+
+### What it actually costs
+
+A minimal fixture is not wrong in itself — a test needing four columns and declaring four is
+legible, and arguably clearer than dragging in the whole schema. Two things make this a
+finding anyway:
+
+- **Every schema addition is a multi-file edit.** `relation.sense_id` (D46) broke
+  `test_ngata_derived_relations` and `test_papakupu_reduplication_wiring`;
+  `concept_member.confirmed_grouping` (D47) broke `test_sweep_runner`. Neither column had
+  anything to do with those tests. Three such edits in one session.
+- **A fixture can diverge in ways nothing catches.** A missing column fails loudly. A wrong
+  type, an absent `NOT NULL`, or a missing `UNIQUE` does not — the test passes, against a
+  table the pipeline has never run on. This is how the D46 fixture was first written: it
+  produced a `te_aka_entries` with no `senses` column and the test looked fine.
+
+### What to do
+
+`00_init_db.initialise()` already exists and is already what the pipeline runs (D46). The work
+is to point the fixtures at it:
+
+1. A shared `tests/` helper — `core_db()` — that calls `initialise()` and returns a connection.
+2. Convert the 26 files, deleting their `CREATE TABLE` blocks.
+3. Keep a hand-rolled table only where a test needs a shape the real schema does **not** have,
+   and say so in a comment. `test_build_unified_fk.py` is the honest case: it builds a
+   deliberately minimal schema to test foreign-key behaviour and would be obscured, not
+   helped, by the real one.
+
+Not urgent and not risky, but it is 460 declarations of duplicated knowledge, and the sweep
+has 55,700 clusters left to judge — every finding that reaches the schema pays this tax again.
