@@ -779,3 +779,76 @@ Not yet measured. The population is senses that earn a block their sibling sense
 share; `proper noun` co-tagged with `noun` on one entry is 30 occurrences corpus-wide, but
 that count is entry-level and is not the right measure for this. **Measuring it is the first
 step, not changing `form_concepts`.**
+
+---
+
+## D45. An inflected English gloss never overlaps its own base form — 895 memberships — **found by the sweep, queued**
+
+Found judging the calibration slice's tier-1 cluster `kaingākau`, 2026-09-25.
+
+`concept_evidence._content_words` lowercases, folds macrons and splits on `[a-z]+`. It does
+not stem. So two sources glossing the same word with the same English lexeme in different
+inflections share nothing at all:
+
+| source | gloss | content words |
+|---|---|---|
+| taikupu | `'valued'` | `{valued}` |
+| te_aka | `'to prize greatly, value, treasure, fond of…'` | `{prize, greatly, value, treasure, fond…}` |
+| williams | `'Prize greatly, value.'` | `{prize, greatly, value}` |
+
+The intersection is **empty**, so no gloss axis can fire, and taikupu sits in its own concept
+while te_aka and williams share one — even though a single cognate set, `KAINGAKAU 'to prize
+greatly, to value'`, links all three.
+
+### Scale
+
+Measured over the memberships now sitting in single-source concepts, using a deliberately
+conservative rule: a surface form counts as an inflection only when the stem is **itself
+attested as a gloss word somewhere in the corpus**, so nothing is invented — `valued` reaches
+`value` because the sources use `value`, and `ring` never reaches `r`.
+
+**895 memberships would gain gloss evidence**, across every bilingual source:
+
+| source | | source | |
+|---|---|---|---|
+| te_aka | 291 | taikupu | 45 |
+| paekupu | 209 | papakupu | 42 |
+| ngata | 169 | kimikupu_hou | 26 |
+| williams | 105 | others | 8 |
+
+**381 of them are reachable by plural/singular alone** — the safest subset.
+
+### The grading rule already handles the bad ones
+
+This is why the finding is `queued` rather than blocked. Graded by the existing
+coverage/distinctiveness rule, the 895 split:
+
+| | | |
+|---|---|---|
+| would grade ordinary `gloss_overlap` | 308 | 34.4% |
+| would grade `gloss_overlap_weak` | 587 | 65.6% |
+
+The ordinary ones are unambiguous — ngata `'Deform'` against williams `'Deformed. Turi haka…'`;
+ngata `'Disengage'` against williams `'Separated, disengaged, divided.'`; te_aka `'sawyers.'`
+against papakupu `'sawyer {From English}'`; ngata `'Cringe'` against te_aka `'…shivering from
+cold, cringing.'`
+
+The spurious ones land in the weak bucket exactly where they belong: williams's `'A small
+fresh-water fish'` reaches te_aka's `'breaking of the waters (childbirth).'` through
+`waters`→`water`, and grades weak on both axes because `water` is common and covers almost
+none of either gloss. **The grading rule is not what is blind — the tokeniser is.**
+
+### Why ngata is disproportionate
+
+ngata is an English→Māori dictionary, so its `gloss_en` is the English headword in citation
+form: `'Deform'`, `'Cringe'`, `'Slope'`, `'Hop'`. Every other source glosses in running English
+and inflects. The mismatch is therefore systematically ngata-against-everyone, and it is
+structural rather than incidental.
+
+### What this is not
+
+Not a licence to match loosely. §2 forbids deriving across languages; this is entirely within
+English, and the attested-stem constraint keeps it to forms the sources themselves use. A
+looser rule — edit distance, or stripping suffixes without checking the result is a word —
+would be inventing the link rather than reading it, and is the same error
+`resolve_relations_by_gloss` refused when it required exact string identity (D34).

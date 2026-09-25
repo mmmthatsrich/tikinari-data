@@ -368,6 +368,15 @@
    "patch_count": 0,
    "rubric_version": "v2",
    "status": "done"
+  },
+  {
+   "cluster_key": "kaingakau",
+   "completed_at": "2026-09-25T11:19:31.926457+00:00",
+   "finding_count": 4,
+   "notes": null,
+   "patch_count": 0,
+   "rubric_version": "v3",
+   "status": "done"
   }
  ],
  "findings": [
@@ -1815,6 +1824,40 @@
    "severity": null,
    "subject": "hepatakakupu:2011",
    "summary": "Sixth recurrence of monolingual isolation, in seven clusters judged. 'He tipu toro nuku' — a creeping plant — is te_aka's 'common creeping native plant'."
+  },
+  {
+   "action": "none",
+   "cluster_key": "kaingakau",
+   "confidence": "certain",
+   "created_at": "2026-09-25T11:19:31.925455+00:00",
+   "detail": "Every ngata definition_raw in this cluster is an equivalents list followed by an English sentence and its Maori translation - 'rekareka, kaingakau She relished the prospect... E rekareka ana a ia...' - and gloss_en is the entry's English headword instead. Corpus-wide this is the whole source: of 33,775 ngata senses, 32,951 have a definition_raw, NONE equals its gloss_en, and all 32,951 are longer than it. Checked rather than assumed to be a defect, and it is not one worth a patch: the equivalents are already relation rows, the example pair is already an example row on the entry that owns it, and definition_raw is referenced by neither 60_export_app_db.py nor 06_fts_rebuild.py, so it reaches neither the app nor search. Recorded so a later reader does not re-flag it as field_placement.",
+   "finding_id": "cal-05:kaingakau:4",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-05",
+   "severity": "low",
+   "subject": "ngata sense.definition_raw, all 32,951 populated rows",
+   "summary": "definition_raw is never a definition in this source, and nothing downstream reads it"
+  },
+  {
+   "action": "none",
+   "cluster_key": "kaingakau",
+   "confidence": "certain",
+   "created_at": "2026-09-25T11:19:31.925455+00:00",
+   "detail": "ngata stores a synonym set as one record and its definition_raw carries the equivalents list plus an example pair, so all twelve kaingakau entries have a candidate example sitting in their raw text. Six carry an example row and six do not, and the split is perfect: the six that carry one are those whose Maori sentence actually contains kaingakau (Treasure, Heartily x2, Interest, Mood, Prize), and the six withheld are those whose sentence uses a different member of the set - rekareka for Relish, piripoho for Valuable, uara for Value, hemonga for Enthusiast, whakangakau for Aspiration, kaikaha for Avid. Each withheld sentence was then looked up corpus-wide and found attached to the sibling entry that owns it: 'E rekareka ana a ia...' sits on ngata:WR-HMN.10623#41022~1 'rekareka', and likewise for the other three checked. D15's guard is verified in real data on a cluster it was not written against, and nothing is lost by the withholding. Recorded as a deliberate audit of a prior fix rather than as a defect.",
+   "finding_id": "cal-05:kaingakau:3",
+   "kind": "observation",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-05",
+   "severity": "low",
+   "subject": "ngata's twelve kaingakau entries ; D15's example_owners guard",
+   "summary": "the example is attached exactly where it belongs and withheld exactly where it does not"
   },
   {
    "action": "queued",
@@ -3294,6 +3337,40 @@
    "severity": null,
    "subject": "williams:1954 see_also -> kaikaiarure",
    "summary": "The relation is recorded but UNRESOLVED — it names a headword it never resolved to an entry, so the pointer exists and connects nothing."
+  },
+  {
+   "action": "queued",
+   "cluster_key": "kaingakau",
+   "confidence": "certain",
+   "created_at": "2026-09-25T11:19:31.919793+00:00",
+   "detail": "hepatakakupu:27186 glosses kaingakau 'Ka tino hiahia (ki tetahi mea), ka whakapono he taonga tonu (tetahi mea)' - to greatly desire something, to hold it to be a treasure. Concept 2707366 holds twelve ngata senses plus te_aka:1973 'to prize greatly, value, treasure, fond of, take pleasure in' and williams:2029 'Prize greatly, value.' They are one word, and the etymology settles it independently of any gloss: the single cognate set KAINGAKAU 'to prize greatly, to value. Cf. ngakau, the heart' links to all sixteen entries in this cluster via tregear. Both sides are compatible on part of speech. This is D43's REMAINDER rather than D43 itself: shared_cognate_set_unique correctly declines, because the set reaches four distinct lexemes here - williams:2029, te_aka:1973, the ngata kaingakau lexeme and taikupu - and the axis fires only where exactly one survives. The uniqueness rule is behaving as designed; the case needs evidence a cognate set cannot supply.",
+   "finding_id": "cal-05:kaingakau:1",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-05",
+   "severity": "high",
+   "subject": "hepatakakupu:27186#1 ; concept 2707366",
+   "summary": "the monolingual entry is the same word as the fourteen-member concept, and one cognate set says so"
+  },
+  {
+   "action": "queued",
+   "cluster_key": "kaingakau",
+   "confidence": "certain",
+   "created_at": "2026-09-25T11:19:31.924457+00:00",
+   "detail": "taikupu glosses kaingakau 'valued'. te_aka:1973 glosses it 'to prize greatly, value, treasure...' and williams:2029 'Prize greatly, value.' The same cognate set KAINGAKAU links all three. They do not share a concept because concept_evidence._content_words tokenises surface forms and never stems: {'valued'} and {'prize','greatly','value',...} have an empty intersection, so no gloss axis can fire. SYSTEMIC; filed as D45. Measured corpus-wide, 895 memberships now sitting in single-source concepts would gain gloss evidence under conservative stemming that only accepts a stem already attested as a gloss word - te_aka 291, paekupu 209, ngata 169, williams 105, taikupu 45. Graded by the existing coverage/distinctiveness rule, 308 would be ordinary gloss_overlap ('Deform'/'Deformed', 'Disengage'/'disengaged', 'sawyers'/'sawyer', 'Cringe'/'cringing') and 587 would be gloss_overlap_weak, which is where the spurious ones land - 'waters' joining a fish to childbirth grades weak on both axes exactly as it should. 381 are reachable by plural/singular alone. The grading rule already works; it is the tokeniser that is blind.",
+   "finding_id": "cal-05:kaingakau:2",
+   "kind": "duplicate",
+   "reverted_at": null,
+   "review": null,
+   "reviewed_at": null,
+   "rubric_version": "v3",
+   "session_id": "cal-05",
+   "severity": "high",
+   "subject": "taikupu:e_1780218354352_1z3ihc#1 'valued' ; concept 2707366",
+   "summary": "an inflected English gloss never overlaps its own base form, so 'valued' is held apart from 'value'"
   }
  ],
  "judgements": [
