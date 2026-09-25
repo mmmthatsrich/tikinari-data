@@ -511,20 +511,52 @@ class Persist(unittest.TestCase):
                 "SELECT source_id FROM concept_member WHERE concept_id=? "
                 "  AND status <> 'rejected'", (cid,))})
 
+    def _confirm(self, con, source_id):
+        """Confirm a member the way sweep_runner does, grouping and all.
+
+        The grouping is not decoration: since D47 a confirmation covers the
+        set of witnesses the judge saw, and one recorded without it cannot be
+        checked and so cannot confirm the concept.
+        """
+        import json
+        cid = con.execute("SELECT concept_id FROM concept_member "
+                          " WHERE source_id=?", (source_id,)).fetchone()[0]
+        grouping = [[r[0], r[1], r[2]] for r in con.execute(
+            "SELECT source_id, source_entry_id, sense_number "
+            "  FROM concept_member WHERE concept_id=? AND status <> 'rejected'",
+            (cid,))]
+        con.execute("UPDATE concept_member SET status='confirmed', "
+                    "  confirmed_grouping=? WHERE source_id=?",
+                    (json.dumps(grouping), source_id))
+        con.commit()
+
     def test_a_confirmed_membership_confirms_the_rebuilt_concept(self):
         # Confirming a member is what makes the sweep able to change what
         # ships; a rebuild that reset the concept to 'proposed' would throw
         # that judgement away on the next run of the chain.
         con = _fixture_db()
         self._build(con)
-        con.execute("UPDATE concept_member SET status='confirmed' "
-                    "WHERE source_id='papakupu'")
-        con.commit()
+        self._confirm(con, "papakupu")
         self._build(con)
         self.assertEqual("confirmed", con.execute(
             "SELECT c.status FROM concept c JOIN concept_member m "
             "  ON m.concept_id = c.id WHERE m.source_id='papakupu'"
         ).fetchone()[0])
+
+    def test_a_confirmation_with_no_grouping_cannot_confirm(self):
+        # D47. Rows judged before confirmed_grouping existed carry no record
+        # of what their judge saw, so the claim cannot be checked. The MEMBER
+        # keeps its confirmed status; only the concept waits to be re-earned.
+        con = _fixture_db()
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='confirmed' "
+                    "WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+        row = con.execute(
+            "SELECT c.status, m.status FROM concept c JOIN concept_member m "
+            "  ON m.concept_id = c.id WHERE m.source_id='papakupu'").fetchone()
+        self.assertEqual(("proposed", "confirmed"), (row[0], row[1]))
 
     def test_a_concept_with_nothing_judged_stays_proposed(self):
         con = _fixture_db()

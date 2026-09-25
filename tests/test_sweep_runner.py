@@ -65,7 +65,8 @@ def _db() -> sqlite3.Connection:
             id INTEGER PRIMARY KEY, concept_id INTEGER NOT NULL,
             source_id TEXT NOT NULL, source_entry_id TEXT NOT NULL,
             sense_number INTEGER, entry_id INTEGER, sense_id INTEGER,
-            status TEXT NOT NULL, confidence TEXT NOT NULL, created_at TEXT);
+            status TEXT NOT NULL, confidence TEXT NOT NULL, created_at TEXT,
+            confirmed_grouping TEXT);
         CREATE TABLE concept_member_evidence (
             id INTEGER PRIMARY KEY, member_id INTEGER NOT NULL,
             kind TEXT NOT NULL, detail TEXT NOT NULL, weight REAL NOT NULL);

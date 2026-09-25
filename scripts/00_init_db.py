@@ -995,6 +995,14 @@ def create_tables(conn: sqlite3.Connection) -> None:
             status            TEXT NOT NULL,   -- proposed | confirmed | rejected
             confidence        TEXT NOT NULL,
             created_at        TEXT,
+            -- The grouping this confirmation was granted to (D47): a JSON
+            -- array of [source_id, source_entry_id, sense_number]. A confirm
+            -- is a judgement about a set of witnesses, and the rebuild re-
+            -- derives the concept's status from whatever membership now
+            -- exists, so without this a confirmation silently widened onto
+            -- groupings the judge never saw. NULL on a reject, and on rows
+            -- judged before this column existed.
+            confirmed_grouping TEXT,
             UNIQUE (concept_id, source_id, source_entry_id, sense_number)
         );
 
@@ -1312,6 +1320,8 @@ def migrate_tables(conn: sqlite3.Connection) -> None:
     # D46: which sense asserts a relation. te Aka states it per sense and the
     # build was reading an entry-level aggregate instead.
     _add_column(conn, "relation", "sense_id", "INTEGER REFERENCES sense(id)")
+    # D47: the grouping a confirmation was granted to.
+    _add_column(conn, "concept_member", "confirmed_grouping", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_relation_sense "
                  "  ON relation(sense_id)")
     _add_column(conn, "relation", "target_sense_id", "INTEGER REFERENCES sense(id)")
