@@ -867,7 +867,7 @@ vetoed. Persisted to `staging_dictionary.db` 2026-09-26; all 28 judged rows kept
 
 ---
 
-## D45. An inflected English gloss never overlaps its own base form — 895 memberships — **found by the sweep, queued**
+## D45. An inflected English gloss never overlaps its own base form — 895 memberships — **✅ fixed 2026-09-26**
 
 Found judging the calibration slice's tier-1 cluster `kaingākau`, 2026-09-25.
 
@@ -937,6 +937,45 @@ English, and the attested-stem constraint keeps it to forms the sources themselv
 looser rule — edit distance, or stripping suffixes without checking the result is a word —
 would be inventing the link rather than reading it, and is the same error
 `resolve_relations_by_gloss` refused when it required exact string identity (D34).
+
+### Fixed — and the first design was too permissive
+
+`GlossIndex.expand` adds the stems the corpus attests, and `positive_evidence` consults them
+**only** where the surface forms share nothing. Three constraints, of which the third was
+found by building it:
+
+1. **Attested.** A stem counts only when some gloss in the index uses it as a word, and no
+   word is cut below three characters, so `ring` never reaches `r`.
+2. **Additive.** A pair that already overlaps keeps its original word sets, so its coverage and
+   distinctiveness are untouched and no existing membership can change grade.
+3. **Ordinary or nothing.** A stemmed match that grades weak is dropped, not recorded weak.
+
+The third was not in the plan. The section above says the weak grade is where the spurious
+matches "land … exactly where they belong", and that is true but **not sufficient**:
+`form_concepts` attaches a seed on *any* evidence at all, so a weak row still merges two
+concepts and only marks the result uncertain. Built permissively, this merged
+
+> paekupu `'A ratio which connects an angle of a right-angled triangle'` (sine)
+> with williams `'ahoaho = aha (iii), n. Open space.'`
+
+on the single stemmed word `connect` — and 583 further merges of that shape, taking `aho` from
+fifteen concepts to fourteen.
+
+| | off | permissive | **as shipped** |
+|---|---|---|---|
+| concepts | 90,236 | 89,700 | **90,040** |
+| cross-source memberships | 85,160 | 86,067 | **85,484** |
+| `aho` concepts | 15 | **14** | **15** |
+| `kaingākau` concepts | 3 | 2 | **2** |
+
+So **+324** rather than +907 — and the 583 given up are precisely the ones this section's own
+measurement predicted would grade weak. `gloss_overlap` rows rise 56,212 → 57,515 while
+`gloss_overlap_weak` moves by −4.
+
+Every canary holds: `hoi` 7, `aho` 15, `hiwi` 8, `auahitūroa` 1. The motivating case merges —
+taikupu's `'valued'` now sits with ngata, te_aka and williams, joined on `value` at coverage
+0.50, an ordinary overlap. Persisted to `staging_dictionary.db` 2026-09-26; 90,040 concepts,
+all 28 judged rows unchanged.
 
 ---
 
