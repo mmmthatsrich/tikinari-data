@@ -255,6 +255,20 @@ _STOPWORDS = frozenset({
 COVERAGE_FLOOR = 0.5
 DISTINCT_CEILING = 10
 
+# (suffix, replacement) pairs tried by GlossIndex.expand, for D45. Ordinary
+# English inflection and nothing cleverer: no edit distance, no stemmer that
+# invents a root. Each candidate must survive the attestation check, so a rule
+# that over-fires costs nothing unless the corpus happens to use the result as
+# a word — which is exactly the case where the two sources ARE saying the same
+# thing. 'ly' is here because ngata glosses adverbs in citation form
+# ('Heartily') against te Aka's running prose.
+_SUFFIXES = (
+    ("ies", "y"), ("es", ""), ("s", ""),
+    ("ed", ""), ("ed", "e"),
+    ("ing", ""), ("ing", "e"),
+    ("d", ""), ("ly", ""),
+)
+
 
 # Macrons are folded BEFORE tokenising, never stripped after. `[a-z]+` stops
 # at a macron, so a Māori word quoted inside an English gloss used to come
@@ -302,6 +316,38 @@ class GlossIndex:
 
     def __len__(self):
         return self._n
+
+    def expand(self, words):
+        """`words` plus every stem of them the corpus itself attests (D45).
+
+        The surface forms are kept, so a pair already sharing `kidneys`
+        outright still shares it.
+
+        Attestation is the whole safeguard. A stem counts only when some
+        gloss in this index uses it as a word: `valued` reaches `value`
+        because the sources say `value`, and `sprocketed` reaches nothing
+        because they never say `sprocket`. That keeps this a reading of what
+        the sources wrote rather than a derivation from it — §2 of the
+        rubric — and it is the discipline `resolve_relations_by_gloss` used
+        when it demanded exact string identity (D34).
+
+        The suffix list is short and English-only, which is all that is
+        needed: `gloss_en` is English, and `gloss_mi` never reaches here.
+        """
+        out = set(words)
+        for word in words:
+            for suffix, replacement in _SUFFIXES:
+                if not word.endswith(suffix):
+                    continue
+                # Never cut a word down to a fragment: 'ring' must not reach
+                # 'r'. Three characters is the floor _content_words already
+                # applies to a word it will look at.
+                if len(word) - len(suffix) < 3:
+                    continue
+                stem = word[:len(word) - len(suffix)] + replacement
+                if stem in self._postings:
+                    out.add(stem)
+        return frozenset(out)
 
     def df(self, words):
         """Glosses containing every word. 0 for an empty or unknown set.
@@ -400,6 +446,22 @@ def positive_evidence(a, b, index, unique_cognates=frozenset()):
 
     a_words, b_words = _content_words(a["gloss_en"]), _content_words(b["gloss_en"])
     overlap = a_words & b_words
+    inferred = False
+    if not overlap and a_words and b_words:
+        # D45: the surface forms share nothing, so try the base forms the
+        # corpus attests — taikupu's 'valued' against te Aka's 'value'.
+        #
+        # STRICTLY additive, and deliberately only in this branch. A pair
+        # that already overlaps keeps its original word sets, so its coverage
+        # and distinctiveness are exactly what they were and no existing
+        # membership can change grade. Expansion enlarges the union as well
+        # as the intersection, which would quietly dilute coverage on pairs
+        # that never needed help.
+        a_stemmed, b_stemmed = index.expand(a_words), index.expand(b_words)
+        stemmed_overlap = a_stemmed & b_stemmed
+        if stemmed_overlap:
+            a_words, b_words, overlap = a_stemmed, b_stemmed, stemmed_overlap
+            inferred = True
     if overlap:
         coverage = gloss_coverage(a_words, b_words)
         distinct = index.df(overlap)
@@ -407,11 +469,22 @@ def positive_evidence(a, b, index, unique_cognates=frozenset()):
         if coverage >= COVERAGE_FLOOR or distinct <= DISTINCT_CEILING:
             found.append(("gloss_overlap", f"glosses share {shown}",
                           coverage, distinct))
-        else:
+        elif not inferred:
             # Weak on both axes: a common word incidental to two long
             # glosses. Its own kind so a reviewer sees WHY it is weak.
             found.append(("gloss_overlap_weak",
                           f"glosses share only {shown}", coverage, distinct))
+        # A STEMMED match that grades weak is dropped entirely rather than
+        # recorded weak, because weak is not harmless here: form_concepts
+        # attaches a seed on any evidence at all, so a weak row still merges
+        # two concepts and only marks the result uncertain. A surface match
+        # is what the sources wrote; a stemmed one is inferred, and an
+        # inference that is also weak on both axes is two steps from the
+        # evidence. Allowing them merged paekupu's 'a ratio which connects an
+        # angle of a right-angled triangle' with williams's 'Open space' on
+        # the single word 'connect', and cost 583 further merges of that
+        # shape — +907 cross-source memberships instead of +324, and `aho`
+        # collapsing from fifteen concepts to fourteen.
 
     return [{"kind": k, "detail": d, "weight": EVIDENCE_WEIGHT[k],
              "coverage": c, "distinctiveness": n}
