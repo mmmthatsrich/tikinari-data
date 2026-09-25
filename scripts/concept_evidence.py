@@ -57,10 +57,18 @@ def lexeme_key(source_id, source_entry_id, headword, locator):
 # same-headword is the one thing this design says is NEVER evidence (see
 # positive_evidence's docstring). Removed after the Task 10 fix-round audit
 # found it merging ten distinct 'hoi' words into one concept.
+#
+# 'shared_cognate_set_unique' is the narrow form that survived measurement
+# (D43). The objection above is about AMBIGUITY, not about etymology: a
+# cognate set reaches 5.3 distinct words on average from a stranded
+# hepatakakupu sense, and ten or more for 2,391 of them, which is exactly how
+# hoi collapsed. It is not an objection to a set that reaches ONE word from
+# each side. See cognate_unique_pairs.
 EVIDENCE_WEIGHT = {
     "cites_source":       1.0,   # Te Matatiki citing 'himoemoe W.50'
     "shared_example":     0.9,   # two sources printing the same sentence
     "attributed_quote":   0.7,   # Te Aka citing 'W 1971:54'
+    "shared_cognate_set_unique": 0.6,
     "gloss_overlap":      0.5,
     "gloss_overlap_weak": 0.3,
 }
@@ -69,6 +77,10 @@ EVIDENCE_CONFIDENCE = {
     "cites_source":       "certain",
     "shared_example":     "certain",
     "attributed_quote":   "probable",
+    # Probable, never certain. The cognate link is stated by the etymology
+    # and the uniqueness is proved against the bucket, but no source says
+    # these two entries are one word — that remains inference.
+    "shared_cognate_set_unique": "probable",
     "gloss_overlap":      "probable",
     # A pair is gloss_overlap_weak precisely when it fails BOTH measures
     # below (gloss_coverage and GlossIndex.df — see COVERAGE_FLOOR /
@@ -329,7 +341,7 @@ def gloss_coverage(a_words, b_words):
     return len(a_words & b_words) / len(a_words | b_words)
 
 
-def positive_evidence(a, b, index):
+def positive_evidence(a, b, index, unique_cognates=frozenset()):
     """[{kind, detail, weight, coverage, distinctiveness}] linking two senses,
     strongest first.
 
@@ -346,6 +358,12 @@ def positive_evidence(a, b, index):
     `index` is a GlossIndex over the corpus the two senses came from. It is
     required rather than optional: a default would silently give two
     different grading rules depending on the call site.
+
+    `unique_cognates` is cognate_unique_pairs() over this pair's headword
+    bucket. It DOES default, and to the empty set, because uniqueness cannot
+    be decided from a pair alone: a caller holding only two senses has no
+    bucket to prove it against, and the honest answer there is that the axis
+    does not fire.
     """
     if a["source_id"] == b["source_id"]:
         return []
@@ -369,9 +387,16 @@ def positive_evidence(a, b, index):
                       f"both cite {sorted(shared_cit)[0][:40]!r}",
                       None, None))
 
-    # No shared_cognate_set check: see the comment above EVIDENCE_WEIGHT.
-    # cognate_sets is still carried on the sense-view for possible later
-    # display use, but it is deliberately not consulted here.
+    # A shared cognate set counts ONLY where it named one word from each
+    # side; cognate_unique_pairs decided that against the whole bucket, and
+    # the bare set is still not evidence. See the comment above
+    # EVIDENCE_WEIGHT.
+    if frozenset({a["member_key"], b["member_key"]}) in unique_cognates:
+        shared_cog = sorted(a["cognate_sets"] & b["cognate_sets"])
+        found.append(("shared_cognate_set_unique",
+                      f"one cognate set, naming one word each way: "
+                      f"{', '.join(str(c) for c in shared_cog[:3])}",
+                      None, None))
 
     a_words, b_words = _content_words(a["gloss_en"]), _content_words(b["gloss_en"])
     overlap = a_words & b_words
@@ -484,6 +509,60 @@ def blocks(a, b):
             reasons.append(f"incompatible part of speech: {a['pos']!r} vs {b['pos']!r}")
 
     return reasons
+
+
+def cognate_unique_pairs(views):
+    """Pairs in one headword bucket whose shared cognate set names one word.
+
+    A cognate set links HEADWORDS. It carries no sense discrimination and it
+    was matched on spelling, so on its own it says only what the headword key
+    already said — which is why there is no plain 'shared_cognate_set' kind
+    (see the comment above EVIDENCE_WEIGHT, and the `hoi` canary in
+    tests/test_concept_acceptance.py, where it merged ten distinct words).
+
+    Measured over the corpus, a stranded He Pātaka Kupu sense reaches 5.3
+    distinct words on average through its cognate sets and ten or more in
+    2,391 cases. But 916 reach exactly ONE, and there the ambiguity that
+    sank `hoi` is absent: the set names a single word and no other.
+
+    So this applies the discipline D32 and D34 already use — act only where
+    exactly one candidate survives — and requires it from BOTH sides. `a`'s
+    unblocked cognate-sharing candidates must be one lexeme, `b`'s must be
+    one lexeme, and they must therefore name each other. Mutual uniqueness
+    costs 1,057 of the 5,737 one-sided pairs and buys a symmetric claim,
+    which matters because positive_evidence is scored in both directions.
+
+    Blocked candidates are not candidates. A macron disagreement or an
+    incompatible part of speech already rules a pair out, so letting one
+    veto the bucket's uniqueness would let a single misspelling refuse every
+    merge around it.
+
+    Yields 4,680 pairs corpus-wide, and moves He Pātaka Kupu from 5.4% of
+    memberships joining a cross-source concept to 8.7%.
+
+    It names the D43 proof case — hepatakakupu:4287, a comet described in
+    Māori, and te_aka:516#2 'Comet' — but naming it is not enough to merge
+    it: te_aka files sense 1 of that entry as a proper noun, a seed is a
+    whole lexeme, and form_concepts refuses a concept any of whose members
+    blocks. That remaining cause is pinned in
+    tests/test_concept_cognate_unique.py and is not this axis's to override.
+
+    Takes one headword_search bucket — the same list form_concepts is given —
+    because uniqueness is a property of the candidate set, not of a pair.
+    """
+    candidates = {}
+    for a in views:
+        survivors = [b for b in views
+                     if b["source_id"] != a["source_id"]
+                     and a["cognate_sets"] & b["cognate_sets"]
+                     and not blocks(a, b)]
+        if survivors and len({b["lexeme"] for b in survivors}) == 1:
+            candidates[a["member_key"]] = survivors
+
+    return {frozenset({key, b["member_key"]})
+            for key, survivors in candidates.items()
+            for b in survivors
+            if b["member_key"] in candidates}
 
 
 def confidence_for(evidence, blocked):

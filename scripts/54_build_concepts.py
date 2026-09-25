@@ -22,7 +22,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 from concept_election import elect_gloss, elect_headword
-from concept_evidence import GlossIndex, SEED_CONFIDENCE, blocks, confidence_for, lexeme_key, positive_evidence
+from concept_evidence import (GlossIndex, SEED_CONFIDENCE, blocks,
+                              cognate_unique_pairs, confidence_for,
+                              lexeme_key, positive_evidence)
 
 
 def _norm(text):
@@ -116,6 +118,10 @@ def form_concepts(views, index):
     the anti-chaining rule: if two words are separated by their own source's
     numbering, no third source compatible with each can later join them.
     """
+    # Uniqueness is a property of the candidate set, so it is decided once
+    # against the whole bucket and then read pair by pair (D43).
+    unique_cognates = cognate_unique_pairs(views)
+
     concepts = []
     for seed in _seed_groups(views):
         placed = False
@@ -129,7 +135,7 @@ def form_concepts(views, index):
             evidence = []
             for s in seed:
                 for e in existing:
-                    found = positive_evidence(s, e, index)
+                    found = positive_evidence(s, e, index, unique_cognates)
                     if found:
                         evidence.extend(found)
             if not evidence:
@@ -176,7 +182,8 @@ def form_concepts(views, index):
                 for other in c["members"]:
                     if other is m:
                         continue
-                    for e in positive_evidence(m["view"], other["view"], index):
+                    for e in positive_evidence(m["view"], other["view"], index,
+                                               unique_cognates):
                         tag = (e["kind"], e["detail"])
                         if tag not in seen:
                             seen.add(tag)
