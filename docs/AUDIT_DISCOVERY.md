@@ -979,7 +979,7 @@ all 28 judged rows unchanged.
 
 ---
 
-## D46. Te Aka's sense-level synonyms are flattened onto the entry — 87,569 relations — **found on the bench, queued**
+## D46. Te Aka's sense-level synonyms are flattened onto the entry — 87,569 relations — **✅ attribution recorded 2026-09-26; consumers still entry-level**
 
 Found 2026-09-26, answering a question about te Aka's relation model. Not found judging a
 cluster: `aho`, the case below, sits at priority 1 behind the calibration slice.
@@ -1049,6 +1049,49 @@ The fix is a build change, not a field patch — `add_relation` would need a sou
 should be measured against the concept layer first: 49,755 relations currently asserting more
 than the source does is also 49,755 that `resolve_within_source_relations` and the concept
 evidence axes have been reading. Narrowing them is likely right and is certainly not free.
+
+### Fixed — the attribution, not the consumers
+
+`relation` gains a nullable `sense_id`, `Builder.add_relation` takes it, and `build_te_aka`
+emits each sense's own synonym list instead of the entry-level aggregate. NULL is not
+"unknown": it means the source made the claim **of the word**, which is what every source but
+te Aka prints.
+
+`aho` now reads as te Aka wrote it:
+
+| sense | gloss | synonyms |
+|---|---|---|
+| 1 | `fishing line, cord, string, line` | raina, io, rārangi, kapa, tawhā, ripa, papanga |
+| 3 | `line of descent, genealogy.` | takiaho, kāwei, kaha, hikahika, kāwai |
+
+The aggregate also deduped, so a synonym serving two senses collapsed to one link. Per-sense
+attribution restores those: **87,569 → 89,916** relations, every one naming a sense. A synonym
+on a repeated def-div is folded onto the sense that won rather than dropped with the duplicate
+row.
+
+**Deliberately not done: narrowing the consumers.** `resolve_within_source_relations`,
+`resolve_relations_by_domain`, `resolve_relations_by_gloss`, `53_build_word_origin` and the
+concept layer's `cites` index all read `entry_id` and the target columns, and all still do.
+That was verified rather than assumed — comparing concept groupings on **stable member keys**
+before and after, all **90,040 groupings are identical** and cross-source memberships are
+unchanged at 85,484. (Comparing on `entry.id` says everything changed, because rebuilding a
+slice re-mints them; the rubric's own rule against addressing `entry.id` applies to
+measurement too.)
+
+The 49,755 relations that assert more than the source does are the rows those consumers have
+been reading, so narrowing them is a separate change needing its own measurement.
+
+### Two schema drifts found while building the test fixture
+
+Left as found, recorded so they are not rediscovered:
+
+- **`te_aka_entries` has two DDLs.** `04_te_aka_import.py` owns it — it drops and recreates
+  it — and the copy in `00_init_db.py` has drifted and lacks the `senses` column. The
+  importer always wins in practice, so this is latent rather than live, but a fixture built
+  on `00_init_db` alone gets a table the pipeline never sees.
+- **The init sequence is not one function.** `sense.note` comes from `migrate_pos_columns`,
+  not `migrate_tables`, so calling a subset silently omits columns. Fixtures should run the
+  same sequence `00_init_db.main()` does.
 
 ---
 
