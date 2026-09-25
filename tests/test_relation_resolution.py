@@ -97,6 +97,8 @@ class ResolveWithinSource(unittest.TestCase):
         self.assertEqual(resolve_within_source_relations(con), 0)
 
     def test_a_missing_relation_table_is_not_an_error(self):
+        # Deliberately NOT core_db(): the point is a database that LACKS the
+        # relation table, and the real schema has one.
         con = sqlite3.connect(":memory:")
         con.execute("CREATE TABLE entry (id INTEGER PRIMARY KEY)")
         self.assertEqual(resolve_within_source_relations(con), 0)

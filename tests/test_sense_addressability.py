@@ -117,6 +117,8 @@ class ResolveUnambiguousSenses(unittest.TestCase):
 
     def test_a_missing_table_is_not_an_error(self):
         # 52_build_etymology_unified runs against DBs that may predate relation.
+        # Deliberately NOT core_db(): the point is a database predating
+        # `relation`, and the real schema has it.
         con = sqlite3.connect(":memory:")
         con.executescript("CREATE TABLE entry (id INTEGER PRIMARY KEY);"
                           "CREATE TABLE sense (id INTEGER PRIMARY KEY, entry_id INTEGER);")
