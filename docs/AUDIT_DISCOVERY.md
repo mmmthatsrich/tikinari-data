@@ -730,7 +730,7 @@ cognate set but ambiguous, and need evidence a cognate set cannot supply.
 
 ---
 
-## D44. One sense's part of speech vetoes its whole entry — 148 attachments, 324 senses — **measured 2026-09-26, queued**
+## D44. One sense's part of speech vetoes its whole entry — 148 attachments, 324 senses — **✅ fixed 2026-09-26**
 
 Found 2026-09-25, implementing the **D43** axis. It is why D43's own proof case still does not
 merge, and it is independent of D43.
@@ -819,6 +819,51 @@ Worked examples: te_aka's `ae` (sense 1 `Verb` 'to agree' blocks; senses 2–4 `
 'yes' are clean and match papakupu's 'yes, in the sense of "I agree with"'); papakupu's `ata`
 (sense 1 `Noun` 'morning, daylight' matches ngata 'Morning', while sense 3
 `Proper noun (person)` blocks).
+
+### Fixed — scope, not a new rule
+
+The first design considered was to attach only the clean senses. That was wrong: it would have
+**split a seed across concepts**, and a seed is a lexeme — a grouping the source stated, and
+the reason seeds are trusted where cross-source attachment is not.
+
+The block's own comment gives the right answer instead. It fires only when both sides are
+single-valued, because *"a source listing several parts of speech is describing a word that
+functions several ways; that is not a claim excluding another source's single tag"* — and
+`_pos_atoms` splits on `[,/|]`, so one sense tagged `'Noun, Verb'` was **already** exempt. The
+rule was right; it simply could not see the same claim spread over sense rows instead of
+commas.
+
+So `concept_evidence.seed_blocks()` weighs the part-of-speech reason against the seed's whole
+inventory, and `form_concepts` uses it in place of `blocks()`. The seed stays atomic.
+
+The asymmetry is load-bearing: a seed is a grouping the source **stated**, so the union of its
+senses' tags is that source's own claim; a concept is a grouping this pipeline **inferred**, so
+its members' tags are not one word's inventory and get no such treatment. Only the
+part-of-speech reason is ever suppressed — the lexeme block is the anti-chaining rule's own
+instrument and the macron block is a claim about spelling.
+
+| | before | after |
+|---|---|---|
+| concepts | 90,419 | 90,236 |
+| spanning 1 source | 70,773 | 70,617 |
+| spanning 5 sources | 523 | 562 |
+| te_aka cross-source | 46.1% | **46.6%** (+278) |
+| williams | 72.2% | **72.8%** (+155) |
+| papakupu | 56.2% | **59.0%** (+132) |
+| hepatakakupu | 8.7% | **8.9%** (+55) |
+| `hoi` concepts (canary floor 7) | 7 | 7 |
+| `aho` / `hiwi` concepts | 15 / 8 | 15 / 8 |
+
+**Not a pure win.** 160 memberships *lose* cross-source status against roughly 750 gained, net
+**+586**. The mechanism is ordering: a concept that now accepts a seed earlier has more
+members, and a later seed blocking against one of those is correctly kept out. That is the
+anti-chaining rule working on a larger concept, not a regression in it — but it is a
+redistribution, and the gross figure is the honest one to quote.
+
+**D43's proof case closes.** `auahitūroa` goes from two concepts to one, holding
+`hepatakakupu:4287#1` with both te_aka senses, on `shared_cognate_set_unique` evidence. It took
+both fixes: without the D43 axis there is no evidence, without this one the evidence was
+vetoed. Persisted to `staging_dictionary.db` 2026-09-26; all 28 judged rows kept.
 
 ---
 
