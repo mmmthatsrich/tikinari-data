@@ -270,8 +270,8 @@ class FormConceptsUsesTheAxis(unittest.TestCase):
                              [m["view"]["member_key"] for m in c["members"]])
 
 
-class TheProofCaseIsBlockedElsewhere(unittest.TestCase):
-    """Pins the real auahitūroa data, which this axis does not settle.
+class TheProofCaseNeededBothFixes(unittest.TestCase):
+    """The real auahitūroa data, which this axis alone could not settle.
 
     D43 recorded that 'both are canonically Noun, so no part-of-speech block
     applies'. That is true entry-to-entry and false sense-to-sense. te_aka:516
@@ -286,8 +286,15 @@ class TheProofCaseIsBlockedElsewhere(unittest.TestCase):
     designed, and it is a separate finding from D43, not something this axis
     may quietly override.
 
-    Characterisation: this pins today's behaviour so that a future change to
-    seed-level blocking announces itself here.
+    That second cause was filed as D44, measured at 148 attachments — every
+    one of them the part-of-speech block — and fixed by `seed_blocks`, which
+    weighs that block against the seed's whole inventory. The pair this axis
+    names is therefore now merged, and it took both fixes: without the axis
+    there is no evidence, and without D44 the evidence is vetoed.
+
+    This class kept a characterisation test while the second cause was open.
+    It went red the moment `seed_blocks` landed, which is exactly what it was
+    written to do; it now asserts the merge instead.
     """
 
     def setUp(self):
@@ -309,7 +316,7 @@ class TheProofCaseIsBlockedElsewhere(unittest.TestCase):
         self.assertIn(frozenset({("hepatakakupu", "4287", 1), ("te_aka", "516", 2)}),
                       pairs)
 
-    def test_but_the_proper_noun_sense_vetoes_the_whole_entry(self):
+    def test_and_with_D44_fixed_the_entry_now_merges(self):
         con = self._real_shape()
         con.execute("UPDATE sense SET part_of_speech_en='Proper noun (person)' "
                     " WHERE id=11")
@@ -319,10 +326,11 @@ class TheProofCaseIsBlockedElsewhere(unittest.TestCase):
         index = GlossIndex(g for (g,) in con.execute(
             "SELECT gloss_en FROM sense WHERE gloss_en IS NOT NULL"))
         concepts = self.mod.form_concepts(views, index)
-        for c in concepts:
-            self.assertEqual(len({m["view"]["source_id"] for m in c["members"]}), 1,
-                             "auahitūroa merged — seed-level blocking changed, and "
-                             "D43's remaining cause needs re-recording")
+        self.assertEqual(len(concepts), 1)
+        self.assertEqual(
+            {m["view"]["member_key"] for m in concepts[0]["members"]},
+            {("hepatakakupu", "4287", 1), ("te_aka", "516", 1),
+             ("te_aka", "516", 2)})
 
 
 if __name__ == "__main__":

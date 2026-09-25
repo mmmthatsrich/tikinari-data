@@ -22,9 +22,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 from concept_election import elect_gloss, elect_headword
-from concept_evidence import (GlossIndex, SEED_CONFIDENCE, blocks,
+from concept_evidence import (GlossIndex, SEED_CONFIDENCE,
                               cognate_unique_pairs, confidence_for,
-                              lexeme_key, positive_evidence)
+                              lexeme_key, positive_evidence, seed_blocks)
 
 
 def _norm(text):
@@ -129,7 +129,11 @@ def form_concepts(views, index):
             existing = [m["view"] for m in concept["members"]]
 
             # A block against any current member rules the whole concept out.
-            if any(blocks(s, e) for s in seed for e in existing):
+            # seed_blocks, not blocks: the part-of-speech reason is weighed
+            # against the seed's whole inventory, because a lexeme is the
+            # source's own grouping and tags spread over its sense rows are
+            # the same claim as a comma list on one (D44).
+            if seed_blocks(seed, existing):
                 continue
 
             evidence = []

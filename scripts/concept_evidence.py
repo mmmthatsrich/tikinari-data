@@ -464,6 +464,10 @@ OPEN_POS = frozenset({"noun", "verb", "stative", "modifier", "adverb"})
 # is excluded from the comparison rather than given a place in OPEN_POS.
 PROVENANCE_POS = frozenset({"loan word"})
 
+# One source of truth: `seed_blocks` recognises this reason to suppress it, so
+# the wording lives here rather than being matched twice.
+_POS_REASON = "incompatible part of speech"
+
 
 def blocks(a, b):
     """Reasons these two senses must NOT share a concept.
@@ -506,8 +510,54 @@ def blocks(a, b):
         provenance = base_a in PROVENANCE_POS or base_b in PROVENANCE_POS
         if (base_a and base_b and base_a != base_b
                 and not interchangeable and not provenance):
-            reasons.append(f"incompatible part of speech: {a['pos']!r} vs {b['pos']!r}")
+            reasons.append(
+                f"{_POS_REASON}: {a['pos']!r} vs {b['pos']!r}")
 
+    return reasons
+
+
+def seed_blocks(seed, existing):
+    """Reasons a whole seed may not join a concept (D44).
+
+    `blocks()` is the sense-to-sense rule and stays exactly that. This is the
+    seed-to-concept rule, and it differs in one respect: the part-of-speech
+    block reads the seed's whole inventory rather than one sense's tag.
+
+    That is the rule `blocks()` already states — it fires only when BOTH sides
+    are single-valued, because "a source listing several parts of speech is
+    describing a word that functions several ways; that is not a claim
+    excluding another source's single tag". `_pos_atoms` splits on `[,/|]`, so
+    one sense tagged 'Noun, Verb' is already exempt. What could not be seen is
+    the same claim spread over sense rows instead of commas: te_aka files
+    `auahitūroa` as sense 1 `Proper noun (person)`, the personified being, and
+    sense 2 `Noun`, the comet, and sense 1's tag was keeping the whole entry
+    out of every concept sense 2 belonged in.
+
+    The asymmetry is deliberate and load-bearing. A seed is a lexeme, a
+    grouping the source STATED, so the union of its senses' tags is that
+    source's own claim about the word. A concept is a grouping this pipeline
+    INFERRED, so its members' tags are not one word's inventory and get no
+    such treatment.
+
+    Only the part-of-speech reason is ever suppressed. A source filing two
+    entries apart is a claim about WORDS — it is the anti-chaining rule's own
+    instrument — and a macron disagreement is a claim about a spelling.
+    Neither is answered by an inventory of parts of speech, and measurement
+    bears this out: of the 148 attachments this unblocks, every one was the
+    part-of-speech block and none involved either of the others.
+    """
+    inventory = set()
+    for s in seed:
+        inventory |= _pos_atoms(s["pos"])
+    stated_several_ways = len(inventory) > 1
+
+    reasons = []
+    for s in seed:
+        for e in existing:
+            for r in blocks(s, e):
+                if stated_several_ways and r.startswith(_POS_REASON):
+                    continue
+                reasons.append(r)
     return reasons
 
 
