@@ -17,6 +17,7 @@ from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 import sweep_runner
@@ -27,56 +28,14 @@ from sweep_runner import claim, record
 
 
 def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(":memory:")
+    con = core_db()
     con.row_factory = sqlite3.Row
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-            headword TEXT, headword_search TEXT, headword_en TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT, part_of_speech_mi TEXT,
-            dialect TEXT, loan_marker TEXT, locator TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-            gloss_en TEXT, gloss_mi TEXT, definition_raw TEXT, register TEXT,
-            note TEXT, part_of_speech TEXT, part_of_speech_en TEXT);
-        CREATE TABLE example (
-            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-            text_mi TEXT, text_en TEXT, citation TEXT, source_abbrev TEXT,
-            sort_no INTEGER);
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT, form_type TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER, target_sense_id INTEGER,
-            note TEXT);
-        CREATE TABLE entry_domain (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, domain TEXT, domain_lang TEXT);
-        CREATE TABLE ETY_cognateset (
-            id INTEGER PRIMARY KEY, protoform TEXT, level TEXT, gloss TEXT);
-        CREATE TABLE ETY_entry_link (
-            id INTEGER PRIMARY KEY, cognateset_id INTEGER, entry_id INTEGER,
-            sense_id INTEGER, source TEXT, match_method TEXT);
-        CREATE TABLE concept (
-            id INTEGER PRIMARY KEY, status TEXT NOT NULL, confidence TEXT NOT NULL,
-            headword TEXT, headword_from INTEGER, gloss_en TEXT,
-            gloss_en_from INTEGER, gloss_mi TEXT, gloss_mi_from INTEGER,
-            created_at TEXT, last_updated TEXT);
-        CREATE TABLE concept_member (
-            id INTEGER PRIMARY KEY, concept_id INTEGER NOT NULL,
-            source_id TEXT NOT NULL, source_entry_id TEXT NOT NULL,
-            sense_number INTEGER, entry_id INTEGER, sense_id INTEGER,
-            status TEXT NOT NULL, confidence TEXT NOT NULL, created_at TEXT,
-            confirmed_grouping TEXT);
-        CREATE TABLE concept_member_evidence (
-            id INTEGER PRIMARY KEY, member_id INTEGER NOT NULL,
-            kind TEXT NOT NULL, detail TEXT NOT NULL, weight REAL NOT NULL);
-    """)
     for ddl in (PATCH_DDL, QUEUE_DDL, FINDING_DDL):
         con.executescript(ddl)
     con.execute("INSERT INTO entry (id, source_id, source_entry_id, headword, "
-                "headword_search) VALUES (1,'te_aka','79','aho','aho')")
+                "headword_search, headword_sort, headword_search)VALUES (1,'te_aka','79','aho','aho', '', '')")
     con.execute("INSERT INTO entry (id, source_id, source_entry_id, headword, "
-                "headword_search) VALUES (2,'williams','54','Aho','aho')")
+                "headword_search, headword_sort, headword_search)VALUES (2,'williams','54','Aho','aho', '', '')")
     con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en) "
                 "VALUES (10,1,1,'weft, woof')")
     con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en) "

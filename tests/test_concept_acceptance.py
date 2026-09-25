@@ -11,6 +11,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import DB_PATH
@@ -193,13 +194,7 @@ class ExportFilter(unittest.TestCase):
 
     def setUp(self):
         self.mod = importlib.import_module("60_export_app_db")
-        self.con = sqlite3.connect(":memory:")
-        self.con.executescript("""
-            CREATE TABLE concept (id INTEGER PRIMARY KEY, status TEXT,
-                confidence TEXT);
-            CREATE TABLE concept_member (id INTEGER PRIMARY KEY,
-                concept_id INTEGER, source_id TEXT, status TEXT);
-        """)
+        self.con = core_db()
         self.con.executemany(
             "INSERT INTO concept (id, status, confidence) VALUES (?,?,?)",
             [(1, "proposed", "certain"),      # ships
@@ -207,8 +202,8 @@ class ExportFilter(unittest.TestCase):
              (3, "confirmed", "uncertain"),   # ships: the sweep judged it
              (4, "proposed", "certain")])     # withheld: every member rejected
         self.con.executemany(
-            "INSERT INTO concept_member (id, concept_id, source_id, status) "
-            "VALUES (?,?,?,?)",
+            "INSERT INTO concept_member (id, concept_id, source_id, status, "
+            "  source_entry_id, confidence) VALUES (?,?,?,?,'x','certain')",
             [(10, 1, "te_aka", "proposed"),
              (11, 1, "papakupu", "rejected"),   # excluded from concept 1
              (12, 2, "te_aka", "proposed"),

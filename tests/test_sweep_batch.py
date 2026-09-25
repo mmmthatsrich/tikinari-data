@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import DB_PATH
@@ -155,40 +156,11 @@ class ConceptsInTheBatch(unittest.TestCase):
     def test_a_database_without_the_concept_tables_still_renders(self):
         # The sweep must not die on a DB built before the concept layer
         # existed — the batch view is how every cluster is read.
-        con = sqlite3.connect(":memory:")
+        con = core_db()
         con.row_factory = sqlite3.Row
-        con.executescript("""
-            CREATE TABLE entry (
-                id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-                headword TEXT, headword_search TEXT, headword_en TEXT,
-                part_of_speech TEXT, part_of_speech_en TEXT, part_of_speech_mi TEXT,
-                dialect TEXT, loan_marker TEXT, locator TEXT);
-            CREATE TABLE sense (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-                gloss_en TEXT, gloss_mi TEXT, definition_raw TEXT, register TEXT,
-                note TEXT, part_of_speech TEXT, part_of_speech_en TEXT);
-            CREATE TABLE example (
-                id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-                text_mi TEXT, text_en TEXT, citation TEXT, source_abbrev TEXT,
-                sort_no INTEGER);
-            CREATE TABLE form (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT, form_type TEXT);
-            CREATE TABLE relation (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-                target_headword TEXT, target_entry_id INTEGER,
-                target_sense_id INTEGER, note TEXT);
-            CREATE TABLE entry_domain (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, domain TEXT,
-                domain_lang TEXT);
-            CREATE TABLE ETY_cognateset (
-                id INTEGER PRIMARY KEY, protoform TEXT, level TEXT, gloss TEXT);
-            CREATE TABLE ETY_entry_link (
-                id INTEGER PRIMARY KEY, cognateset_id INTEGER, entry_id INTEGER,
-                sense_id INTEGER, source TEXT, match_method TEXT);
-        """)
         con.execute("INSERT INTO entry (id, source_id, source_entry_id, "
-                    "headword, headword_search) VALUES "
-                    "(1,'te_aka','79','aho','aho')")
+                    "headword, headword_sort, headword_search) VALUES "
+                    "(1,'te_aka','79','aho','aho','aho')")
         con.commit()
         batch = assemble(con, "aho")
         self.assertEqual(batch["concepts"], [])
