@@ -1010,3 +1010,86 @@ The fix is a build change, not a field patch — `add_relation` would need a sou
 should be measured against the concept layer first: 49,755 relations currently asserting more
 than the source does is also 49,755 that `resolve_within_source_relations` and the concept
 evidence axes have been reading. Narrowing them is likely right and is certainly not free.
+
+---
+
+## D47. A confirmation granted to one grouping is re-applied to every later grouping — **found on the bench, queued**
+
+Found 2026-09-26, verifying the D44 rebuild. Not hypothetical: it happened during that
+rebuild, to a row that can be named.
+
+### The mechanism
+
+A member-level confirm sets a **concept-level** status. `sweep_runner._apply_concept_actions`:
+
+> *"A confirm also confirms the member's CONCEPT. Nothing else in the codebase sets
+> `concept.status`, so without this the sweep could not change what ships."*
+
+That is right, and the judgement must survive a rebuild. But the rebuild re-derives the
+concept's status from scratch, against **whatever membership now exists**
+(`54_build_concepts.py`):
+
+```python
+status = "confirmed" if any(
+    judged.get(m["view"]["member_key"], ...)[1] == "confirmed"
+    for m in members) else "proposed"
+```
+
+`any()`. One confirmed member makes the whole rebuilt concept confirmed, however many new and
+unjudged members have joined it since. The confirmation is sticky to the **member**; its effect
+lands on the **concept**; and the concept is rebuilt from nothing every run.
+
+The repointing logic is deliberate, but its stated rationale is about *identifiers* —
+*"every rebuild mints new concept ids, so it is carried onto the rebuilt row rather than left
+pointing at the old one"* — which assumes the grouping is stable and only the id moves.
+
+### What happened
+
+A sweep session confirmed `te_aka:516#1` and `#2` in a concept holding **only te_aka**. The
+D44 fix then merged `hepatakakupu:4287#1` into it:
+
+| | before | after |
+|---|---|---|
+| `te_aka:516#1` | concept sources `('te_aka',)` | `('hepatakakupu', 'te_aka')` |
+| `te_aka:516#2` | concept sources `('te_aka',)` | `('hepatakakupu', 'te_aka')` |
+
+The rebuilt concept 2784068 is `confirmed`. hepatakakupu:4287's membership — which no judge
+has ever seen — now sits inside a concept marked as confirmed by a human.
+
+**In this instance the outcome is correct.** hepatakakupu:4287 *is* the same word; that is the
+entire point of D43 and D44. But it is correct by luck rather than by check, and the same
+mechanism would carry a confirmation onto a wrong merge exactly as silently.
+
+### Why it matters beyond bookkeeping
+
+`60_export_app_db.py` ships a concept when `status = 'confirmed' OR confidence IN (certain,
+probable)`. A confirmed concept therefore **bypasses the confidence filter entirely**. An
+unjudged member riding someone else's confirmation ships whatever its own confidence.
+
+### Scale
+
+| | |
+|---|---|
+| confirmed concepts | 13 |
+| members inside them | 38 |
+| **of those, never judged themselves** | **10** |
+
+Concept 2780572 is the sharpest: **10 members, 3 judged, 7 not.**
+
+Ten members today — but the sweep is 42 clusters into 55,765, **0.08% complete**. This grows
+with every cluster judged.
+
+### Recommended remedy
+
+Keep the member's confirmation durable — *"a lost judgement is unrecoverable"* is a principle
+this pipeline already states — but stop the concept-level claim from silently widening:
+
+1. Record the member-key set a confirmation was granted against, at confirm time.
+2. On rebuild, derive `concept.status = 'confirmed'` **only** when the current grouping has
+   gained no member the judge did not see.
+3. Where it has, every member keeps its own status and the concept reverts to `proposed`,
+   re-entering the queue to be re-judged.
+
+Nothing is destroyed, the export stops shipping unexamined merges as confirmed, and a
+grouping that changed gets looked at again — which is what a judge would want, since a new
+witness is exactly the thing that could change their mind.
