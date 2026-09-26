@@ -16,26 +16,16 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import resolve_relations_by_domain
 
 
 def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword TEXT,
-            part_of_speech TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER);
-        CREATE TABLE entry_domain (
-            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-            domain TEXT, domain_lang TEXT);
-    """)
+    con = core_db()
     con.executemany(
-        "INSERT INTO entry (id, source_id, headword, part_of_speech) VALUES (?,?,?,?)", [
+        "INSERT INTO entry (id, source_id, headword, part_of_speech, headword_sort, headword_search)VALUES (?,?,?,?, '', '')", [
             (1, "paekupu", "hīmoemoe", "Adjective"),   # the referring entry
             (2, "paekupu", "kawa", "Noun"),            # Pūtaiao
             (3, "paekupu", "kawa", "Noun"),            # Hangarau
@@ -122,8 +112,10 @@ class ResolveByDomain(unittest.TestCase):
         # even though it matches the headword, the domain and the POS best.
         con = _db()
         con.executemany(
-            "INSERT INTO entry (id, source_id, headword, part_of_speech) "
-            "VALUES (?,'paekupu','hīmoemoe',?)", [(8, "Adjective"), (9, "Noun")])
+            "INSERT INTO entry (id, source_id, headword, headword_sort, "
+            "  headword_search, part_of_speech) "
+            "VALUES (?,'paekupu','hīmoemoe','','',?)",
+            [(8, "Adjective"), (9, "Noun")])
         con.executemany(
             "INSERT INTO entry_domain (entry_id, domain, domain_lang) "
             "VALUES (?,'Hangarau','mi')", [(8,), (9,)])

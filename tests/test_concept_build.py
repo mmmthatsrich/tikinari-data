@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 SCHEMA_SRC = Path(__file__).parent.parent / "scripts" / "00_init_db.py"
@@ -23,7 +24,7 @@ def concept_ddl() -> str:
 
 class Schema(unittest.TestCase):
     def test_the_three_tables_exist(self):
-        con = sqlite3.connect(":memory:")
+        con = core_db()
         con.executescript(concept_ddl())
         names = {r[0] for r in con.execute(
             "SELECT name FROM sqlite_master WHERE type='table'")}
@@ -32,7 +33,7 @@ class Schema(unittest.TestCase):
             {"concept", "concept_member", "concept_member_evidence"})
 
     def test_a_member_is_unique_per_concept_and_address(self):
-        con = sqlite3.connect(":memory:")
+        con = core_db()
         con.executescript(concept_ddl())
         con.execute("INSERT INTO concept (id, status, confidence) "
                     "VALUES (1,'proposed','probable')")
@@ -46,31 +47,16 @@ class Schema(unittest.TestCase):
 
 def _fixture_db():
     """A miniature corpus: the hiwi cluster's shape, in three sources."""
-    con = sqlite3.connect(":memory:")
+    con = core_db()
     con.executescript("""
-        CREATE TABLE entry (id INTEGER PRIMARY KEY, source_id TEXT,
-            source_entry_id TEXT, headword TEXT, headword_search TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT, locator TEXT);
-        CREATE TABLE sense (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            sense_number INTEGER, gloss_en TEXT, gloss_mi TEXT,
-            part_of_speech TEXT, part_of_speech_en TEXT);
-        CREATE TABLE example (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            sense_id INTEGER, text_mi TEXT, citation TEXT);
-        CREATE TABLE relation (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            rel_type TEXT, target_entry_id INTEGER);
-        CREATE TABLE ETY_entry_link (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            cognateset_id INTEGER, sense_id INTEGER);
         -- delete_source_slice clears these two unguarded, so the fixture must
         -- carry them for RebuildSurvival to call the real function.
-        CREATE TABLE entry_domain (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            domain TEXT, domain_lang TEXT);
-        CREATE TABLE form (id INTEGER PRIMARY KEY, entry_id INTEGER,
-            form TEXT, form_type TEXT);
     """)
     con.executescript(concept_ddl())
     con.executemany(
         "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-        "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)", [
+        "headword_search, part_of_speech, locator, headword_sort) "
+            "VALUES (?,?,?,?,?,?,?, '')", [
             (1, "williams", "1251", "Hiwi", "hiwi", None, None),
             (2, "williams", "1250", "Hiwi", "hiwi", None, None),
             # Real te_aka rows carry a 'word_id=N' locator too, the same shape
@@ -139,7 +125,8 @@ class LoadSenses(unittest.TestCase):
         con = _fixture_db()
         con.executemany(
             "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-            "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)",
+            "headword_search, part_of_speech, locator, headword_sort) "
+            "VALUES (?,?,?,?,?,?,?, '')",
             [(90, "ngata", "WR-90", "manawa", "manawa", None, None),
              (91, "ngata", "WR-91", "mānawa", "manawa", None, None)])
         con.executemany(
@@ -159,7 +146,8 @@ class LoadSenses(unittest.TestCase):
         con = _fixture_db()
         con.executemany(
             "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-            "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)",
+            "headword_search, part_of_speech, locator, headword_sort) "
+            "VALUES (?,?,?,?,?,?,?, '')",
             [(92, "ngata", "WR-92", "hoatu", "hoatu", None, None),
              (93, "ngata", "WR-93", "hoatu", "hoatu", None, None)])
         con.executemany(
@@ -255,8 +243,8 @@ class FormConcepts(unittest.TestCase):
         # B may join one of them, but that must never place A with C.
         con = _fixture_db()
         con.execute("INSERT INTO entry (id, source_id, source_entry_id, headword,"
-                    " headword_search, part_of_speech) VALUES"
-                    " (5,'taikupu','t1','hīwi','hiwi',NULL)")
+                    " headword_search, part_of_speech, headword_sort) VALUES"
+                    " (5,'taikupu','t1','hīwi','hiwi',NULL,'')")
         con.execute("INSERT INTO sense (id, entry_id, sense_number, gloss_en)"
                     " VALUES (15,5,1,'ridge of a hill')")
         con.commit()
@@ -293,7 +281,8 @@ class ConfidenceIsScoredAgainstFinalMembership(unittest.TestCase):
         # either. bbb and ccc are terse and identical to each other.
         con.executemany(
             "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-            "headword_search, part_of_speech, locator) VALUES (?,?,?,?,?,?,?)",
+            "headword_search, part_of_speech, locator, headword_sort) "
+            "VALUES (?,?,?,?,?,?,?, '')",
             [(70, "aaa", "1", "kupu", "kupu", None, None),
              (71, "bbb", "1", "kupu", "kupu", None, None),
              (72, "ccc", "1", "kupu", "kupu", None, None)])
@@ -307,7 +296,7 @@ class ConfidenceIsScoredAgainstFinalMembership(unittest.TestCase):
         # Make 'wide' common enough that only coverage can rescue a pair.
         con.executemany(
             "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-            "headword_search) VALUES (?,?,?,?,?)",
+            "headword_search, headword_sort) VALUES (?,?,?,?,?, '')",
             [(800 + i, "filler", f"f{i}", f"kupu{i}", f"kupu{i}")
              for i in range(30)])
         con.executemany(
@@ -511,20 +500,52 @@ class Persist(unittest.TestCase):
                 "SELECT source_id FROM concept_member WHERE concept_id=? "
                 "  AND status <> 'rejected'", (cid,))})
 
+    def _confirm(self, con, source_id):
+        """Confirm a member the way sweep_runner does, grouping and all.
+
+        The grouping is not decoration: since D47 a confirmation covers the
+        set of witnesses the judge saw, and one recorded without it cannot be
+        checked and so cannot confirm the concept.
+        """
+        import json
+        cid = con.execute("SELECT concept_id FROM concept_member "
+                          " WHERE source_id=?", (source_id,)).fetchone()[0]
+        grouping = [[r[0], r[1], r[2]] for r in con.execute(
+            "SELECT source_id, source_entry_id, sense_number "
+            "  FROM concept_member WHERE concept_id=? AND status <> 'rejected'",
+            (cid,))]
+        con.execute("UPDATE concept_member SET status='confirmed', "
+                    "  confirmed_grouping=? WHERE source_id=?",
+                    (json.dumps(grouping), source_id))
+        con.commit()
+
     def test_a_confirmed_membership_confirms_the_rebuilt_concept(self):
         # Confirming a member is what makes the sweep able to change what
         # ships; a rebuild that reset the concept to 'proposed' would throw
         # that judgement away on the next run of the chain.
         con = _fixture_db()
         self._build(con)
-        con.execute("UPDATE concept_member SET status='confirmed' "
-                    "WHERE source_id='papakupu'")
-        con.commit()
+        self._confirm(con, "papakupu")
         self._build(con)
         self.assertEqual("confirmed", con.execute(
             "SELECT c.status FROM concept c JOIN concept_member m "
             "  ON m.concept_id = c.id WHERE m.source_id='papakupu'"
         ).fetchone()[0])
+
+    def test_a_confirmation_with_no_grouping_cannot_confirm(self):
+        # D47. Rows judged before confirmed_grouping existed carry no record
+        # of what their judge saw, so the claim cannot be checked. The MEMBER
+        # keeps its confirmed status; only the concept waits to be re-earned.
+        con = _fixture_db()
+        self._build(con)
+        con.execute("UPDATE concept_member SET status='confirmed' "
+                    "WHERE source_id='papakupu'")
+        con.commit()
+        self._build(con)
+        row = con.execute(
+            "SELECT c.status, m.status FROM concept c JOIN concept_member m "
+            "  ON m.concept_id = c.id WHERE m.source_id='papakupu'").fetchone()
+        self.assertEqual(("proposed", "confirmed"), (row[0], row[1]))
 
     def test_a_concept_with_nothing_judged_stays_proposed(self):
         con = _fixture_db()
@@ -900,7 +921,7 @@ class RebuildSurvival(unittest.TestCase):
         # Snapshot williams' rows before the delete so they can be restored
         # -- this stands in for the source's re-import.
         entry_rows = con.execute(
-            "SELECT id, source_id, source_entry_id, headword, "
+            "SELECT id, source_id, source_entry_id, headword, headword_sort, "
             " headword_search, part_of_speech, part_of_speech_en, locator "
             " FROM entry WHERE source_id='williams'").fetchall()
         sense_rows = con.execute(
@@ -914,8 +935,9 @@ class RebuildSurvival(unittest.TestCase):
 
         con.executemany(
             "INSERT INTO entry (id, source_id, source_entry_id, headword, "
-            " headword_search, part_of_speech, part_of_speech_en, locator) "
-            " VALUES (?,?,?,?,?,?,?,?)", entry_rows)
+            " headword_sort, headword_search, part_of_speech, "
+            " part_of_speech_en, locator) VALUES (?,?,?,?,?,?,?,?,?)",
+            entry_rows)
         con.executemany(
             "INSERT INTO sense (id, entry_id, sense_number, gloss_en, "
             " gloss_mi, part_of_speech, part_of_speech_en) "
@@ -978,6 +1000,21 @@ class RebuildSurvival(unittest.TestCase):
             " AND source_entry_id=? AND sense_number IS ?", key)
         con.commit()
 
+        # The real schema declares headword_search NOT NULL, so this state
+        # cannot be reached through it — which is the point. The guard in 54
+        # exists for a database that got there anyway: rows written before the
+        # constraint, or a restore. Relaxing the one column is how the test
+        # reaches the state it is about.
+        version = con.execute("PRAGMA schema_version").fetchone()[0]
+        con.executescript(f"""
+            PRAGMA writable_schema = ON;
+            UPDATE sqlite_master
+               SET sql = replace(sql, 'headword_search TEXT NOT NULL',
+                                      'headword_search TEXT')
+             WHERE type = 'table' AND name = 'entry';
+            PRAGMA schema_version = {version + 1};
+            PRAGMA writable_schema = OFF;
+        """)
         con.execute(
             "UPDATE entry SET headword_search=NULL WHERE source_id='papakupu'")
         con.commit()

@@ -15,21 +15,15 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import resolve_within_source_relations
 
 
 def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER);
-    """)
-    con.executemany("INSERT INTO entry (id, source_id, headword) VALUES (?,?,?)", [
+    con = core_db()
+    con.executemany("INSERT INTO entry (id, source_id, headword, headword_sort, headword_search)VALUES (?,?,?, '', '')", [
         (1, "hepatakakupu", "ahuahu"),
         (2, "hepatakakupu", "harahara"),     # unique target
         (3, "hepatakakupu", "ahu"),          # ambiguous: two entries share it
@@ -103,6 +97,8 @@ class ResolveWithinSource(unittest.TestCase):
         self.assertEqual(resolve_within_source_relations(con), 0)
 
     def test_a_missing_relation_table_is_not_an_error(self):
+        # Deliberately NOT core_db(): the point is a database that LACKS the
+        # relation table, and the real schema has one.
         con = sqlite3.connect(":memory:")
         con.execute("CREATE TABLE entry (id INTEGER PRIMARY KEY)")
         self.assertEqual(resolve_within_source_relations(con), 0)

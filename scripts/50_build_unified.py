@@ -362,14 +362,20 @@ class Builder:
         return True
 
     def add_relation(self, entry_id, rel_type, target_headword, target_entry_id=None,
-                     note=None, target_sense_id=None):
+                     note=None, target_sense_id=None, sense_id=None):
+        """`sense_id` is WHICH sense asserts this, where the source says (D46).
+
+        NULL means the source made the claim of the word, not of one sense,
+        which is true of every source but te Aka today. It is not "unknown":
+        an entry-level claim is what those sources actually print.
+        """
         if not target_headword:
             return
         self.con.execute(
             "INSERT INTO relation (entry_id, rel_type, target_headword, target_entry_id, "
-            "note, target_sense_id) VALUES (?,?,?,?,?,?)",
+            "note, target_sense_id, sense_id) VALUES (?,?,?,?,?,?,?)",
             (entry_id, rel_type, target_headword, target_entry_id, note,
-             target_sense_id))
+             target_sense_id, sense_id))
         self.counts["relation"] += 1
 
     def add_domain(self, entry_id, sense_id, domain, domain_lang):
@@ -562,6 +568,29 @@ def te_aka_example(item):
     return text, en, cite
 
 
+def _add_te_aka_synonyms(b, entry_id, sense_id, sense, emitted):
+    """One sense's synonyms, attributed to that sense (D46).
+
+    `emitted` guards (sense, headword) across the duplicate-def-div merge, so
+    folding a repeated sense into the one that won cannot double a row.
+    """
+    for sy in sense.get("synonyms") or []:
+        if isinstance(sy, dict):
+            text = sy.get("text")
+            # word_id is a SOURCE id, not a unified entry.id — stash it in note and
+            # resolve to target_entry_id after all te_aka entries exist (see below).
+            note = f"te_aka_word_id={sy.get('word_id')}" if sy.get("word_id") else None
+        elif isinstance(sy, str):
+            text, note = sy, None
+        else:
+            continue
+        if not text or (sense_id, text) in emitted:
+            continue
+        emitted.add((sense_id, text))
+        b.add_relation(entry_id, "synonym", text, None, note=note,
+                       sense_id=sense_id)
+
+
 def build_te_aka(con, b):
     sql = ("SELECT word_id, headword, headword_sort, headword_search, part_of_speech, "
            "definition, senses, usage_examples, audio_url, synonyms, filters "
@@ -587,21 +616,29 @@ def build_te_aka(con, b):
         # same def-div N times, e.g. "Rua o Takurua, Te"), then renumber 1..n.
         # Fall back to the packed definition for data parsed before senses existed.
         if not senses:
+            # Parsed before senses existed: the entry-level aggregate is all
+            # there is, and it belongs to the one sense synthesised here.
             senses = [{"sense_number": 1, "part_of_speech": pos,
-                       "gloss_en": d, "definition_raw": d, "examples": examples}]
+                       "gloss_en": d, "definition_raw": d, "examples": examples,
+                       "synonyms": jload(syn)}]
 
         first_sid = None
-        seen_senses = set()
+        seen_senses = {}
         out_no = 0
+        emitted = set()
         for s in senses:
             key = _ws(s.get("definition_raw") or s.get("gloss_en") or "").lower()
             if key and key in seen_senses:
+                # A repeated def-div. Its synonyms still belong to the sense
+                # that won, or they would be dropped with the duplicate row.
+                _add_te_aka_synonyms(b, eid, seen_senses[key], s, emitted)
                 continue
-            seen_senses.add(key)
             out_no += 1
             sid = b.add_sense(eid, out_no, s.get("gloss_en"), None,
                               s.get("definition_raw"),
                               part_of_speech=s.get("part_of_speech"))
+            if key:
+                seen_senses[key] = sid
             _add_suffix_forms(
                 b, eid, suffix_forms.strip_suffix_notation(hw),
                 suffix_forms.read_paren_suffixes(
@@ -614,15 +651,13 @@ def build_te_aka(con, b):
                 if parsed:
                     text, en, cite = parsed
                     b.add_example(sid, eid, text, en, None, cite, i)
+            # D46: te Aka states which sense a synonym belongs to, inside that
+            # sense's div. The entry-level `synonyms` column is an aggregate
+            # the parser also builds, marked "legacy / FTS", and reading it
+            # here threw the attribution away: aho's cord senses and its
+            # genealogy senses became mutual synonyms.
+            _add_te_aka_synonyms(b, eid, sid, s, emitted)
 
-        for sy in jload(syn):
-            if isinstance(sy, dict):
-                # word_id is a SOURCE id, not a unified entry.id — stash it in note and
-                # resolve to target_entry_id after all te_aka entries exist (see below).
-                wid_note = f"te_aka_word_id={sy.get('word_id')}" if sy.get("word_id") else None
-                b.add_relation(eid, "synonym", sy.get("text"), None, note=wid_note)
-            elif isinstance(sy, str):
-                b.add_relation(eid, "synonym", sy)
         for fdom in filter_domains:
             b.add_domain(eid, first_sid, fdom, "en")
 

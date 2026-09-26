@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import DB_PATH
@@ -108,6 +109,31 @@ class Render(unittest.TestCase):
     def test_the_etymology_section_is_rendered(self):
         self.assertIn("ETYMOLOGY", self.text)
 
+    def test_a_relation_shows_which_sense_asserts_it(self):
+        # D46. te Aka states its synonyms per sense, and `aho` is why that
+        # matters: the source puts one set on sense 1, 'fishing line, cord,
+        # string', and another on sense 3, 'line of descent, genealogy'.
+        # Rendered without the attribution, twelve synonyms hang off the entry
+        # and a judge cannot see that the cord sense and the genealogy sense
+        # were never synonyms of each other.
+        text = render(assemble(self.con, "aho"))
+        cord = [l for l in text.splitlines()
+                if "rel   synonym" in l and "'io'" in l]
+        descent = [l for l in text.splitlines()
+                   if "rel   synonym" in l and "'kāwai'" in l]
+        self.assertTrue(cord and descent)
+        self.assertIn("from s1", cord[0])
+        self.assertIn("from s3", descent[0])
+
+    def test_an_entry_level_relation_claims_no_sense(self):
+        # Every source but te Aka states its relations of the WORD, and NULL
+        # means exactly that rather than 'unknown'. Marking those would invent
+        # an attribution the source never made.
+        text = render(assemble(self.con, "aho"))
+        williams = [l for l in text.splitlines()
+                    if "rel   " in l and "from s" in l and "williams" in l]
+        self.assertEqual(williams, [])
+
     def test_an_empty_cluster_renders_without_blowing_up(self):
         self.assertIsInstance(render(assemble(self.con, "zzzznotacluster")), str)
 
@@ -155,40 +181,11 @@ class ConceptsInTheBatch(unittest.TestCase):
     def test_a_database_without_the_concept_tables_still_renders(self):
         # The sweep must not die on a DB built before the concept layer
         # existed — the batch view is how every cluster is read.
-        con = sqlite3.connect(":memory:")
+        con = core_db()
         con.row_factory = sqlite3.Row
-        con.executescript("""
-            CREATE TABLE entry (
-                id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-                headword TEXT, headword_search TEXT, headword_en TEXT,
-                part_of_speech TEXT, part_of_speech_en TEXT, part_of_speech_mi TEXT,
-                dialect TEXT, loan_marker TEXT, locator TEXT);
-            CREATE TABLE sense (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-                gloss_en TEXT, gloss_mi TEXT, definition_raw TEXT, register TEXT,
-                note TEXT, part_of_speech TEXT, part_of_speech_en TEXT);
-            CREATE TABLE example (
-                id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-                text_mi TEXT, text_en TEXT, citation TEXT, source_abbrev TEXT,
-                sort_no INTEGER);
-            CREATE TABLE form (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT, form_type TEXT);
-            CREATE TABLE relation (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-                target_headword TEXT, target_entry_id INTEGER,
-                target_sense_id INTEGER, note TEXT);
-            CREATE TABLE entry_domain (
-                id INTEGER PRIMARY KEY, entry_id INTEGER, domain TEXT,
-                domain_lang TEXT);
-            CREATE TABLE ETY_cognateset (
-                id INTEGER PRIMARY KEY, protoform TEXT, level TEXT, gloss TEXT);
-            CREATE TABLE ETY_entry_link (
-                id INTEGER PRIMARY KEY, cognateset_id INTEGER, entry_id INTEGER,
-                sense_id INTEGER, source TEXT, match_method TEXT);
-        """)
         con.execute("INSERT INTO entry (id, source_id, source_entry_id, "
-                    "headword, headword_search) VALUES "
-                    "(1,'te_aka','79','aho','aho')")
+                    "headword, headword_sort, headword_search) VALUES "
+                    "(1,'te_aka','79','aho','aho','aho')")
         con.commit()
         batch = assemble(con, "aho")
         self.assertEqual(batch["concepts"], [])

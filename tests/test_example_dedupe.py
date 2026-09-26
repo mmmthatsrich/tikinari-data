@@ -17,32 +17,14 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 bu = importlib.import_module("50_build_unified")
 
 
 def _builder():
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, source_entry_id TEXT,
-            headword TEXT, headword_sort TEXT, headword_search TEXT,
-            homonym_no INTEGER, headword_en TEXT, part_of_speech TEXT,
-            loan_marker TEXT, dialect TEXT, audio_url TEXT, locator TEXT,
-            content_hash TEXT, first_seen TEXT, created_at TEXT, last_updated TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, sense_number INTEGER,
-            parent_sense_id INTEGER, gloss_en TEXT, gloss_mi TEXT,
-            definition_raw TEXT, register TEXT, part_of_speech TEXT, note TEXT);
-        CREATE TABLE example (
-            id INTEGER PRIMARY KEY, sense_id INTEGER, entry_id INTEGER,
-            text_mi TEXT, text_en TEXT, source_abbrev TEXT, citation TEXT,
-            sort_no INTEGER);
-        CREATE TABLE form (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, form TEXT,
-            form_search TEXT, form_type TEXT, note TEXT);
-    """)
+    con = core_db()
     b = bu.Builder(con, "williams", None, {})
     eid = b.add_entry("1006503", "ahuahu", "ahuahu", "ahuahu")
     return con, b, eid

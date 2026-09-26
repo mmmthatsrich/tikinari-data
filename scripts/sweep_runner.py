@@ -193,6 +193,29 @@ def _apply_concept_actions(con, finding):
         if cur.rowcount == 0:
             raise ValueError(f"no concept membership for {a['member']!r}")
         if confirming:
+            # Record WHICH grouping this confirmation was granted to (D47).
+            # A confirm is a judgement about a set of witnesses, and the
+            # concept is rebuilt from nothing every run, so without this the
+            # confirmation widens silently onto groupings the judge never saw
+            # — and a confirmed concept bypasses the export's confidence
+            # filter, carrying unexamined members out to users with it.
+            #
+            # A rejected member is not part of the grouping: the rejection
+            # records that the sense does NOT belong, so its presence later
+            # is not an unseen witness.
+            grouping = [
+                [r[0], r[1], r[2]] for r in con.execute(
+                    "SELECT source_id, source_entry_id, sense_number "
+                    "  FROM concept_member "
+                    " WHERE concept_id IN (SELECT concept_id FROM concept_member "
+                    "                       WHERE source_id = ? AND source_entry_id = ? "
+                    "                         AND sense_number IS ?) "
+                    "   AND status <> 'rejected'", (src, seid, sn))]
+            con.execute(
+                "UPDATE concept_member SET confirmed_grouping = ? "
+                "  WHERE source_id = ? AND source_entry_id = ? "
+                "    AND sense_number IS ?",
+                (json.dumps(grouping), src, seid, sn))
             con.execute(
                 "UPDATE concept SET status = 'confirmed', last_updated = ? "
                 "  WHERE id IN (SELECT concept_id FROM concept_member "

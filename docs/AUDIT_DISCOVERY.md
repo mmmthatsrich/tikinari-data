@@ -384,3 +384,989 @@ papyfera, "Paper mulberry" (Moraceae)'`) and are fine as they are.
 Left for the sweep rather than fixed in the pipeline: 12 rows is below the point
 where a re-parse and rebuild is cheaper than a judgement, and the batch
 assembler surfaces them in the etymology section where they will be read anyway.
+
+---
+
+## D39. Brackets and terminal punctuation reach `headword_search` — 883 entries — **found by the sweep, deferred**
+
+Found judging the calibration slice's first two tier-4 clusters, 2026-09-24. Twenty-nine
+tier-1 and tier-2 clusters had not surfaced it: a multi-source cluster is judged on whether
+the sources agree, not on whether a reader could have found the word.
+
+paekupu prints `(Te) Rā Rangaawatea`, where the parenthesis marks the article as optional.
+`normalise_search_key` keeps it, so `headword_search` is `(te) ra rangawatea` and a reader
+searching the bare term does not reach the entry. te_aka's `[tō] tara!` is the same shape with
+square brackets and an exclamation mark.
+
+| in `headword_search` | entries |
+|---|---|
+| round brackets | 707 |
+| square brackets | 139 |
+| ellipsis `...` | 128 |
+| slash | 48 |
+| exclamation mark | 46 |
+| question mark | 35 |
+| **any bracket or terminal punctuation** | **883** |
+
+By source: paekupu 506, te_aka 252, kimikupu_hou 57, papakupu 28, williams 20,
+te_matatiki 14, hepatakakupu 4, tregear_exceptions 2. 1,080 sweep clusters are keyed with a
+bracket.
+
+### Why it is not simply "strip the punctuation"
+
+**The shapes are not one defect.** Two of them are genuinely different:
+
+- **An optional element.** `(Te) Rā Rangaawatea`, `[tō] tara!` — the brackets mark something a
+  speaker may omit. The bare form is the one a reader will type, so the key should hold it.
+- **Real alternation.** te_aka's `(ka/he/te) tau/kino (kē) (hoki)` and
+  `(ko) wai ka hua, (ko) wai ka tohu` are idiom templates. The parentheses and slashes mark
+  choices, and there is no single bare form to strip to. Stripping would produce
+  `ka/he/te tau/kino kē hoki`, which is not a word anyone would search for either.
+
+A fix has to tell those apart, and the discriminator is not obvious from the string alone.
+
+**The precedent is that this belongs in the pipeline, not the rubric.** §6 of the rubric records
+D19 and D20 being fixed in the script that caused them rather than written into the standard.
+The same applies here: `normalise_search_key` builds these keys, and 883 entries cannot be
+corrected cluster by cluster.
+
+### Constraints on the eventual fix
+
+- **Do not rewrite `headword`.** Same rule as D18 and part-of-speech: the printed form is the
+  record. Only the key changes.
+- **Keying on the bare form must not merge homographs.** Stripping `(te)` from
+  `(te) ra rangawatea` yields `ra rangawatea`; check first whether that collides with an
+  existing key, because a collision is a merge, and merging on key identity alone is the error
+  D18 exists to prevent.
+- **An entry may need more than one key.** The honest answer for the optional-element shape may
+  be that both `(te) ra rangawatea` and `ra rangawatea` should find it, which is a
+  search-alias question rather than a key-rewrite one. `form` already holds alternative
+  spellings for exactly this purpose and may be the right home.
+- **Measure the alternation shapes before touching them.** The 48 slashes and some of the 707
+  parentheses are idiom templates where no bare form exists.
+
+### Where it is recorded
+
+Two `deferred` findings in `sweep_finding`, on clusters `(te) ra rangawatea` and `[to] tara!`.
+The first counted round brackets only and reported 707; the second corrects it to 883 and
+names the per-source and per-shape breakdown. Both are `action='deferred'` rather than
+`queued`, because there is no per-cluster patch that would address them.
+
+---
+
+## D40. A source's own repeats are never grouped — 2,117 paekupu headwords — **found by the sweep, queued**
+
+Found judging the calibration slice's fourth tier-4 cluster, 2026-09-24, and invisible to the
+twenty-nine multi-source clusters judged before it for the same reason as D39: a tier-1 cluster
+is read for whether the *sources* agree, and this is a source disagreeing with itself.
+
+paekupu publishes per curriculum subject, so a coined term can be listed under two subject
+areas. `ako tautauāmoa` appears as `ako-tautauamoa` under Hangarau/Technology and
+`ako-tautauamoa-2` under Mātauranga Whānui/Education General. Every field that carries meaning
+is identical — headword, `headword_en`, `gloss_en`, and the same cross-reference. Only the
+domain differs.
+
+| | |
+|---|---|
+| paekupu slugs ending `-2`, `-3`, … | 3,486 |
+| paekupu headwords on more than one entry | **2,117** |
+| …of those, with an identical gloss across the entries | **833** |
+| …of those, landing in more than one concept | **2,117 — all of them** |
+
+`54_build_concepts._seed_groups` seeds on `lexeme`, which is `(source_id, source_entry_id,
+headword, locator)`. Two slugs from one source are two lexemes, so they are two seeds, and
+nothing in the matcher rejoins seeds from the same source. The 833 identical-gloss cases are
+one word held as two concepts.
+
+### What a fix must not lose
+
+**The domain pair is the only content distinguishing the entries, and it is real information.**
+That paekupu classifies `ako tautauāmoa` under both Technology and Education General says
+something about the term. A concept can hold two members with both domains attached, so
+grouping them need not discard either — but a deduplication that kept one entry and dropped
+the other would.
+
+**The 2,117 are not all the 833.** A shared headword with *different* glosses is a homograph,
+which the rubric's `homograph` kind exists to protect: those belong in separate concepts and
+grouping them would be the worst error the sweep can make. Only the identical-gloss subset is
+clearly one word, and even there the check should be on the gloss, not the slug.
+
+**The failure is not general — measured across six sources on cluster `aramona`, 2026-09-24.**
+The first draft of this entry implied `_seed_groups` never rejoins a source's own seeds. It
+does, for half of them.
+
+| source | headword on >1 entry | identical gloss | split across concepts |
+|---|---|---|---|
+| te_aka | 5,707 | **986** | all |
+| paekupu | 2,117 | **833** | all |
+| williams | 1,093 | 0 | all |
+| ngata | 5,294 | 128 | **0 — already grouped** |
+| hepatakakupu | 4,921 | 4,921 | **0 — already grouped** |
+| papakupu | 540 | 8 | **0 — already grouped** |
+
+ngata, hepatakakupu and papakupu encode a shared word id inside `source_entry_id`
+(hepatakakupu's `word_id~sense`, ngata's `seid#wid~i`), which `lexeme_key` collapses, so their
+repeats are one lexeme and one seed already. te_aka, williams and paekupu mint an unrelated id
+per entry, so nothing ties them together.
+
+**williams's 1,093 are not a defect.** None of them shares a gloss: they are the `(i)`/`(ii)`
+homographs, which belong in separate concepts and which the `homograph` finding kind exists to
+keep apart. Counting them here would have inverted the rubric's most important protection.
+
+So the real population is **te_aka 986 + paekupu 833 = 1,819** identical-gloss repeats held as
+two or more concepts.
+
+### Where it is recorded
+
+One `queued` finding on cluster `ako tautauāmoa`, with an `observation` beside it naming the
+domain pair as the thing to preserve. The memberships were deliberately **not** confirmed:
+confirming both would assert that the split into two concepts is correct, which is the opposite
+of the finding.
+
+---
+
+## D41. Subject domains live inside `gloss_en` and never reach `entry_domain` — 2,541 senses — **found by the sweep, queued**
+
+Found judging the calibration slice's fourth tier-3 cluster, 2026-09-24.
+
+te_aka:49647 `ārai-ā-ngaoaho` glosses `'(science) light-dependent resistor.'` The leading
+`(science)` is a subject marker, and `entry_domain` holds **nothing at all** for that entry —
+so the only record of the domain is inside the gloss text a reader sees.
+
+| senses whose `gloss_en` opens with a parenthetical | |
+|---|---|
+| te_matatiki | 1,244 |
+| te_aka | 1,017 |
+| papakupu | 133 |
+| paekupu | 102 |
+| williams | 43 |
+| kimikupu_hou, temarareo | 1 each |
+| **total** | **2,541** |
+
+te_aka's are unmistakably subjects: `(sport)` 58, `(mathematics)` 32, `(rugby)` 24, `(golf)` 20,
+`(anatomy)` 20, `(softball)` 19, `(chemistry)` 19, `(cricket)` 16, `(biology)` 16, `(music)` 15.
+
+**Distinct from D8.** That finding is about 18,439 te_aka `entry_domain` rows holding a
+*register* marker instead of a domain — a wrong value in the right column. This is the domain
+never reaching the column at all.
+
+### Constraints on the eventual fix
+
+- **Not every leading parenthetical is a domain.** The shape has to be read before it is
+  stripped; a gloss may open with a grammatical or register note, and te_matatiki's 1,244 are
+  its own printed convention.
+- **Adding is safe, removing is not.** Writing the domain into `entry_domain` is additive and
+  breaks no rule. Deleting `(science)` from `gloss_en` edits a source's printed text, which
+  §2 of the rubric forbids for the raw fields — the canonical layer is where normalisation
+  belongs.
+- **The patch layer cannot do it.** `sweep_patch` updates fields; creating an `entry_domain`
+  row is an insert. This is why the finding is `queued` rather than `applied`.
+- **`subject_area`/`subject_area_en` is the controlled vocabulary** the rubric's §2 already
+  permits deriving across languages with, so a mapping from `(science)` to the existing
+  Pūtaiao/Science pair has a sanctioned route.
+
+---
+
+## D42. Editorial notes inside `example.text_en` — 3,785 te_aka examples — **found by the sweep, queued**
+
+Found judging the calibration slice's tier-4 cluster `amupa`, 2026-09-24.
+
+te_aka:20438's example reads:
+
+> `On 16 August Mekini was hung for the murder of the child of a woman called Amupa.`
+> `note: Maori name?`
+
+The trailing note is te_aka's own editorial query about the headword, not a translation of the
+Māori sentence. A reader shown the example sees it. **3,785 te_aka examples** carry a `note:`
+marker inside `text_en`.
+
+### The notes are not one kind
+
+This is why the finding is `queued` and not `applied` — the target column depends on which
+kind it is:
+
+| shape | example | belongs in |
+|---|---|---|
+| glossing a proper noun | `note: Persian king.` · `note: pharoah` | a sense gloss, or nowhere |
+| a citation | `note: 2Sam1:20` | `example.citation` |
+| an open editorial query | `note: Maori name?` | not a user-facing field at all |
+
+§3 permits `applied` only where the target column is unambiguous. Here it is not, and a blanket
+strip would discard a citation that the schema already has a home for.
+
+### Related but distinct
+
+- **D9** was source HTML reaching `definition_raw` — markup, mechanically removable.
+- **D41** is a subject domain inside `gloss_en` — one kind of content, one target column.
+
+This one is a single marker carrying at least three kinds of content, which is what makes it a
+classification problem rather than a cleanup.
+
+### Also recorded on that cluster
+
+1,380 senses are glossed exactly `unknown` — te_aka 1,376, ngata 4. That is **not** a defect:
+§2 says a missing gloss is reported and never filled, and te_aka is being honest about a
+transliterated name it could not identify. Recorded so that a consumer counting glosses knows
+these are a deliberate absence rather than content.
+
+---
+
+## D43. The monolingual source is structurally excluded from the concept layer — hepatakakupu, 24,941 memberships — **narrow fix built 2026-09-25; 5.4% → 8.7%, remainder open**
+
+Found judging the calibration slice's tier-3 cluster `auahitūroa`, 2026-09-24. The most
+consequential finding of the slice so far.
+
+`concept_evidence`'s gloss axes — `gloss_overlap` (weight 0.5) and `gloss_overlap_weak` (0.3) —
+compare `gloss_en`. **`gloss_mi` appears nowhere in the module.** He Pātaka Kupu is a
+monolingual Māori dictionary, which §4 of the rubric correctly records as normal, so it has
+`gloss_en` for **none** of its 24,941 senses and can never produce gloss evidence.
+
+| source | joins a concept holding another source |
+|---|---|
+| williams | 17,595 of 24,976 — **70%** |
+| ngata | 20,995 of 33,775 — **62%** |
+| papakupu | 2,580 of 4,683 — **55%** |
+| te_aka | 26,965 of 59,485 — **45%** |
+| paekupu | 5,257 of 16,486 — **32%** |
+| **hepatakakupu** | **1,336 of 24,941 — 5%** |
+
+Its 5% comes entirely from the non-gloss axes: `cites_source`, `shared_example` and
+`attributed_quote`.
+
+### The proof case
+
+`auahitūroa` is unambiguous. hepatakakupu:4287 glosses it in Māori as a celestial body with an
+elliptical orbit, an ice and dust nucleus, growing a tail near the sun. te_aka:516 glosses it
+`'Comet'`. **One cognate set — `AUAHI-TUROA '(To Auahi-Turoa), a comet. Cf. auahi, smoke.'` —
+links to both entries.** They are still concepts 2602536 and 2602537.
+
+> **Correction, 2026-09-25.** This entry originally read *"Both are canonically `Noun`, so no
+> part-of-speech block applies."* That is true entry-to-entry and **false sense-to-sense**.
+> te_aka:516 has two senses: **#1 `Proper noun (person)`** — Auahitūroa the personage — and
+> **#2 `Noun`**, the comet. `proper noun` is deliberately outside `OPEN_POS`, so #1 *does*
+> block against hepatakakupu's `Noun`. A block against any one member rules out the whole
+> concept, so sense 1 vetoes attachment to sense 2. That is a second and independent cause,
+> recorded below as **D44**, and it is why this cluster is still two concepts even now that
+> the evidence axis it asked for exists.
+
+### Why this is hard, not merely unfixed
+
+- **A Māori-to-Māori axis buys almost nothing.** Only two sources carry `gloss_mi` at all:
+  hepatakakupu (24,900) and paekupu (3,435). Every other source has zero. So a `gloss_mi`
+  overlap axis could only ever pair hepatakakupu with a fifth of paekupu.
+- **Cross-language gloss matching is forbidden.** §2: *"Translating a gloss from one language
+  into the other is authoring, not auditing, and is forbidden."* An axis that matched
+  `'Comet'` against `'He ao tuarangi…'` would have to translate one of them.
+- **The non-gloss axes are the route, and they are narrow.** `shared_example` needs two sources
+  printing the same sentence; `cites_source` needs one source citing another's entry. Neither
+  is available for most of hepatakakupu.
+
+### What the cluster shows is available
+
+The etymology link was decisive here and is not currently an evidence axis in `WEIGHTS`. A
+shared cognate set is not proof on its own — the `hoi` canary in
+`tests/test_concept_acceptance.py` records that `shared_cognate_set` once merged ten distinct
+words into one concept, which is why it was removed or blocked. But **a shared cognate set
+plus a compatible canonical part of speech** is a narrower claim than either alone, and this
+cluster is a case where it would have been right. That is a hypothesis for the concept work to
+test against the calibration answers, not a change to make blind.
+
+### The hypothesis, tested — 2026-09-25
+
+Measured before implementing, over the 23,605 stranded memberships:
+
+| gate | memberships | |
+|---|---|---|
+| single-source hepatakakupu memberships | 23,605 | 100.0% |
+| …`headword_search` shared with another source | 22,863 | 96.9% |
+| …and a cognate set shared with one of those | 16,441 | 69.7% |
+| …and at least one partner unblocked | 16,297 | 69.0% |
+
+**The part-of-speech conjunct is vacuous.** The hypothesis above claimed "a shared cognate set
+plus a compatible canonical part of speech" is narrower than either alone. It removes **144
+memberships, 0.9%** — 968 partner-pairs on macron disagreement and 225 on POS. It cannot be
+the safety mechanism, and for the right reason: `OPEN_POS` deliberately lets noun, verb,
+stative, modifier and adverb interchange, so the block almost never fires.
+
+**What the conjunct missed is ambiguity, not category.** Counting distinct partner *words*,
+a stranded sense reaches **5.3 on average**, and 2,391 of them reach ten or more. `keho` alone
+has five hepatakakupu senses all reaching williams:2671's 'Peak of a hill' *and* 'Frost, ice'.
+Shipping this would have been `hoi` again.
+
+**Sense-level cognate links do not rescue it.** `ETY_entry_link.sense_id` is populated on 88.5%
+of rows, but requiring a sense-level match trims only 16,297 → 15,681 — those ids are assigned
+mechanically by `resolve_unambiguous_senses` where the target has one sense, not semantically.
+It also *loses* `auahitūroa`, since te_aka carries `sense_id` on just 51% of its links.
+
+### What was built instead
+
+The discipline D32 and D34 already use — act only where exactly one candidate survives — and
+required from **both** sides:
+
+> a shared cognate set **∧** unblocked **∧** exactly one surviving partner lexeme, each way
+
+Mutual uniqueness costs 1,057 of the 5,737 one-sided pairs and buys a symmetric claim, which
+matters because `positive_evidence` is scored in both directions. Shipped as evidence kind
+`shared_cognate_set_unique` (weight 0.6, confidence **probable** — the link is stated and the
+uniqueness proved, but no source says the two entries are one word), in
+`concept_evidence.cognate_unique_pairs`, with `tests/test_concept_cognate_unique.py`.
+
+| | axis off | axis on |
+|---|---|---|
+| concepts | 91,140 | 90,419 |
+| spanning 1 source | 72,193 | 70,773 |
+| spanning 2 sources | 11,832 | 12,514 |
+| **hepatakakupu cross-source** | **5.4%** | **8.7%** (+832) |
+| williams cross-source | 70.4% | 72.2% |
+| `hoi` concepts (canary floor 7) | 7 | 7 |
+
+### Scale
+
+At 5%, roughly 23,600 hepatakakupu memberships sat in single-source concepts. The hedge that
+"some of those words genuinely appear in no other dictionary" is now measured and is small:
+**only 742 of 23,605 — 3.1% —** have a headword no other source carries. Vocabulary is not the
+explanation. The axis above recovers 832; the remaining ~15,400 are reachable by headword and
+cognate set but ambiguous, and need evidence a cognate set cannot supply.
+
+---
+
+## D44. One sense's part of speech vetoes its whole entry — 148 attachments, 324 senses — **✅ fixed 2026-09-26**
+
+Found 2026-09-25, implementing the **D43** axis. It is why D43's own proof case still does not
+merge, and it is independent of D43.
+
+`form_concepts` refuses a concept if a block holds against **any** current member:
+
+```python
+if any(blocks(s, e) for s in seed for e in existing):
+    continue
+```
+
+That is the anti-chaining rule, and the rule itself is right — it is what stops a third source
+compatible with each of two separated words from quietly joining them. The problem is the
+granularity of what it quantifies over. A seed is a whole **lexeme**, so a block earned by one
+sense is applied to every sense of that entry.
+
+### The case
+
+| sense | part of speech | |
+|---|---|---|
+| te_aka:516#1 | `Proper noun (person)` | Auahitūroa, the personage |
+| te_aka:516#2 | `Noun` | the comet |
+| hepatakakupu:4287#1 | `Noun` | the comet, described in Māori |
+
+`cognate_unique_pairs` names `(hepatakakupu:4287#1, te_aka:516#2)` as a mutually unique pair —
+the evidence is there and correct. But te_aka:516#1 is a proper noun, `proper noun` is
+emphatically outside `OPEN_POS` (the `Hene` rule, and rightly so), and so the block it earns
+against `Noun` rules out the entire concept. Sense 2 never gets to attach.
+
+### Why this is not a quick fix
+
+- **The POS block is sense-level; the seed is entry-level.** `blocks()` already compares the
+  sense's own `part_of_speech_en`. It is the quantifier in `form_concepts` that widens a
+  sense's claim to its whole lexeme.
+- **Narrowing it weakens the anti-chaining rule**, which the design calls "the safety
+  mechanism of the whole design". Any change here must be measured against the `hoi` canary
+  and the calibration answers, exactly as the D43 axis was.
+- **Not every block should narrow.** A source filing two entries apart (`a['lexeme'] !=
+  b['lexeme']`) is a statement about *words* and should keep vetoing the whole seed. A macron
+  disagreement is about a *spelling*. Only the POS block is clearly a per-sense claim. The
+  three may not deserve the same treatment.
+
+### Scale — measured 2026-09-26
+
+Measured by replaying the real attachment loop over the whole corpus and recording every
+seed-vs-concept rejection where at least one sense of the seed was itself clean **and** had
+positive evidence — the attachments a per-sense rule would have allowed.
+
+| | |
+|---|---|
+| seed-vs-concept rejections caused by a block | 67,525 |
+| …where **every** sense was blocked — genuine | 67,016 (99.2%) |
+| …clean sense, but no evidence anyway | 361 |
+| **…clean sense with evidence — preventable** | **148 (0.22%)** |
+
+148 attachments, **324 senses**: papakupu 164, williams 93, te_aka 67. No other source is
+affected at all.
+
+### The speculation above is confirmed, and more sharply than it was put
+
+This entry guessed that the three block kinds "may not deserve the same treatment". Measured,
+**every one of the 148 is caused by the part-of-speech block alone.** Not predominantly —
+exclusively. Zero involve a macron disagreement, and zero involve a source filing two entries
+apart.
+
+That last is the important one. The anti-chaining rule's stated purpose is the *lexeme* block
+— *"if two words are separated by their own source's numbering, no third source compatible
+with each can later join them"* — and the lexeme block never appears in this population.
+Narrowing the POS block to the sense that earns it would leave the anti-chaining mechanism
+untouched.
+
+### What it would attach
+
+| confidence the attachment would earn | |
+|---|---|
+| `certain` | 5 |
+| `probable` | 91 |
+| `uncertain` | 52 |
+
+The export keeps `status = 'confirmed' OR confidence IN (certain, probable)`, so the 52
+uncertain ones would not ship unless a human confirmed them: the shipped gain is about **96
+attachments**. Small, and it includes D43's proof case — `auahitūroa`, blocked by
+`part_of_speech`, with `shared_cognate_set_unique` as its evidence, sitting in this population.
+
+Worked examples: te_aka's `ae` (sense 1 `Verb` 'to agree' blocks; senses 2–4 `Interjection`
+'yes' are clean and match papakupu's 'yes, in the sense of "I agree with"'); papakupu's `ata`
+(sense 1 `Noun` 'morning, daylight' matches ngata 'Morning', while sense 3
+`Proper noun (person)` blocks).
+
+### Fixed — scope, not a new rule
+
+The first design considered was to attach only the clean senses. That was wrong: it would have
+**split a seed across concepts**, and a seed is a lexeme — a grouping the source stated, and
+the reason seeds are trusted where cross-source attachment is not.
+
+The block's own comment gives the right answer instead. It fires only when both sides are
+single-valued, because *"a source listing several parts of speech is describing a word that
+functions several ways; that is not a claim excluding another source's single tag"* — and
+`_pos_atoms` splits on `[,/|]`, so one sense tagged `'Noun, Verb'` was **already** exempt. The
+rule was right; it simply could not see the same claim spread over sense rows instead of
+commas.
+
+So `concept_evidence.seed_blocks()` weighs the part-of-speech reason against the seed's whole
+inventory, and `form_concepts` uses it in place of `blocks()`. The seed stays atomic.
+
+The asymmetry is load-bearing: a seed is a grouping the source **stated**, so the union of its
+senses' tags is that source's own claim; a concept is a grouping this pipeline **inferred**, so
+its members' tags are not one word's inventory and get no such treatment. Only the
+part-of-speech reason is ever suppressed — the lexeme block is the anti-chaining rule's own
+instrument and the macron block is a claim about spelling.
+
+| | before | after |
+|---|---|---|
+| concepts | 90,419 | 90,236 |
+| spanning 1 source | 70,773 | 70,617 |
+| spanning 5 sources | 523 | 562 |
+| te_aka cross-source | 46.1% | **46.6%** (+278) |
+| williams | 72.2% | **72.8%** (+155) |
+| papakupu | 56.2% | **59.0%** (+132) |
+| hepatakakupu | 8.7% | **8.9%** (+55) |
+| `hoi` concepts (canary floor 7) | 7 | 7 |
+| `aho` / `hiwi` concepts | 15 / 8 | 15 / 8 |
+
+**Not a pure win.** 160 memberships *lose* cross-source status against roughly 750 gained, net
+**+586**. The mechanism is ordering: a concept that now accepts a seed earlier has more
+members, and a later seed blocking against one of those is correctly kept out. That is the
+anti-chaining rule working on a larger concept, not a regression in it — but it is a
+redistribution, and the gross figure is the honest one to quote.
+
+**D43's proof case closes.** `auahitūroa` goes from two concepts to one, holding
+`hepatakakupu:4287#1` with both te_aka senses, on `shared_cognate_set_unique` evidence. It took
+both fixes: without the D43 axis there is no evidence, without this one the evidence was
+vetoed. Persisted to `staging_dictionary.db` 2026-09-26; all 28 judged rows kept.
+
+---
+
+## D45. An inflected English gloss never overlaps its own base form — 895 memberships — **✅ fixed 2026-09-26**
+
+Found judging the calibration slice's tier-1 cluster `kaingākau`, 2026-09-25.
+
+`concept_evidence._content_words` lowercases, folds macrons and splits on `[a-z]+`. It does
+not stem. So two sources glossing the same word with the same English lexeme in different
+inflections share nothing at all:
+
+| source | gloss | content words |
+|---|---|---|
+| taikupu | `'valued'` | `{valued}` |
+| te_aka | `'to prize greatly, value, treasure, fond of…'` | `{prize, greatly, value, treasure, fond…}` |
+| williams | `'Prize greatly, value.'` | `{prize, greatly, value}` |
+
+The intersection is **empty**, so no gloss axis can fire, and taikupu sits in its own concept
+while te_aka and williams share one — even though a single cognate set, `KAINGAKAU 'to prize
+greatly, to value'`, links all three.
+
+### Scale
+
+Measured over the memberships now sitting in single-source concepts, using a deliberately
+conservative rule: a surface form counts as an inflection only when the stem is **itself
+attested as a gloss word somewhere in the corpus**, so nothing is invented — `valued` reaches
+`value` because the sources use `value`, and `ring` never reaches `r`.
+
+**895 memberships would gain gloss evidence**, across every bilingual source:
+
+| source | | source | |
+|---|---|---|---|
+| te_aka | 291 | taikupu | 45 |
+| paekupu | 209 | papakupu | 42 |
+| ngata | 169 | kimikupu_hou | 26 |
+| williams | 105 | others | 8 |
+
+**381 of them are reachable by plural/singular alone** — the safest subset.
+
+### The grading rule already handles the bad ones
+
+This is why the finding is `queued` rather than blocked. Graded by the existing
+coverage/distinctiveness rule, the 895 split:
+
+| | | |
+|---|---|---|
+| would grade ordinary `gloss_overlap` | 308 | 34.4% |
+| would grade `gloss_overlap_weak` | 587 | 65.6% |
+
+The ordinary ones are unambiguous — ngata `'Deform'` against williams `'Deformed. Turi haka…'`;
+ngata `'Disengage'` against williams `'Separated, disengaged, divided.'`; te_aka `'sawyers.'`
+against papakupu `'sawyer {From English}'`; ngata `'Cringe'` against te_aka `'…shivering from
+cold, cringing.'`
+
+The spurious ones land in the weak bucket exactly where they belong: williams's `'A small
+fresh-water fish'` reaches te_aka's `'breaking of the waters (childbirth).'` through
+`waters`→`water`, and grades weak on both axes because `water` is common and covers almost
+none of either gloss. **The grading rule is not what is blind — the tokeniser is.**
+
+### Why ngata is disproportionate
+
+ngata is an English→Māori dictionary, so its `gloss_en` is the English headword in citation
+form: `'Deform'`, `'Cringe'`, `'Slope'`, `'Hop'`. Every other source glosses in running English
+and inflects. The mismatch is therefore systematically ngata-against-everyone, and it is
+structural rather than incidental.
+
+### What this is not
+
+Not a licence to match loosely. §2 forbids deriving across languages; this is entirely within
+English, and the attested-stem constraint keeps it to forms the sources themselves use. A
+looser rule — edit distance, or stripping suffixes without checking the result is a word —
+would be inventing the link rather than reading it, and is the same error
+`resolve_relations_by_gloss` refused when it required exact string identity (D34).
+
+### Fixed — and the first design was too permissive
+
+`GlossIndex.expand` adds the stems the corpus attests, and `positive_evidence` consults them
+**only** where the surface forms share nothing. Three constraints, of which the third was
+found by building it:
+
+1. **Attested.** A stem counts only when some gloss in the index uses it as a word, and no
+   word is cut below three characters, so `ring` never reaches `r`.
+2. **Additive.** A pair that already overlaps keeps its original word sets, so its coverage and
+   distinctiveness are untouched and no existing membership can change grade.
+3. **Ordinary or nothing.** A stemmed match that grades weak is dropped, not recorded weak.
+
+The third was not in the plan. The section above says the weak grade is where the spurious
+matches "land … exactly where they belong", and that is true but **not sufficient**:
+`form_concepts` attaches a seed on *any* evidence at all, so a weak row still merges two
+concepts and only marks the result uncertain. Built permissively, this merged
+
+> paekupu `'A ratio which connects an angle of a right-angled triangle'` (sine)
+> with williams `'ahoaho = aha (iii), n. Open space.'`
+
+on the single stemmed word `connect` — and 583 further merges of that shape, taking `aho` from
+fifteen concepts to fourteen.
+
+| | off | permissive | **as shipped** |
+|---|---|---|---|
+| concepts | 90,236 | 89,700 | **90,040** |
+| cross-source memberships | 85,160 | 86,067 | **85,484** |
+| `aho` concepts | 15 | **14** | **15** |
+| `kaingākau` concepts | 3 | 2 | **2** |
+
+So **+324** rather than +907 — and the 583 given up are precisely the ones this section's own
+measurement predicted would grade weak. `gloss_overlap` rows rise 56,212 → 57,515 while
+`gloss_overlap_weak` moves by −4.
+
+Every canary holds: `hoi` 7, `aho` 15, `hiwi` 8, `auahitūroa` 1. The motivating case merges —
+taikupu's `'valued'` now sits with ngata, te_aka and williams, joined on `value` at coverage
+0.50, an ordinary overlap. Persisted to `staging_dictionary.db` 2026-09-26; 90,040 concepts,
+all 28 judged rows unchanged.
+
+---
+
+## D46. Te Aka's sense-level synonyms are flattened onto the entry — 87,569 relations — **✅ attribution recorded 2026-09-26; consumers still entry-level**
+
+Found 2026-09-26, answering a question about te Aka's relation model. Not found judging a
+cluster: `aho`, the case below, sits at priority 1 behind the calibration slice.
+
+### The source says which sense; the build does not
+
+`04_te_aka_parse.py` reads the dictionary-link anchors **inside each sense's div** and stores
+them on that sense (`sense_synonyms`, line 160). It then also accumulates an entry-level
+`all_synonyms`, commented *"legacy / FTS / synonym resolution"*.
+
+`50_build_unified.py` line 618 iterates that entry-level aggregate and calls
+`b.add_relation(eid, ...)`. **The per-sense list is never read.** `relation` has no source-side
+sense column, so the assertion becomes one about the word.
+
+`te_aka_entries.senses` still holds the per-sense lists, so nothing was lost at parse and
+nothing needs re-scraping. The flattening is entirely in the build.
+
+### `aho` — five senses, two synonym sets, twelve flat relations
+
+| | |
+|---|---|
+| sense 1 | `fishing line, cord, string, line, medium for an atua` |
+| sense 2 | `weft, woof - cross-threads of weaving or a mat.` |
+| sense 3 | `line of descent, genealogy.` |
+| sense 4 | `chord (maths).` |
+| sense 5 | `sine (maths)` |
+
+The source puts `{io, kapa, papanga, raina, ripa, rārangi, tawhā}` on **sense 1** and
+`{hikahika, kaha, kāwai, kāwei, takiaho}` on **sense 3**. What is built is twelve relations on
+the entry with no sense, so the cord sense and the genealogy sense become mutual synonyms.
+`aho` is the rubric's own `spurious_etymology` worked example.
+
+### Scale
+
+| | |
+|---|---|
+| te_aka synonym relations | 87,569 |
+| entries carrying at least one | 10,676 |
+| of those, multi-sense | 4,489 |
+| **whose senses carry different sets** | **2,046** |
+| relations sitting on a multi-sense entry | 49,755 |
+| relations attributable to a named sense | 89,957 |
+
+The last row exceeding the first is a second, smaller loss: the entry-level aggregate dedups
+(`if syn not in all_synonyms`), so a synonym serving two senses collapses to one link and the
+fact that it serves both is discarded — **2,388 attributions**.
+
+### The 42% that looks like sense resolution is not
+
+`target_sense_id` is set on 37,104 of the 87,569. Of the **50,465** relations pointing at a
+*multi-sense* target, **zero** have a sense chosen. Every resolved one came from
+`resolve_unambiguous_senses` picking the only sense there was. There is no editorial sense
+choice in this data, on either side.
+
+### It is also dense, which compounds it
+
+Median degree 4, max 170, **91% reciprocated**. Of 1,421 connected components, 1,175 (82.7%)
+are complete graphs — synonym sets expanded to full cliques. But the largest component holds
+**7,630 entries**, 71% of everything carrying a synonym, because the cliques chain through
+shared members. Flattening senses is what lets them chain: `aho`'s two unrelated sets are
+joined at the entry, and every set touching either is now one component.
+
+### Why this is queued, not applied
+
+The fix is a build change, not a field patch — `add_relation` would need a source-side
+`sense_id`, and `relation` would need the column. That is schema work plus a rebuild, and it
+should be measured against the concept layer first: 49,755 relations currently asserting more
+than the source does is also 49,755 that `resolve_within_source_relations` and the concept
+evidence axes have been reading. Narrowing them is likely right and is certainly not free.
+
+### Fixed — the attribution, not the consumers
+
+`relation` gains a nullable `sense_id`, `Builder.add_relation` takes it, and `build_te_aka`
+emits each sense's own synonym list instead of the entry-level aggregate. NULL is not
+"unknown": it means the source made the claim **of the word**, which is what every source but
+te Aka prints.
+
+`aho` now reads as te Aka wrote it:
+
+| sense | gloss | synonyms |
+|---|---|---|
+| 1 | `fishing line, cord, string, line` | raina, io, rārangi, kapa, tawhā, ripa, papanga |
+| 3 | `line of descent, genealogy.` | takiaho, kāwei, kaha, hikahika, kāwai |
+
+The aggregate also deduped, so a synonym serving two senses collapsed to one link. Per-sense
+attribution restores those: **87,569 → 89,916** relations, every one naming a sense. A synonym
+on a repeated def-div is folded onto the sense that won rather than dropped with the duplicate
+row.
+
+**Deliberately not done: narrowing the consumers.** `resolve_within_source_relations`,
+`resolve_relations_by_domain`, `resolve_relations_by_gloss`, `53_build_word_origin` and the
+concept layer's `cites` index all read `entry_id` and the target columns, and all still do.
+That was verified rather than assumed — comparing concept groupings on **stable member keys**
+before and after, all **90,040 groupings are identical** and cross-source memberships are
+unchanged at 85,484. (Comparing on `entry.id` says everything changed, because rebuilding a
+slice re-mints them; the rubric's own rule against addressing `entry.id` applies to
+measurement too.)
+
+The 49,755 relations that assert more than the source does are the rows those consumers have
+been reading, so narrowing them is a separate change needing its own measurement.
+
+### The follow-on, measured — and it is a no-op
+
+Measured 2026-09-26, before writing any of it:
+
+- **`cites_source` never sees a `sense_id`.** That evidence comes only from williams (1,526
+  rows) and te_matatiki (648). Neither source carries the attribution and te_aka contributes
+  none, so narrowing the `cites` index changes nothing.
+- **The resolvers never see one either.** All 89,916 te_aka relations are already resolved,
+  and every one of the 11,908 unresolved relations in the corpus has `sense_id` NULL —
+  paekupu 6,513, williams 1,732, te_matatiki 1,357, hepatakakupu 1,340, papakupu 737,
+  tregear_exceptions 208, temarareo 21. `resolve_within_source_relations`,
+  `resolve_relations_by_domain` and `resolve_relations_by_gloss` act only on unresolved rows.
+
+The one source carrying the attribution is the one with nothing left for the resolvers to do.
+Narrowing them would be writing code against data that does not exist, and the 49,755 figure
+above — real as a description of what the relations *assert* — turns out to name no consumer
+that currently reads them wrongly.
+
+**It becomes live the moment a second source gains the attribution.** paekupu and hepatakakupu
+both publish per-sense structure and both have thousands of unresolved relations, so this is
+worth re-measuring rather than closing.
+
+### What was worth doing: showing it in the batch
+
+`sweep_batch` now renders the asserting sense, across 4,463 multi-sense entries. On `aho`:
+
+```
+rel synonym -> 'io'      [te_aka:1764]  from s1
+rel synonym -> 'raina'   [te_aka:6429]  from s1
+…
+rel synonym -> 'kāwai'   [te_aka:2465]  from s3
+rel synonym -> 'kaha'    [te_aka:1836]  from s3
+```
+
+Sense 1 is *fishing line, cord, string*; sense 3 is *line of descent, genealogy*. Flattened,
+those twelve read as one set and a judge cannot see they were never synonyms of each other.
+NULL renders as nothing rather than as "unknown", because an entry-level claim is what every
+other source actually prints.
+
+### Two schema drifts found while building the test fixture — **✅ fixed 2026-09-26**
+
+Neither had ever failed anything, which is why both survived.
+
+**A landing table had two DDLs.** `04_te_aka_import.py`, `04_paekupu_import.py` and
+`05_hepataka_import.py` each DROP and CREATE their own table, so theirs is the shape the
+pipeline runs on — and `00_init_db.py` carried a second, stale copy of each. Measured against
+the live database, a fresh init was missing:
+
+| table | columns absent |
+|---|---|
+| `te_aka_entries` | `senses` |
+| `paekupu_entries` | `alternative_words`, `audio_url`, `definition_mi`, `pos_mi`, `slug`, `subject_area_en`, `subject_areas` |
+| `hepatakakupu_entries` | `master_sense`, `master_word_id`, `semantic_domain`, `sense_number`, `suffixes`, `synonym_senses`, `synonyms` |
+
+Nothing failed, because the importer recreates the table before anything reads it. It bites
+whatever trusts `00_init_db` alone — a fixture, or a fresh database queried before its first
+import, which is exactly how it surfaced.
+
+The stale copies are gone, along with paekupu's index, FTS table and triggers, which sat in a
+different section of the file and were left dangling by the first removal pass.
+`create_importer_owned_tables()` calls each owner's DDL, **all or nothing per table**: those
+scripts run straight after their own DROP, so they carry no `IF NOT EXISTS` and their triggers
+contain semicolons, and cannot be split or applied piecemeal.
+
+**The init sequence was not one call.** `main()` ran five functions in order, and `sense.note`
+comes from `migrate_pos_columns` while `sense.part_of_speech` comes from `migrate_tables`, so
+calling a subset produced a database that looked initialised and silently lacked columns.
+`initialise()` is now the whole sequence.
+
+Verified: a fresh `initialise()` and the live staging database agree on all three tables — 17,
+20 and 18 columns — with no FTS or index object missing.
+`tests/test_schema_single_source.py` pins both, including that `00_init_db`'s **source** must
+not contain a `CREATE` for an owned table, so the duplication cannot return by being pasted
+back.
+
+---
+
+## D47. A confirmation granted to one grouping is re-applied to every later grouping — **✅ fixed 2026-09-26**
+
+Found 2026-09-26, verifying the D44 rebuild. Not hypothetical: it happened during that
+rebuild, to a row that can be named.
+
+### The mechanism
+
+A member-level confirm sets a **concept-level** status. `sweep_runner._apply_concept_actions`:
+
+> *"A confirm also confirms the member's CONCEPT. Nothing else in the codebase sets
+> `concept.status`, so without this the sweep could not change what ships."*
+
+That is right, and the judgement must survive a rebuild. But the rebuild re-derives the
+concept's status from scratch, against **whatever membership now exists**
+(`54_build_concepts.py`):
+
+```python
+status = "confirmed" if any(
+    judged.get(m["view"]["member_key"], ...)[1] == "confirmed"
+    for m in members) else "proposed"
+```
+
+`any()`. One confirmed member makes the whole rebuilt concept confirmed, however many new and
+unjudged members have joined it since. The confirmation is sticky to the **member**; its effect
+lands on the **concept**; and the concept is rebuilt from nothing every run.
+
+The repointing logic is deliberate, but its stated rationale is about *identifiers* —
+*"every rebuild mints new concept ids, so it is carried onto the rebuilt row rather than left
+pointing at the old one"* — which assumes the grouping is stable and only the id moves.
+
+### What happened
+
+A sweep session confirmed `te_aka:516#1` and `#2` in a concept holding **only te_aka**. The
+D44 fix then merged `hepatakakupu:4287#1` into it:
+
+| | before | after |
+|---|---|---|
+| `te_aka:516#1` | concept sources `('te_aka',)` | `('hepatakakupu', 'te_aka')` |
+| `te_aka:516#2` | concept sources `('te_aka',)` | `('hepatakakupu', 'te_aka')` |
+
+The rebuilt concept 2784068 is `confirmed`. hepatakakupu:4287's membership — which no judge
+has ever seen — now sits inside a concept marked as confirmed by a human.
+
+**In this instance the outcome is correct.** hepatakakupu:4287 *is* the same word; that is the
+entire point of D43 and D44. But it is correct by luck rather than by check, and the same
+mechanism would carry a confirmation onto a wrong merge exactly as silently.
+
+### Why it matters beyond bookkeeping
+
+`60_export_app_db.py` ships a concept when `status = 'confirmed' OR confidence IN (certain,
+probable)`. A confirmed concept therefore **bypasses the confidence filter entirely**. An
+unjudged member riding someone else's confirmation ships whatever its own confidence.
+
+### Scale
+
+| | |
+|---|---|
+| confirmed concepts | 13 |
+| members inside them | 38 |
+| **of those, never judged themselves** | **10** |
+
+Concept 2780572 is the sharpest: **10 members, 3 judged, 7 not.**
+
+Ten members today — but the sweep is 42 clusters into 55,765, **0.08% complete**. This grows
+with every cluster judged.
+
+### Recommended remedy
+
+Keep the member's confirmation durable — *"a lost judgement is unrecoverable"* is a principle
+this pipeline already states — but stop the concept-level claim from silently widening:
+
+1. Record the member-key set a confirmation was granted against, at confirm time.
+2. On rebuild, derive `concept.status = 'confirmed'` **only** when the current grouping has
+   gained no member the judge did not see.
+3. Where it has, every member keeps its own status and the concept reverts to `proposed`,
+   re-entering the queue to be re-judged.
+
+Nothing is destroyed, the export stops shipping unexamined merges as confirmed, and a
+grouping that changed gets looked at again — which is what a judge would want, since a new
+witness is exactly the thing that could change their mind.
+
+### Fixed as recommended
+
+`concept_member` gains `confirmed_grouping`, a JSON array of the member keys a confirmation
+was granted to, written by `sweep_runner._apply_concept_actions` at confirm time.
+`54_build_concepts._concept_status()` confirms a concept only where some confirmed member's
+recorded grouping **covers everything now present**.
+
+Three details the remedy above did not spell out, settled while building it:
+
+- **Losing a member is fine.** The judge saw more than is there now, so nothing unexamined has
+  appeared. The test is subset, not equality.
+- **A rejected member is not part of the grouping.** The rejection records that the sense does
+  *not* belong, so its later presence is not an unseen witness.
+- **A confirmation with no recorded grouping cannot confirm.** It cannot be checked, and an
+  unverifiable claim is not a confirmation. That covers every row judged before the column
+  existed — deliberately not backfilled, because backfilling would assert the judge saw a
+  grouping they may never have seen, which is the very thing this finding is about.
+
+### Measured on staging
+
+| | before | after |
+|---|---|---|
+| confirmed concepts | 13 | **0** |
+| member judgements | 28 | **28** |
+| unjudged members inside a confirmed concept | 10 | **0** |
+
+All 13 predate the column, so all 13 revert. **No judgement was lost** — every one of the 28
+confirmed memberships keeps its own status, and only the concept-level claim waits to be
+re-earned.
+
+Two uncertain concepts shipped *only* because they were confirmed, and are now withheld until
+re-judged: **3148696** (paekupu, te_aka, williams) and **3150970** (te_aka, te_aka). Both hold
+a confirmed member, so the sweep will re-confirm them with a grouping recorded and they will
+ship again.
+
+---
+
+## D48. Test fixtures hand-roll the core tables — 76 tables across 26 files — **✅ fixed 2026-09-26**
+
+Found 2026-09-26, after D46 and D47 each broke fixtures that had nothing to do with them.
+
+This is a **test-infrastructure** finding, not a corpus defect. It is recorded here because it
+is the same root cause as the drift fixed under D46 — schema knowledge written down twice —
+only in `tests/` rather than in `00_init_db.py`, and because it now taxes every schema change
+the sweep's findings produce.
+
+### The measurement
+
+Comparing each `CREATE TABLE` in `tests/` against what `initialise()` builds:
+
+| | |
+|---|---|
+| hand-rolled core tables | **76** |
+| files affected | **26** |
+| column declarations missing | **460** |
+
+The worst are not close:
+
+```
+test_concept_build.py        entry     8/19 cols   missing 11
+test_derivation_evidence.py  entry     4/19 cols   missing 15
+test_concept_acceptance.py   concept   3/11 cols   missing  8
+```
+
+### What it actually costs
+
+A minimal fixture is not wrong in itself — a test needing four columns and declaring four is
+legible, and arguably clearer than dragging in the whole schema. Two things make this a
+finding anyway:
+
+- **Every schema addition is a multi-file edit.** `relation.sense_id` (D46) broke
+  `test_ngata_derived_relations` and `test_papakupu_reduplication_wiring`;
+  `concept_member.confirmed_grouping` (D47) broke `test_sweep_runner`. Neither column had
+  anything to do with those tests. Three such edits in one session.
+- **A fixture can diverge in ways nothing catches.** A missing column fails loudly. A wrong
+  type, an absent `NOT NULL`, or a missing `UNIQUE` does not — the test passes, against a
+  table the pipeline has never run on. This is how the D46 fixture was first written: it
+  produced a `te_aka_entries` with no `senses` column and the test looked fine.
+
+### What to do
+
+`00_init_db.initialise()` already exists and is already what the pipeline runs (D46). The work
+is to point the fixtures at it:
+
+1. A shared `tests/` helper — `core_db()` — that calls `initialise()` and returns a connection.
+2. Convert the 26 files, deleting their `CREATE TABLE` blocks.
+3. Keep a hand-rolled table only where a test needs a shape the real schema does **not** have,
+   and say so in a comment. `test_build_unified_fk.py` is the honest case: it builds a
+   deliberately minimal schema to test foreign-key behaviour and would be obscured, not
+   helped, by the real one.
+
+Not urgent and not risky, but it is 460 declarations of duplicated knowledge, and the sweep
+has 55,700 clusters left to judge — every finding that reaches the schema pays this tax again.
+
+### Fixed
+
+`tests/core_schema.py` exposes `core_db()`, which calls `00_init_db.initialise()` and clones
+the result per call — 11 ms to build, 0.6 ms to clone, which matters across ~1,470 tests.
+
+| | before | after |
+|---|---|---|
+| hand-rolled core tables | 76 | **3** |
+| files affected | 26 | **2** |
+| missing column declarations | 460 | **46** |
+
+**The three that remain are deliberate and annotated.** `test_build_unified_fk` builds a
+minimal schema to exercise foreign-key behaviour; `test_relation_resolution`,
+`test_sense_addressability` and `test_derived_long_scope` each have one test about a database
+that *lacks* a table, which `core_db()` — providing every table — would defeat.
+
+### What the conversion found
+
+Every one of these was a test passing against a table the pipeline has never run on:
+
+- My own D43 and D44 fixtures inserted `entry` rows with no `headword_sort` and
+  `ETY_entry_link` rows with no `source`, both `NOT NULL` in the real schema.
+- `concept_member` rows with no `source_entry_id` and no `confidence`; `ngata_entries` rows
+  with no `ref_no`, `headword_sort` or `headword_search`.
+
+One test needed more than a conversion. `RebuildSurvival`'s E2 case sets
+`entry.headword_search` to NULL to reach the state 54's guard exists for — and the real schema
+declares that column `NOT NULL`, so **the state is unreachable through it**. That is the point
+rather than an obstacle: the guard is for a database that got there anyway, by rows written
+before the constraint or by a restore. The test now relaxes that one column via
+`writable_schema`, with a `schema_version` bump, because SQLite caches the parsed schema and
+the edit is otherwise silently ignored.
+
+Five files used positional inserts — `INSERT INTO entry VALUES (...)` — which depend on the
+hand-rolled column order, so each needed its columns named before its table could go. That is
+its own small argument for the change: a positional insert against a table defined three files
+away is unreadable, and it silently means something different the moment a column moves.

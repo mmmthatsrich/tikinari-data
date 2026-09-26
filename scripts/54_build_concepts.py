@@ -11,6 +11,7 @@ and rows a human or the sweep has judged are never overwritten.
     py scripts/54_build_concepts.py --write
 """
 import argparse
+import json
 import re
 import sqlite3
 import sys
@@ -22,7 +23,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.stdout.reconfigure(encoding="utf-8")
 from utils import DB_PATH
 from concept_election import elect_gloss, elect_headword
-from concept_evidence import GlossIndex, SEED_CONFIDENCE, blocks, confidence_for, lexeme_key, positive_evidence
+from concept_evidence import (GlossIndex, SEED_CONFIDENCE,
+                              cognate_unique_pairs, confidence_for,
+                              lexeme_key, positive_evidence, seed_blocks)
 
 
 def _norm(text):
@@ -116,6 +119,10 @@ def form_concepts(views, index):
     the anti-chaining rule: if two words are separated by their own source's
     numbering, no third source compatible with each can later join them.
     """
+    # Uniqueness is a property of the candidate set, so it is decided once
+    # against the whole bucket and then read pair by pair (D43).
+    unique_cognates = cognate_unique_pairs(views)
+
     concepts = []
     for seed in _seed_groups(views):
         placed = False
@@ -123,13 +130,17 @@ def form_concepts(views, index):
             existing = [m["view"] for m in concept["members"]]
 
             # A block against any current member rules the whole concept out.
-            if any(blocks(s, e) for s in seed for e in existing):
+            # seed_blocks, not blocks: the part-of-speech reason is weighed
+            # against the seed's whole inventory, because a lexeme is the
+            # source's own grouping and tags spread over its sense rows are
+            # the same claim as a comma list on one (D44).
+            if seed_blocks(seed, existing):
                 continue
 
             evidence = []
             for s in seed:
                 for e in existing:
-                    found = positive_evidence(s, e, index)
+                    found = positive_evidence(s, e, index, unique_cognates)
                     if found:
                         evidence.extend(found)
             if not evidence:
@@ -176,7 +187,8 @@ def form_concepts(views, index):
                 for other in c["members"]:
                     if other is m:
                         continue
-                    for e in positive_evidence(m["view"], other["view"], index):
+                    for e in positive_evidence(m["view"], other["view"], index,
+                                               unique_cognates):
                         tag = (e["kind"], e["detail"])
                         if tag not in seen:
                             seen.add(tag)
@@ -242,6 +254,47 @@ def _derived_long(con):
     return out
 
 
+def _concept_status(member_keys, judged):
+    """'confirmed' only where a judge saw this grouping, else 'proposed' (D47).
+
+    A member-level confirm sets a concept-level status — nothing else sets
+    `concept.status`, and without it the sweep could not change what ships.
+    But the concept is rebuilt from nothing every run, so the old rule, a bare
+    `any(member is confirmed)`, re-applied one judgement to whatever grouping
+    now existed. A sweep session confirmed te_aka:516 in a te_aka-only
+    concept; a later fix merged hepatakakupu:4287 in; and the rebuilt concept
+    came back confirmed with a member no judge had ever seen inside it.
+
+    That is not only bookkeeping: `filter_concepts` ships a concept when
+    `status = 'confirmed' OR confidence IN (certain, probable)`, so a
+    confirmed concept bypasses the confidence filter and carries its
+    unexamined members out with it.
+
+    So a confirmation must name the grouping it was granted to, and covers
+    only a grouping that adds nothing to it. Losing a member is fine: the
+    judge saw more than is here now and nothing unexamined has appeared.
+    A rejected member is not part of the grouping at all — the rejection
+    records that the sense does NOT belong.
+
+    A confirmation with no recorded grouping cannot be checked, so it cannot
+    confirm. That covers rows judged before the column existed. Nothing is
+    destroyed either way: the member keeps its own `confirmed` status, and
+    only the concept-level claim waits to be re-earned, because a lost
+    judgement is unrecoverable and this is not.
+    """
+    present = {k for k in member_keys
+               if judged.get(k, (None, None, None, None))[1] != "rejected"}
+    for key in member_keys:
+        cid, status, conf, grouping = judged.get(
+            key, (None, None, None, None))
+        if status != "confirmed" or grouping is None:
+            continue
+        seen = {tuple(k) for k in grouping}
+        if present <= seen:
+            return "confirmed"
+    return "proposed"
+
+
 def persist(con, concepts):
     """Write concepts, preserving anything a human or the sweep has judged —
     except a judgement whose (source_id, source_entry_id, sense_number) this
@@ -256,11 +309,13 @@ def persist(con, concepts):
     concept, and is dropped when the sense is renumbered or leaves the corpus
     while its source stays live."""
     judged = {}
-    for cid, src, seid, sn, status, conf in con.execute(
+    for cid, src, seid, sn, status, conf, grouping in con.execute(
             "SELECT concept_id, source_id, source_entry_id, sense_number, "
-            "       status, confidence FROM concept_member "
+            "       status, confidence, confirmed_grouping FROM concept_member "
             " WHERE status IN (?,?)", _JUDGED):
-        judged[(src, str(seid), sn)] = (cid, status, conf)
+        judged[(src, str(seid), sn)] = (
+            cid, status, conf,
+            None if grouping is None else json.loads(grouping))
 
     con.execute("DELETE FROM concept_member_evidence")
     con.execute("DELETE FROM concept_member WHERE status NOT IN (?,?)", _JUDGED)
@@ -293,9 +348,8 @@ def persist(con, concepts):
         # sweep's judgement away on the next run of the chain, and the export
         # would drop the concept again. Rejecting a member says nothing about
         # the concept — the rest of the grouping may still be right.
-        status = "confirmed" if any(
-            judged.get(m["view"]["member_key"], (None, None, None))[1]
-            == "confirmed" for m in members) else "proposed"
+        status = _concept_status([m["view"]["member_key"] for m in members],
+                                 judged)
 
         cur = con.execute(
             "INSERT INTO concept (status, confidence, created_at, last_updated)"

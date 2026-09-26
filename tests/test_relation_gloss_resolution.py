@@ -22,6 +22,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from core_schema import core_db
 sys.stdout.reconfigure(encoding="utf-8")
 
 from utils import resolve_relations_by_gloss
@@ -30,18 +31,8 @@ CORD = "He weu kua kōmiroa, kua whiria kia ū, kia roa, kia kōrahirahi."
 
 
 def _db() -> sqlite3.Connection:
-    con = sqlite3.connect(":memory:")
-    con.executescript("""
-        CREATE TABLE entry (
-            id INTEGER PRIMARY KEY, source_id TEXT, headword TEXT);
-        CREATE TABLE sense (
-            id INTEGER PRIMARY KEY, entry_id INTEGER,
-            gloss_en TEXT, gloss_mi TEXT);
-        CREATE TABLE relation (
-            id INTEGER PRIMARY KEY, entry_id INTEGER, rel_type TEXT,
-            target_headword TEXT, target_entry_id INTEGER);
-    """)
-    con.executemany("INSERT INTO entry (id, source_id, headword) VALUES (?,?,?)", [
+    con = core_db()
+    con.executemany("INSERT INTO entry (id, source_id, headword, headword_sort, headword_search)VALUES (?,?,?, '', '')", [
         (1, "hepatakakupu", "aho"),     # the referrer
         (2, "hepatakakupu", "au"),      # a brave heart
         (3, "hepatakakupu", "au"),      # THE cord sense
@@ -128,7 +119,7 @@ class ResolveByGloss(unittest.TestCase):
         # entry 1 refers to its own headword; 'aho' has one other entry which
         # shares the definition, and entry 1 must not be its own target.
         con = _db()
-        con.executemany("INSERT INTO entry (id, source_id, headword) VALUES (?,?,?)",
+        con.executemany("INSERT INTO entry (id, source_id, headword, headword_sort, headword_search)VALUES (?,?,?, '', '')",
                         [(6, "hepatakakupu", "aho"), (7, "hepatakakupu", "aho")])
         con.executemany("INSERT INTO sense (entry_id, gloss_en, gloss_mi) VALUES (?,?,?)",
                         [(6, None, CORD), (7, None, "He mea kē anō.")])
